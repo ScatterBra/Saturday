@@ -1,0 +1,107 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d47284dcfd8ed94ab460dede4894665, type: 3}
+  m_Name: ChessPieceArt
+  m_EditorClassIdentifier: SaturdayGame.Chess.View::SaturdayGame.Chess.View.PieceArt
+  pawn: {fileID: 21300000, guid: 45f8a4347e636de4a86bea360218af87, type: 3}
+  knight: {fileID: 21300000, guid: e8cdaa04297c6e54e942c03fcb577352, type: 3}
+  bishop: {fileID: 21300000, guid: d102a5cf7a02a4149b81817206b8624a, type: 3}
+  rook: {fileID: 21300000, guid: a9842ebd33701a94c895e304a0d880c8, type: 3}
+  queen: {fileID: 21300000, guid: 23ea2ef6a59e2dc48bfa9388685edda6, type: 3}
+  king: {fileID: 21300000, guid: e3810390bcb83304a834feb5397460c6, type: 3}
+  blackPawn: {fileID: 21300000, guid: 7039dfa8ea5cc3e4fb7ea428f21dab22, type: 3}
+  blackKnight: {fileID: 21300000, guid: bf8c58e9ed9db3f45869371b33feff35, type: 3}
+  blackBishop: {fileID: 21300000, guid: 43a1edbb26d9db049b8df4d77dad1863, type: 3}
+  blackRook: {fileID: 21300000, guid: 1c244cb185f299442abbb99500e55894, type: 3}
+  blackQueen: {fileID: 21300000, guid: 55da88a9c9d5f4e40a334b17675e4ecc, type: 3}
+  blackKing: {fileID: 21300000, guid: 9dc0466568e0e0e4ab362062d806f59a, type: 3}
+  blackTint: {r: 0, g: 0, b: 0, a: 0}
+  variantBlackTint: {r: 0.75, g: 0.75, b: 0.8, a: 1}
+  pieceHeight: 0.95
+  skins:
+  - skin: hydrant
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: 8b04aa6d93ce86948842e55932122013, type: 3}
+    black:
+    - {fileID: 21300000, guid: a8fca54bfeb855c4f8b475c4d4014599, type: 3}
+  - skin: fish_shop
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: 0e3194f2940c6bf4683ced5c93cd05b5, type: 3}
+    black: []
+  - skin: bishbird
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: 210ebc8f4ba940943884e00d34337894, type: 3}
+    black: []
+  - skin: tree
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: edbf873cf2d496c4bbd5e54c1d710b7f, type: 3}
+    - {fileID: 21300000, guid: 63a1eb9ae533347499e6803f5fdf5069, type: 3}
+    - {fileID: 21300000, guid: e2988e884a43d6546bf4fde90c2d2844, type: 3}
+    - {fileID: 21300000, guid: 2c8ba63af3add874ca6d2867e3ff1321, type: 3}
+    - {fileID: 21300000, guid: 386b131681eeb2746baa46ee8f830de0, type: 3}
+    - {fileID: 21300000, guid: 7042adfabfec4804eaf44894a034901e, type: 3}
+    black: []
+  - skin: crayon
+    onlyForType: 1
+    type: 0
+    white:
+    - {fileID: 21300000, guid: d58dab09d27191f4fb70ee2057808f25, type: 3}
+    black:
+    - {fileID: 21300000, guid: 897c1343972f6704eaf46dad7b5af47e, type: 3}
+  - skin: crayon
+    onlyForType: 1
+    type: 1
+    white:
+    - {fileID: 21300000, guid: 496c748e768f2ac4891ea1c2b376a273, type: 3}
+    black:
+    - {fileID: 21300000, guid: 6aa2435a9fdaefc418e34466cca8fe95, type: 3}
+  - skin: crayon
+    onlyForType: 1
+    type: 4
+    white:
+    - {fileID: 21300000, guid: 49fe9a76b664e394eaf3f7d48e5d4d45, type: 3}
+    black:
+    - {fileID: 21300000, guid: 2a3a2289c0507b446ab1c60b288cbe16, type: 3}
+  - skin: crayon
+    onlyForType: 1
+    type: 3
+    white:
+    - {fileID: 21300000, guid: fa180b0cabacb32458ebfb232f813566, type: 3}
+    black:
+    - {fileID: 21300000, guid: e278e5e6d4039b945bf76843217c8a57, type: 3}
+  - skin: cake
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: 03b979098cab9d14ebc85cae39541360, type: 3}
+    black: []
+  - skin: watch_tower
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: 2034e094792ccd643b933687d030dbcf, type: 3}
+    black: []
+  - skin: frog
+    onlyForType: 0
+    type: 0
+    white:
+    - {fileID: 21300000, guid: 5bd9a28723dcff84dae2c22bacd5b6dc, type: 3}
+    black:
+    - {fileID: 21300000, guid: b55f4507049c60e4191ab113b397de0d, type: 3}
