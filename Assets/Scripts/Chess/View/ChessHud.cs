@@ -7,11 +7,25 @@ using UnityEngine.UI;
 namespace SaturdayGame.Chess.View
 {
     /// <summary>
-    /// 屏幕 UI（按草图）：左边 “NEW” 是三选一的规则卡，右边是规则书，中间是棋盘；
-    /// 上方是状态栏，下方是对白字幕。全部在代码里生成，方便以后整体替换成美术版。
+    /// 桌面布局（按草图）：左边 “NEW” 规则卡区、中间棋盘、右边规则书，三者平放在同一张桌面上，
+    /// 被同一台斜视相机拍到。规则卡区和规则书是平躺在桌面上的 World Space Canvas。
+    /// 状态栏、对白字幕、Skip 按钮、结束面板仍然是屏幕最上层的 UI。全部在代码里生成。
     /// </summary>
     public sealed class ChessHud : MonoBehaviour
     {
+        /// <summary>桌面上两块区域的尺寸和位置（世界单位，一格 = 1）。DeskCameraFit 用它来框住整个布局。</summary>
+        public static class DeskLayout
+        {
+            public const float PanelWidth = 4.2f;
+            public const float PanelDepth = 9f;
+            /// <summary>左右两块区域中心离棋盘中心的距离。</summary>
+            public const float PanelCenterX = 7f;
+            /// <summary>Canvas 每个世界单位的像素数（UI 尺寸按像素写）。</summary>
+            public const float PixelsPerUnit = 100f;
+            public const float HalfExtentX = PanelCenterX + PanelWidth / 2 + 0.2f;
+            public const float HalfExtentZ = PanelDepth / 2 + 0.1f;
+        }
+
         static readonly Color Paper = new Color(0.95f, 0.92f, 0.84f, 0.96f);
         static readonly Color Ink = new Color(0.16f, 0.12f, 0.1f);
 
@@ -36,7 +50,7 @@ namespace SaturdayGame.Chess.View
         readonly List<GameObject> cards = new List<GameObject>();
         readonly List<RuleBase> ruleBook = new List<RuleBase>();
 
-        public static ChessHud Create(Transform parent)
+        public static ChessHud Create(Transform parent, Camera deskCamera)
         {
             var go = new GameObject("HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             go.transform.SetParent(parent, false);
@@ -48,17 +62,38 @@ namespace SaturdayGame.Chess.View
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 0.5f;
             var hud = go.AddComponent<ChessHud>();
-            hud.Build();
+            hud.Build(parent, deskCamera);
             return hud;
         }
 
-        void Build()
+        /// <summary>平躺在桌面上的一块 World Space Canvas，中心在 (centerX, 0, 0)。</summary>
+        static RectTransform DeskCanvas(Transform parent, string name, float centerX, Camera camera)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(parent, false);
+            rt.sizeDelta = new Vector2(DeskLayout.PanelWidth, DeskLayout.PanelDepth) * DeskLayout.PixelsPerUnit;
+            // 贴在桌面上（桌面顶面 y = -0.08），比棋盘格子（y = 0）略低，像放在桌上的纸
+            rt.localPosition = new Vector3(centerX, -0.075f, 0f);
+            // Canvas 默认面朝 -Z，绕 X 转 90° 后面朝上、顶边朝远处，平躺在桌面上
+            rt.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            rt.localScale = Vector3.one / DeskLayout.PixelsPerUnit;
+            var canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = camera;
+            // 世界空间里的文字按 3 倍分辨率栅格化，斜着看也不糊
+            go.GetComponent<CanvasScaler>().dynamicPixelsPerUnit = 3f;
+            return rt;
+        }
+
+        void Build(Transform deskParent, Camera deskCamera)
         {
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var root = (RectTransform)transform;
 
-            // 左栏：NEW
-            var left = Panel(root, "New", new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(24, 0), new Vector2(420, -48), Paper);
+            // 左边：NEW 规则卡区（平放在桌面上）
+            var leftCanvas = DeskCanvas(deskParent, "Desk New", -DeskLayout.PanelCenterX, deskCamera);
+            var left = Panel(leftCanvas, "New", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Paper);
             Label(left, "Title", "NEW", 44, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
             newHintText = Label(left, "Hint", "", 22, FontStyle.Italic, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, 120));
             cardsRoot = Rect(left, "Cards", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -126), new Vector2(-40, -146));
@@ -68,10 +103,11 @@ namespace SaturdayGame.Chess.View
             layout.childControlWidth = true;
             layout.childForceExpandHeight = false;
 
-            // 右栏：规则书
-            var right = Panel(root, "RuleBook", new Vector2(1, 0), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-24, 0), new Vector2(420, -48), Paper);
+            // 右边：规则书（平放在桌面上）
+            var rightCanvas = DeskCanvas(deskParent, "Desk RuleBook", DeskLayout.PanelCenterX, deskCamera);
+            var right = Panel(rightCanvas, "RuleBook", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Paper);
             Label(right, "Title", "Rule Book", 40, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
-            ruleBookText = Label(right, "Rules", "", 21, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, -110));
+            ruleBookText = Label(right, "Rules", "", 26, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, -110));
             ruleBookText.rectTransform.anchorMin = new Vector2(0, 0);
             ruleBookText.rectTransform.sizeDelta = new Vector2(-48, -110);
 
@@ -174,9 +210,9 @@ namespace SaturdayGame.Chess.View
             foreach (var rule in ruleBook)
             {
                 sb.Append($"\n<b>{RuleCatalog.StageNames[rule.Stage]}: {rule.Title}</b>\n");
-                sb.Append($"<size=18>{rule.Description}</size>\n");
+                sb.Append($"<size=23>{rule.Description}</size>\n");
             }
-            if (ruleBook.Count < RuleCatalog.StageCount) sb.Append("\n<i><size=18>(the rest of the pages are blank)</size></i>");
+            if (ruleBook.Count < RuleCatalog.StageCount) sb.Append("\n<i><size=22>(the rest of the pages are blank)</size></i>");
             ruleBookText.text = sb.ToString();
         }
 

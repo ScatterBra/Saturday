@@ -51,7 +51,7 @@ namespace SaturdayGame.Chess.View
             if (boardCamera == null) boardCamera = GetComponentInChildren<Camera>();
             var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt);
             board = new BoardView(transform, factory);
-            hud = ChessHud.Create(transform);
+            hud = ChessHud.Create(transform, boardCamera);
             hud.RuleCardClicked += ChooseRule;
             hud.SkipClicked += () => ResolveTarget(null);
             hud.PlayAgainClicked += NewGame;
@@ -246,6 +246,8 @@ namespace SaturdayGame.Chess.View
                         break;
                 }
             }
+            // 对白播完就收起字幕，不挡住棋盘
+            hud.HideCaption();
             board.SyncAll();
             if (game.Phase == GamePhase.ChoosingTarget)
                 board.Highlight(null, null, game.PendingTarget.Options, lastMove);

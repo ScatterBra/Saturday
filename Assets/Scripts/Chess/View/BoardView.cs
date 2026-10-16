@@ -32,6 +32,10 @@ namespace SaturdayGame.Chess.View
             root = new GameObject("Board").transform;
             root.SetParent(parent, false);
 
+            // 桌面（backdrop）：顶面在 y = -0.08，比相机能看到的范围大很多，宽屏也不会露边
+            var desk = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.13f, 0), new Vector3(80f, 0.1f, 50f));
+            desk.name = "Desk";
+            factory.SetColor(desk, new Color(0.42f, 0.3f, 0.22f));
             var frame = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.12f, 0), new Vector3(9f, 0.1f, 9f));
             factory.SetColor(frame, new Color(0.3f, 0.2f, 0.14f));
             for (int i = 0; i < 64; i++)
