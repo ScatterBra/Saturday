@@ -4,7 +4,7 @@ namespace SaturdayGame.Chess.View
 {
     /// <summary>
     /// 让斜视相机自动框住整张桌面布局（左边规则卡区、棋盘、右边规则书）。
-    /// 俯仰角固定，只调整相机离桌面的距离和前后位置，屏幕比例变了会重新计算。
+    /// 俯仰角和水平转角固定，只调整相机离桌面的距离和注视点，让布局在屏幕上居中；屏幕比例变了会重新计算。
     /// 挂在棋盘相机上，相机需要是 Chess 根物体的子物体。
     /// </summary>
     [RequireComponent(typeof(Camera))]
@@ -12,6 +12,10 @@ namespace SaturdayGame.Chess.View
     {
         [Tooltip("俯仰角，90 = 正上方往下看")]
         [Range(30f, 90f)] public float pitch = 65f;
+        [Tooltip("水平转角，0 = 从白方正后方看过去；正数相机往右绕，负数往左绕")]
+        [Range(-90f, 90f)] public float yaw = 0f;
+        [Tooltip("缩放，1 = 刚好框住整个布局；大于 1 拉近（边缘会被裁掉），小于 1 拉远（四周露出更多桌面）")]
+        [Range(0.5f, 3f)] public float zoom = 1f;
         [Tooltip("布局左右、前后的半宽（本地坐标），默认按 ChessHud.DeskLayout 计算")]
         public Vector2 halfExtent = new Vector2(ChessHud.DeskLayout.HalfExtentX, ChessHud.DeskLayout.HalfExtentZ);
         [Tooltip("屏幕上方留给状态栏的比例")]
@@ -33,62 +37,99 @@ namespace SaturdayGame.Chess.View
             if (!Mathf.Approximately(cam.aspect, fittedAspect)) Fit();
         }
 
+        // 运行中在 Inspector 里改参数时立刻重新取景
+        void OnValidate()
+        {
+            if (Application.isPlaying && cam != null) Fit();
+        }
+
         [ContextMenu("Fit Now")]
         public void Fit()
         {
             if (cam == null) cam = GetComponent<Camera>();
             fittedAspect = cam.aspect;
-            var rotation = Quaternion.Euler(pitch, 0f, 0f);
+            var rotation = Quaternion.Euler(pitch, yaw, 0f);
             transform.localRotation = rotation;
 
-            // 二分查找最小距离：在这个距离上，调整注视点前后位置让布局上下居中，再看四个角是否都在边距内
-            float near = 1f, far = 200f, focusZ = 0f;
+            // 二分查找最小距离：在这个距离上，移动注视点让布局在屏幕上居中，再看四个角是否都在边距内
+            float near = 1f, far = 200f;
+            Vector3 focus;
             for (int i = 0; i < 40; i++)
             {
                 float distance = (near + far) / 2;
-                focusZ = CenterVertically(rotation, distance);
-                if (Fits(rotation, distance, focusZ)) far = distance;
+                focus = Center(rotation, distance);
+                if (Fits(rotation, distance, focus)) far = distance;
                 else near = distance;
             }
-            focusZ = CenterVertically(rotation, far);
-            Place(rotation, far, focusZ);
+            // 刚好框住的距离除以 zoom：拉近或拉远后布局仍然保持居中
+            float finalDistance = far / Mathf.Max(0.01f, zoom);
+            focus = Center(rotation, finalDistance);
+            Place(rotation, finalDistance, focus);
         }
 
-        float CenterVertically(Quaternion rotation, float distance)
+        /// <summary>
+        /// 找一个注视点，让四个角在屏幕上的包围框处于边距之间的正中。
+        /// 沿相机在桌面上的“前后”方向移动修正上下偏差，沿“左右”方向修正左右偏差。
+        /// </summary>
+        Vector3 Center(Quaternion rotation, float distance)
         {
-            float focusZ = 0f;
-            float wantedMid = (bottomMargin + (1f - topMargin)) / 2;
-            for (int i = 0; i < 12; i++)
+            var forward = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            var right = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+            float depthExtent = Extent(forward), widthExtent = Extent(right);
+            float wantedMidY = (bottomMargin + (1f - topMargin)) / 2;
+
+            var focus = Vector3.zero;
+            for (int i = 0; i < 16; i++)
             {
-                Place(rotation, distance, focusZ);
-                float farY = Viewport(new Vector3(0, 0, halfExtent.y)).y;
-                float nearY = Viewport(new Vector3(0, 0, -halfExtent.y)).y;
-                float span = farY - nearY;
-                if (span <= 0.0001f) break;
-                float mid = (farY + nearY) / 2;
-                // 中点偏高就把注视点往远处挪，反之往近处挪
-                focusZ += (mid - wantedMid) / span * 2f * halfExtent.y;
+                Place(rotation, distance, focus);
+                Bounds(out float minX, out float maxX, out float minY, out float maxY);
+                float spanX = maxX - minX, spanY = maxY - minY;
+                if (spanX <= 0.0001f || spanY <= 0.0001f) break;
+                // 包围框偏上就把注视点往远处挪，偏右就往右挪
+                focus += forward * (((minY + maxY) / 2 - wantedMidY) / spanY * depthExtent);
+                focus += right * (((minX + maxX) / 2 - 0.5f) / spanX * widthExtent);
             }
-            return focusZ;
+            return focus;
         }
 
-        bool Fits(Quaternion rotation, float distance, float focusZ)
+        /// <summary>布局四个角投影到某个水平方向上的总长度。</summary>
+        float Extent(Vector3 axis) =>
+            2f * (Mathf.Abs(axis.x) * halfExtent.x + Mathf.Abs(axis.z) * halfExtent.y);
+
+        void Bounds(out float minX, out float maxX, out float minY, out float maxY)
         {
-            Place(rotation, distance, focusZ);
-            for (int sx = -1; sx <= 1; sx += 2)
+            minX = minY = float.MaxValue;
+            maxX = maxY = float.MinValue;
+            foreach (var corner in Corners())
             {
-                for (int sz = -1; sz <= 1; sz += 2)
-                {
-                    var v = Viewport(new Vector3(sx * halfExtent.x, 0, sz * halfExtent.y));
-                    if (v.z <= 0 || v.x < sideMargin || v.x > 1 - sideMargin || v.y < bottomMargin || v.y > 1 - topMargin)
-                        return false;
-                }
+                var v = Viewport(corner);
+                minX = Mathf.Min(minX, v.x);
+                maxX = Mathf.Max(maxX, v.x);
+                minY = Mathf.Min(minY, v.y);
+                maxY = Mathf.Max(maxY, v.y);
+            }
+        }
+
+        bool Fits(Quaternion rotation, float distance, Vector3 focus)
+        {
+            Place(rotation, distance, focus);
+            foreach (var corner in Corners())
+            {
+                var v = Viewport(corner);
+                if (v.z <= 0 || v.x < sideMargin || v.x > 1 - sideMargin || v.y < bottomMargin || v.y > 1 - topMargin)
+                    return false;
             }
             return true;
         }
 
-        void Place(Quaternion rotation, float distance, float focusZ) =>
-            transform.localPosition = new Vector3(0, 0, focusZ) - rotation * Vector3.forward * distance;
+        Vector3[] Corners() => new[]
+        {
+            new Vector3(-halfExtent.x, 0, -halfExtent.y), new Vector3(halfExtent.x, 0, -halfExtent.y),
+            new Vector3(-halfExtent.x, 0, halfExtent.y), new Vector3(halfExtent.x, 0, halfExtent.y),
+        };
+
+        void Place(Quaternion rotation, float distance, Vector3 focus) =>
+            transform.localPosition = focus - rotation * Vector3.forward * distance;
 
         Vector3 Viewport(Vector3 local)
         {

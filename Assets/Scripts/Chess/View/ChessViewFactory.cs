@@ -12,7 +12,7 @@ namespace SaturdayGame.Chess.View
 
         readonly Material material;
         readonly Font font;
-        readonly Quaternion labelRotation;
+        readonly Transform cameraTransform;
         readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
 
         /// <summary>棋子贴图配置，为 null 时全部用占位图形。</summary>
@@ -23,7 +23,19 @@ namespace SaturdayGame.Chess.View
             Art = art;
             this.material = material != null ? material : new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            labelRotation = camera != null ? camera.transform.rotation : Quaternion.Euler(90, 0, 0);
+            cameraTransform = camera != null ? camera.transform : null;
+        }
+
+        /// <summary>让物体始终和相机朝向一致（相机转了也跟着转）。</summary>
+        void Face(GameObject go)
+        {
+            if (cameraTransform == null)
+            {
+                go.transform.rotation = Quaternion.Euler(90, 0, 0);
+                return;
+            }
+            go.transform.rotation = cameraTransform.rotation;
+            go.AddComponent<FaceCamera>().target = cameraTransform;
         }
 
         public GameObject Primitive(PrimitiveType type, Transform parent, Vector3 localPosition, Vector3 localScale)
@@ -55,7 +67,7 @@ namespace SaturdayGame.Chess.View
             var go = new GameObject("Label");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
-            go.transform.rotation = labelRotation;
+            Face(go);
             var mesh = go.AddComponent<TextMesh>();
             mesh.font = font;
             mesh.fontSize = 64;
@@ -74,7 +86,7 @@ namespace SaturdayGame.Chess.View
             var go = new GameObject("Sprite");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
-            go.transform.rotation = labelRotation;
+            Face(go);
             return go.AddComponent<SpriteRenderer>();
         }
     }
