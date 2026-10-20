@@ -4,7 +4,7 @@ namespace SaturdayGame.Chess.View
 {
     /// <summary>
     /// 一枚棋子的占位显示：圆柱底座（阵营颜色）+ 字母，外观（Skin）用底下的彩色圆环和小字表示，
-    /// 冻结用头顶的小方块表示。PieceArt 里配了贴图的棋子类型改用朝向镜头的贴图显示。
+    /// 冻结用头顶的小方块表示。PieceArt 里配了贴图的棋子类型改用朝向镜头的贴图显示，配了 3D 模型的外观（例如树）用模型显示。
     /// </summary>
     public sealed class PieceView
     {
@@ -23,6 +23,8 @@ namespace SaturdayGame.Chess.View
         readonly TextMesh letter;
         readonly TextMesh caption;
         readonly SpriteRenderer sprite;
+        GameObject model;
+        GameObject modelSource;
 
         public PieceView(ChessViewFactory factory, Transform parent, Piece piece)
         {
@@ -49,7 +51,9 @@ namespace SaturdayGame.Chess.View
             bool white = piece.Side == Side.White;
             var art = factory.Art;
             var resolved = art != null ? art.Resolve(piece) : default;
-            bool useSprite = resolved.Sprite != null;
+            UpdateModel(resolved.Model, piece);
+            bool useModel = model != null;
+            bool useSprite = !useModel && resolved.Sprite != null;
             if (sprite != null)
             {
                 sprite.enabled = useSprite;
@@ -57,9 +61,9 @@ namespace SaturdayGame.Chess.View
                 sprite.color = resolved.Tint;
                 sprite.transform.localScale = Vector3.one * art.pieceHeight;
             }
-            letter.gameObject.SetActive(!useSprite);
+            letter.gameObject.SetActive(!useSprite && !useModel);
 
-            disc.SetActive(!useSprite);
+            disc.SetActive(!useSprite && !useModel);
             factory.SetColor(disc, white ? WhiteBody : BlackBody);
 
             // 贴图已经画出来的外观就不再显示占位圆环 / 冻结方块和对应的小字
@@ -85,6 +89,17 @@ namespace SaturdayGame.Chess.View
             }
             caption.text = text;
             caption.color = new Color(0.1f, 0.06f, 0.04f);
+        }
+
+        /// <summary>外观要用的模型变了才重新生成；同一枚棋子总是同一个朝向，几棵树看起来不会一模一样。</summary>
+        void UpdateModel(GameObject source, Piece piece)
+        {
+            if (source == modelSource) return;
+            if (model != null) Object.Destroy(model);
+            modelSource = source;
+            model = source != null
+                ? factory.Model(source, Root.transform, factory.Art.modelHeight, factory.Art.modelWidth, piece.Id * 137f)
+                : null;
         }
 
         public void SetPosition(Vector3 localPosition) => Root.transform.localPosition = localPosition;

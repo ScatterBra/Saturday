@@ -39,17 +39,27 @@ namespace SaturdayGame.Chess.View
         public Material placeholderMaterial;
         [Tooltip("棋子贴图配置，留空则用占位图形")]
         public PieceArt pieceArt;
+        [Tooltip("打开后 3D 模型（例如树）投影子，桌面和棋盘格子改用受光照的材质来接影子（颜色会随灯光明暗变化）")]
+        public bool shadows = true;
+        [Tooltip("打开阴影时桌面和棋盘格子用的受光照材质（URP Lit），留空则运行时创建")]
+        public Material surfaceMaterial;
         public float aiThinkTime = 0.6f;
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
         public float dialogueDuration = 1.4f;
         [Tooltip("风暴沙尘卷起和散去各用多久")]
         public float stormDuration = 0.8f;
+        [Tooltip("选了树技能后相机转到这个俯仰角，才看得出立体的树；0 = 不转")]
+        [Range(0f, 90f)] public float treeCameraPitch = 65f;
+        [Tooltip("相机转过去用多久")]
+        public float cameraTurnDuration = 1f;
 
         ChessGame game;
         ChessAI ai;
         BoardView board;
         ChessHud hud;
+        DeskCameraFit cameraFit;
+        float startPitch;
         bool busy;
         Piece selected;
         List<Move> selectedMoves = new List<Move>();
@@ -62,7 +72,10 @@ namespace SaturdayGame.Chess.View
         {
             EnsureEventSystem();
             if (boardCamera == null) boardCamera = GetComponentInChildren<Camera>();
-            var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt);
+            cameraFit = boardCamera != null ? boardCamera.GetComponent<DeskCameraFit>() : null;
+            if (cameraFit != null) startPitch = cameraFit.pitch;
+            EnsureLight();
+            var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows);
             board = new BoardView(transform, factory);
             hud = ChessHud.Create(transform, boardCamera, pieceArt);
             hud.RuleCardClicked += ChooseRule;
@@ -95,6 +108,12 @@ namespace SaturdayGame.Chess.View
             board.Bind(game.Board);
             hud.ResetForNewGame();
             hud.SetStorm(0);
+            // 上一局转过的相机回到场景里设的角度
+            if (cameraFit != null && !Mathf.Approximately(cameraFit.pitch, startPitch))
+            {
+                cameraFit.pitch = startPitch;
+                cameraFit.Fit();
+            }
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
@@ -308,6 +327,8 @@ namespace SaturdayGame.Chess.View
                         hud.HideOffers();
                         hud.ShowSkip(false);
                         hud.AddRule(e.Rule);
+                        if (e.Rule is TreePawnsRule && cameraFit != null && treeCameraPitch > 0f && !Mathf.Approximately(cameraFit.pitch, treeCameraPitch))
+                            yield return cameraFit.TurnTo(treeCameraPitch, cameraTurnDuration);
                         break;
                     case GameEventType.TargetRequested:
                         if (!e.Request.IsPieceRequest) board.Highlight(null, null, e.Request.Options, lastMove);
@@ -384,6 +405,19 @@ namespace SaturdayGame.Chess.View
             if (FindAnyObjectByType<EventSystem>() != null) return;
             var go = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
             go.transform.SetParent(transform, false);
+        }
+
+        /// <summary>3D 模型（例如树）用的是受光照的材质，场景里没有灯时补一盏平行光，不然模型是黑的。占位图形和贴图不受光照影响。</summary>
+        void EnsureLight()
+        {
+            if (FindAnyObjectByType<Light>() != null) return;
+            var go = new GameObject("Model Light");
+            go.transform.SetParent(transform, false);
+            go.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            var light = go.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.intensity = 1.2f;
+            light.shadows = LightShadows.None;
         }
     }
 }

@@ -24,12 +24,16 @@ namespace SaturdayGame.Chess.View
             public Sprite[] white = Array.Empty<Sprite>();
             [Tooltip("留空时黑方用白方的图乘上 variantBlackTint")]
             public Sprite[] black = Array.Empty<Sprite>();
+            [Tooltip("3D 模型（FBX 或预制体）。配了模型就在棋盘上用模型代替贴图（贴图仍用在被吃区等 2D 界面里），多个模型按棋子编号固定选一个")]
+            public GameObject[] models = Array.Empty<GameObject>();
         }
 
         /// <summary>选出来的贴图和它代表的东西，PieceView 据此决定还要不要显示占位标记。</summary>
         public struct Resolved
         {
             public Sprite Sprite;
+            /// <summary>不为 null 时棋盘上用这个 3D 模型代替贴图。</summary>
+            public GameObject Model;
             public Color Tint;
             /// <summary>贴图已经表现了 Skin，不用再画彩色圆环。</summary>
             public bool ShowsSkin;
@@ -59,6 +63,10 @@ namespace SaturdayGame.Chess.View
         public Color variantBlackTint = new Color(0.75f, 0.75f, 0.8f);
         [Tooltip("棋子贴图在棋盘上的高度（一格 = 1）")]
         public float pieceHeight = 0.95f;
+        [Tooltip("3D 模型在棋盘上的高度（一格 = 1），按模型包围盒自动缩放")]
+        public float modelHeight = 1.1f;
+        [Tooltip("3D 模型最宽不超过这么多（一格 = 1）")]
+        public float modelWidth = 0.95f;
 
         [Header("Skins")]
         public List<SkinArt> skins = new List<SkinArt>();
@@ -94,10 +102,12 @@ namespace SaturdayGame.Chess.View
                 if (entry.skin != id || (entry.onlyForType && entry.type != piece.Type)) continue;
                 bool hasBlack = piece.Side == Side.Black && entry.black != null && entry.black.Length > 0;
                 var list = hasBlack ? entry.black : entry.white;
-                if (list == null || list.Length == 0) continue;
-                result.Sprite = list[piece.Id % list.Length];
+                bool hasModel = entry.models != null && entry.models.Length > 0;
+                if ((list == null || list.Length == 0) && !hasModel) continue;
+                if (list != null && list.Length > 0) result.Sprite = list[piece.Id % list.Length];
+                if (hasModel) result.Model = entry.models[piece.Id % entry.models.Length];
                 result.Tint = piece.Side == Side.Black && !hasBlack ? variantBlackTint : Color.white;
-                return result.Sprite != null;
+                return result.Sprite != null || result.Model != null;
             }
             return false;
         }

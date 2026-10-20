@@ -3,7 +3,8 @@ using UnityEngine;
 namespace SaturdayGame.Chess.View
 {
     /// <summary>
-    /// 生成占位用的几何体和文字。颜色用 MaterialPropertyBlock 改，所有物体共用一个不受光照影响的材质。
+    /// 生成占位用的几何体和文字。颜色用 MaterialPropertyBlock 改，所有物体共用一个不受光照影响的材质；
+    /// 打开阴影时桌面、棋盘格子这些“地面”改用受光照的材质，才接得住 3D 模型投下的影子。
     /// </summary>
     public sealed class ChessViewFactory
     {
@@ -11,6 +12,7 @@ namespace SaturdayGame.Chess.View
         static readonly int LegacyColor = Shader.PropertyToID("_Color");
 
         readonly Material material;
+        readonly Material litMaterial;
         readonly Font font;
         readonly Transform cameraTransform;
         readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
@@ -18,10 +20,23 @@ namespace SaturdayGame.Chess.View
         /// <summary>棋子贴图配置，为 null 时全部用占位图形。</summary>
         public readonly PieceArt Art;
 
-        public ChessViewFactory(Material material, Camera camera, PieceArt art = null)
+        /// <summary>3D 模型是否投影子。</summary>
+        public readonly bool Shadows;
+
+        public ChessViewFactory(Material material, Camera camera, PieceArt art = null, Material surfaceMaterial = null, bool shadows = false)
         {
             Art = art;
+            Shadows = shadows;
             this.material = material != null ? material : new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            if (shadows)
+            {
+                litMaterial = surfaceMaterial;
+                if (litMaterial == null)
+                {
+                    litMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                    litMaterial.SetFloat("_Smoothness", 0.1f);
+                }
+            }
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             cameraTransform = camera != null ? camera.transform : null;
         }
@@ -38,7 +53,8 @@ namespace SaturdayGame.Chess.View
             go.AddComponent<FaceCamera>().target = cameraTransform;
         }
 
-        public GameObject Primitive(PrimitiveType type, Transform parent, Vector3 localPosition, Vector3 localScale)
+        /// <param name="surface">桌面、棋盘格子这类地面：打开阴影时用受光照的材质并接收影子。</param>
+        public GameObject Primitive(PrimitiveType type, Transform parent, Vector3 localPosition, Vector3 localScale, bool surface = false)
         {
             var go = GameObject.CreatePrimitive(type);
             Object.Destroy(go.GetComponent<Collider>());
@@ -46,9 +62,10 @@ namespace SaturdayGame.Chess.View
             go.transform.localPosition = localPosition;
             go.transform.localScale = localScale;
             var renderer = go.GetComponent<Renderer>();
-            renderer.sharedMaterial = material;
+            bool lit = surface && litMaterial != null;
+            renderer.sharedMaterial = lit ? litMaterial : material;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
+            renderer.receiveShadows = lit;
             return go;
         }
 
@@ -88,6 +105,42 @@ namespace SaturdayGame.Chess.View
             go.transform.localPosition = localPosition;
             Face(go);
             return go.AddComponent<SpriteRenderer>();
+        }
+
+        /// <summary>
+        /// 放一个 3D 模型：按包围盒缩放到 height 高、最宽不超过 width，底部中心对准格子中心，再绕竖轴转 yaw 度。
+        /// 模型本身的大小、原点位置不用管，导进来的 FBX 直接拖进 PieceArt 就行。
+        /// </summary>
+        public GameObject Model(GameObject source, Transform parent, float height, float width, float yaw)
+        {
+            var holder = new GameObject("Model");
+            holder.transform.SetParent(parent, false);
+            var model = Object.Instantiate(source, holder.transform, false);
+            model.transform.localPosition = Vector3.zero;
+            model.transform.localRotation = source.transform.localRotation;
+            model.transform.localScale = source.transform.localScale;
+            foreach (var collider in model.GetComponentsInChildren<Collider>()) Object.Destroy(collider);
+
+            var renderers = model.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                var bounds = renderers[0].bounds;
+                foreach (var r in renderers)
+                {
+                    bounds.Encapsulate(r.bounds);
+                    r.shadowCastingMode = Shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+                }
+                // 包围盒换算到 holder 的本地坐标
+                var min = holder.transform.InverseTransformPoint(bounds.min);
+                var max = holder.transform.InverseTransformPoint(bounds.max);
+                var size = new Vector3(Mathf.Abs(max.x - min.x), Mathf.Abs(max.y - min.y), Mathf.Abs(max.z - min.z));
+                float scale = Mathf.Min(height / Mathf.Max(0.0001f, size.y), width / Mathf.Max(0.0001f, Mathf.Max(size.x, size.z)));
+                var bottomCenter = new Vector3((min.x + max.x) / 2, Mathf.Min(min.y, max.y), (min.z + max.z) / 2);
+                model.transform.localScale *= scale;
+                model.transform.localPosition = -bottomCenter * scale;
+            }
+            holder.transform.localRotation = Quaternion.Euler(0, yaw, 0);
+            return holder;
         }
     }
 }

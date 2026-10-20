@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 namespace SaturdayGame.Chess.View
@@ -65,6 +66,20 @@ namespace SaturdayGame.Chess.View
             float finalDistance = far / Mathf.Max(0.01f, zoom);
             focus = Center(rotation, finalDistance);
             Place(rotation, finalDistance, focus);
+        }
+
+        /// <summary>在 duration 秒内平滑转到新的俯仰角，转的过程中一直保持布局框在屏幕里。</summary>
+        public IEnumerator TurnTo(float targetPitch, float duration)
+        {
+            float start = pitch;
+            for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.01f, duration))
+            {
+                pitch = Mathf.Lerp(start, targetPitch, Mathf.SmoothStep(0f, 1f, t));
+                Fit();
+                yield return null;
+            }
+            pitch = targetPitch;
+            Fit();
         }
 
         /// <summary>
