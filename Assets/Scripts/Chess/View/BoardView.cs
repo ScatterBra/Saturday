@@ -7,23 +7,31 @@ namespace SaturdayGame.Chess.View
     /// <summary>
     /// 棋盘的显示：64 个格子 + 所有棋子的 PieceView。棋盘平放在根物体的 XZ 平面上，
     /// 格子 (x, y) 的中心在本地坐标 (x - 3.5, 0, y - 3.5)。
+    /// 第三阶段的高原用一格一格升起的方块表示，每级高 LevelHeight；城堡格是灰色石块。
     /// </summary>
     public sealed class BoardView
     {
+        /// <summary>高原每升一级在画面上抬高多少（世界单位，一格 = 1）。</summary>
+        public const float LevelHeight = 0.35f;
+
         static readonly Color Light = new Color(0.93f, 0.87f, 0.74f);
         static readonly Color Dark = new Color(0.72f, 0.56f, 0.4f);
         static readonly Color Lava = new Color(1f, 0.32f, 0.05f);
+        static readonly Color Rock = new Color(0.55f, 0.5f, 0.42f);
+        static readonly Color CastleStone = new Color(0.62f, 0.62f, 0.66f);
         static readonly Color Selected = new Color(1f, 0.9f, 0.3f);
         static readonly Color MoveTarget = new Color(0.55f, 0.85f, 0.45f);
         static readonly Color CaptureTarget = new Color(0.95f, 0.4f, 0.35f);
         static readonly Color PickTarget = new Color(0.35f, 0.8f, 0.95f);
         static readonly Color LastMove = new Color(0.95f, 0.8f, 0.5f);
+        static readonly Color Danger = new Color(0.9f, 0.1f, 0.1f);
 
         readonly Transform root;
         readonly ChessViewFactory factory;
         readonly GameObject[] squares = new GameObject[64];
         readonly Dictionary<int, PieceView> pieces = new Dictionary<int, PieceView>();
         readonly Transform pieceRoot;
+        GameObject castleLabel;
         Board board;
 
         public BoardView(Transform parent, ChessViewFactory factory)
@@ -57,15 +65,30 @@ namespace SaturdayGame.Chess.View
 
         public static Vector3 SquareCenter(Coord c) => new Vector3(c.X - 3.5f, 0f, c.Y - 3.5f);
 
-        /// <summary>屏幕射线落在哪个格子上。</summary>
+        /// <summary>棋子站在这个格子上时的位置（考虑高原高度）。</summary>
+        public Vector3 PiecePosition(Coord c) => SquareCenter(c) + Vector3.up * TopOf(c);
+
+        float TopOf(Coord c) => board != null ? board.Height(c) * LevelHeight : 0f;
+
+        /// <summary>屏幕射线落在哪个格子上（升起的格子按它的顶面算）。</summary>
         public bool TryGetCoord(Ray ray, out Coord coord)
         {
             coord = default;
-            var plane = new Plane(root.up, root.position);
-            if (!plane.Raycast(ray, out float distance)) return false;
-            var local = root.InverseTransformPoint(ray.GetPoint(distance));
-            coord = new Coord(Mathf.FloorToInt(local.x + 4f), Mathf.FloorToInt(local.z + 4f));
-            return coord.IsValid;
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                var top = root.TransformPoint(SquareCenter(c) + Vector3.up * TopOf(c));
+                var plane = new Plane(root.up, top);
+                if (!plane.Raycast(ray, out float distance) || distance >= best) continue;
+                var local = root.InverseTransformPoint(ray.GetPoint(distance)) - SquareCenter(c);
+                if (Mathf.Abs(local.x) > 0.5f || Mathf.Abs(local.z) > 0.5f) continue;
+                best = distance;
+                coord = c;
+                found = true;
+            }
+            return found;
         }
 
         /// <summary>换一局新棋：清掉旧棋子，按新棋盘重建。</summary>
@@ -74,8 +97,39 @@ namespace SaturdayGame.Chess.View
             foreach (var view in pieces.Values) view.Destroy();
             pieces.Clear();
             board = newBoard;
+            RebuildTerrain();
             SyncAll();
             Highlight(null, null, null, null);
+        }
+
+        /// <summary>按棋盘的高度和城堡重新摆格子（第三阶段风暴之后调用）。</summary>
+        public void RebuildTerrain()
+        {
+            Vector3 castleSum = Vector3.zero;
+            int castleCount = 0;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                float top = TopOf(c);
+                float thickness = 0.1f + top;
+                squares[i].transform.localPosition = SquareCenter(c) + Vector3.up * (top - thickness / 2);
+                squares[i].transform.localScale = new Vector3(1f, thickness, 1f);
+                if (board != null && board.IsCastle(c))
+                {
+                    castleSum += SquareCenter(c) + Vector3.up * top;
+                    castleCount++;
+                }
+            }
+
+            if (castleLabel != null) Object.Destroy(castleLabel);
+            castleLabel = null;
+            if (castleCount > 0)
+            {
+                var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Princess");
+                label.color = new Color(1f, 0.85f, 0.95f);
+                label.fontStyle = FontStyle.Bold;
+                castleLabel = label.gameObject;
+            }
         }
 
         /// <summary>按棋盘状态把所有棋子摆正（演出结束后调用，保证显示和逻辑一致）。</summary>
@@ -94,9 +148,9 @@ namespace SaturdayGame.Chess.View
                     continue;
                 }
                 if (view == null) view = Create(piece);
-                view.Root.SetActive(!piece.IsHidden);
+                view.Root.SetActive(true);
                 view.Root.transform.localScale = Vector3.one;
-                view.SetPosition(SquareCenter(piece.Pos));
+                view.SetPosition(PiecePosition(piece.Pos));
                 view.Refresh(piece);
             }
         }
@@ -104,7 +158,7 @@ namespace SaturdayGame.Chess.View
         PieceView Create(Piece piece)
         {
             var view = new PieceView(factory, pieceRoot, piece);
-            view.SetPosition(SquareCenter(piece.Pos));
+            view.SetPosition(PiecePosition(piece.Pos));
             pieces[piece.Id] = view;
             return view;
         }
@@ -115,15 +169,21 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>
-        /// 格子着色。优先级：岩浆 > 点选目标 > 可吃 > 可走 > 选中 > 上一步 > 普通。
+        /// 格子着色。优先级：岩浆 > 城堡 > 被将军的王 > 点选目标 > 可吃 > 可走 > 选中 > 上一步 > 普通。
+        /// 第三阶段献祭完成前，我方还去不了的对面格子会暗一些；高原是岩石色。
         /// </summary>
-        public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove)
+        public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null)
         {
             var colors = new Color[64];
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
                 colors[i] = (c.X + c.Y) % 2 == 0 ? Dark : Light;
+                if (board != null && board.Stage3)
+                {
+                    if (board.Height(c) > 0) colors[i] = Color.Lerp(colors[i], Rock, 0.6f);
+                    if (!board.TaskComplete && !board.InPlayerZone(c)) colors[i] = Color.Lerp(colors[i], Color.black, 0.2f);
+                }
             }
             if (lastMove.HasValue)
             {
@@ -133,13 +193,22 @@ namespace SaturdayGame.Chess.View
             if (selected.HasValue) colors[selected.Value.Index] = Selected;
             if (moves != null)
                 foreach (var m in moves)
-                    colors[m.To.Index] = board.PieceAt(m.To) != null ? CaptureTarget : MoveTarget;
+                    colors[m.To.Index] = board.PieceAt(m.To) != null || board.IsLava(m.To) ? CaptureTarget : MoveTarget;
             if (pickOptions != null)
                 foreach (var c in pickOptions)
                     colors[c.Index] = PickTarget;
+            if (danger.HasValue) colors[danger.Value.Index] = Danger;
             for (int i = 0; i < 64; i++)
             {
-                if (board != null && board.IsLava(Coord.FromIndex(i))) colors[i] = Lava;
+                var c = Coord.FromIndex(i);
+                if (board != null && board.IsCastle(c)) colors[i] = CastleStone;
+                if (board != null && board.IsLava(c))
+                {
+                    // 岩浆格上能走（献祭 / 地狱马）时用红色描出来，否则就是岩浆色
+                    bool target = false;
+                    if (moves != null) foreach (var m in moves) target |= m.To == c;
+                    colors[i] = target ? Color.Lerp(Lava, CaptureTarget, 0.6f) : Lava;
+                }
                 factory.SetColor(squares[i], colors[i]);
             }
         }
@@ -150,9 +219,54 @@ namespace SaturdayGame.Chess.View
         {
             var piece = board.GetPiece(id);
             if (!pieces.TryGetValue(id, out var view)) view = Create(piece);
-            view.Root.SetActive(true); // 从城堡里出来的棋子之前是隐藏的
-            var start = SquareCenter(from);
-            var end = SquareCenter(to);
+            var start = view.Root.transform.localPosition;
+            var end = PiecePosition(to);
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                float k = Mathf.SmoothStep(0, 1, t);
+                view.SetPosition(Vector3.Lerp(start, end, k) + Vector3.up * Mathf.Sin(k * Mathf.PI) * 0.35f);
+                yield return null;
+            }
+            view.SetPosition(end);
+        }
+
+        /// <summary>被击飞：高高地抛出去，落到 to（掉进岩浆的话由随后的 Captured 事件烧掉）。</summary>
+        public IEnumerator AnimateKnockback(int id, Coord to, float duration)
+        {
+            if (!pieces.TryGetValue(id, out var view)) yield break;
+            var start = view.Root.transform.localPosition;
+            var end = PiecePosition(to);
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                view.SetPosition(Vector3.Lerp(start, end, t) + Vector3.up * Mathf.Sin(t * Mathf.PI) * 1.2f);
+                view.Root.transform.localRotation = Quaternion.Euler(0, 0, 360f * t);
+                yield return null;
+            }
+            view.Root.transform.localRotation = Quaternion.identity;
+            view.SetPosition(end);
+        }
+
+        /// <summary>献祭：走进岩浆，慢慢沉下去。</summary>
+        public IEnumerator AnimateSacrifice(int id, Coord at, float duration)
+        {
+            if (!pieces.TryGetValue(id, out var view)) yield break;
+            pieces.Remove(id);
+            yield return MoveView(view, PiecePosition(at), duration);
+            var flame = factory.Primitive(PrimitiveType.Sphere, view.Root.transform, new Vector3(0, 0.3f, 0), Vector3.one * 0.8f);
+            factory.SetColor(flame, new Color(1f, 0.3f, 0.05f));
+            var start = view.Root.transform.localPosition;
+            for (float t = 0; t < 1f; t += Time.deltaTime / (duration * 2))
+            {
+                view.SetPosition(start + Vector3.down * 0.6f * t);
+                view.Root.transform.localScale = Vector3.one * (1f - t);
+                yield return null;
+            }
+            view.Destroy();
+        }
+
+        IEnumerator MoveView(PieceView view, Vector3 end, float duration)
+        {
+            var start = view.Root.transform.localPosition;
             for (float t = 0; t < 1f; t += Time.deltaTime / duration)
             {
                 float k = Mathf.SmoothStep(0, 1, t);
@@ -185,26 +299,13 @@ namespace SaturdayGame.Chess.View
             var piece = board.GetPiece(id);
             if (!pieces.TryGetValue(id, out var view)) view = Create(piece);
             view.Refresh(piece);
+            view.SetPosition(PiecePosition(piece.Pos));
             for (float t = 0; t < 1f; t += Time.deltaTime / duration)
             {
                 view.Root.transform.localScale = Vector3.one * Mathf.SmoothStep(0, 1, t);
                 yield return null;
             }
             view.Root.transform.localScale = Vector3.one;
-        }
-
-        public IEnumerator AnimateEnterCastle(int id, Coord castle, float duration)
-        {
-            if (!pieces.TryGetValue(id, out var view)) yield break;
-            var start = view.Root.transform.localPosition;
-            var end = SquareCenter(castle);
-            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
-            {
-                view.SetPosition(Vector3.Lerp(start, end, Mathf.SmoothStep(0, 1, t)) + Vector3.up * 0.6f * Mathf.Sin(t * Mathf.PI));
-                view.Root.transform.localScale = Vector3.one * (1f - 0.7f * t);
-                yield return null;
-            }
-            view.Root.SetActive(false);
         }
 
         /// <summary>外观变化时轻轻弹一下，让玩家注意到。</summary>

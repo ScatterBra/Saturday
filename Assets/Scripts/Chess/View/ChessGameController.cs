@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using SaturdayGame.Minigames;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -18,8 +19,18 @@ namespace SaturdayGame.Chess.View
         [Header("Game")]
         [Tooltip("随机种子，0 表示每局随机")]
         public int seed;
-        [Tooltip("在这些回合开始时抽规则卡")]
-        public int[] stageTurns = { 4, 10, 16 };
+        [Tooltip("在这些回合开始时弹出固定选卡（第一、二阶段）")]
+        public int[] stageTurns = { 4, 10 };
+        [Tooltip("到这个回合朋友掀起风暴，进入第三阶段")]
+        public int stormTurn = 20;
+        [Tooltip("第三阶段要往岩浆里献祭几个棋子，马才能变成地狱马")]
+        public int sacrificesNeeded = 3;
+        [Tooltip("第三阶段每隔几回合弹一次技能")]
+        public int stage3SkillEvery = 5;
+        [Tooltip("第三阶段开始后的第几回合朋友放技能（鸟群）")]
+        public int[] friendSkillTurns = { 2, 7 };
+        [Tooltip("第三阶段的地形和阵型，留空用默认布局")]
+        public Stage3LayoutAsset stage3Layout;
         [Range(0f, 1f)] public float aiBlunderChance = 0.2f;
 
         [Header("Presentation")]
@@ -32,6 +43,8 @@ namespace SaturdayGame.Chess.View
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
         public float dialogueDuration = 1.4f;
+        [Tooltip("风暴沙尘卷起和散去各用多久")]
+        public float stormDuration = 0.8f;
 
         ChessGame game;
         ChessAI ai;
@@ -51,9 +64,10 @@ namespace SaturdayGame.Chess.View
             if (boardCamera == null) boardCamera = GetComponentInChildren<Camera>();
             var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt);
             board = new BoardView(transform, factory);
-            hud = ChessHud.Create(transform, boardCamera);
+            hud = ChessHud.Create(transform, boardCamera, pieceArt);
             hud.RuleCardClicked += ChooseRule;
-            hud.SkipClicked += () => ResolveTarget(null);
+            hud.SkipClicked += Skip;
+            hud.LostPieceClicked += id => ResolvePiece(id);
             hud.PlayAgainClicked += NewGame;
             hud.BackClicked += () => MinigameSession.Finish(game.Winner == game.PlayerSide ? "won" : game.Winner == null ? "draw" : "lost");
             NewGame();
@@ -63,7 +77,15 @@ namespace SaturdayGame.Chess.View
         {
             StopAllCoroutines();
             busy = false;
-            var settings = new GameSettings { StageTurns = stageTurns };
+            var settings = new GameSettings
+            {
+                StageTurns = stageTurns,
+                StormTurn = stormTurn,
+                SacrificesNeeded = sacrificesNeeded,
+                Stage3SkillEvery = stage3SkillEvery,
+                FriendSkillTurns = friendSkillTurns,
+                Layout = stage3Layout != null ? stage3Layout.Build() : null,
+            };
             if (seed != 0) settings.Seed = seed;
             game = new ChessGame(settings);
             ai = new ChessAI(new System.Random(settings.Seed + 1)) { BlunderChance = aiBlunderChance };
@@ -72,6 +94,7 @@ namespace SaturdayGame.Chess.View
             lastMove = null;
             board.Bind(game.Board);
             hud.ResetForNewGame();
+            hud.SetStorm(0);
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
@@ -99,8 +122,8 @@ namespace SaturdayGame.Chess.View
             if (busy) return;
             if (game.Phase == GamePhase.ChoosingTarget)
             {
-                foreach (var option in game.PendingTarget.Options)
-                    if (option == coord) ResolveTarget(coord);
+                if (game.PendingTarget.IsPieceRequest) return;
+                if (game.PendingTarget.Options.Contains(coord)) ResolveTarget(coord);
                 return;
             }
             if (game.Phase != GamePhase.PlayerTurn) return;
@@ -113,17 +136,6 @@ namespace SaturdayGame.Chess.View
                     PlayMove(move);
                     return;
                 }
-                // 再点一次城堡：切换成操作藏在里面的棋子
-                if (coord == selected.Pos && selected.HasGuest)
-                {
-                    Select(game.Board.GetPiece(selected.GuestId));
-                    return;
-                }
-                if (coord == selected.Pos && selected.IsHidden)
-                {
-                    Select(game.Board.GetPiece(selected.HostId));
-                    return;
-                }
             }
 
             var piece = game.Board.PieceAt(coord);
@@ -134,15 +146,43 @@ namespace SaturdayGame.Chess.View
         public void ChooseRule(int index)
         {
             if (busy || game.Phase != GamePhase.ChoosingRule) return;
+            hud.ShowSkip(false);
             game.ChooseRule(index);
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
+        /// <summary>Skip 按钮：跳过可选的技能卡，或跳过可选的点选。</summary>
+        public void Skip()
+        {
+            if (busy) return;
+            if (game.Phase == GamePhase.ChoosingRule && game.CanSkipOffers)
+            {
+                hud.ShowSkip(false);
+                hud.HideOffers();
+                game.SkipOffers();
+                StartCoroutine(PlayEvents(game.DrainEvents()));
+            }
+            else if (game.Phase == GamePhase.ChoosingTarget && game.PendingTarget.AllowSkip)
+            {
+                if (game.PendingTarget.IsPieceRequest) ResolvePiece(null);
+                else ResolveTarget(null);
+            }
+        }
+
         public void ResolveTarget(Coord? coord)
         {
-            if (busy || game.Phase != GamePhase.ChoosingTarget) return;
+            if (busy || game.Phase != GamePhase.ChoosingTarget || game.PendingTarget.IsPieceRequest) return;
             hud.ShowSkip(false);
             game.ResolveTarget(coord);
+            StartCoroutine(PlayEvents(game.DrainEvents()));
+        }
+
+        /// <summary>在规则书下方的被吃区里点选了一枚棋子（复活技能）。</summary>
+        public void ResolvePiece(int? pieceId)
+        {
+            if (busy || game.Phase != GamePhase.ChoosingTarget || !game.PendingTarget.IsPieceRequest) return;
+            hud.ShowSkip(false);
+            game.ResolvePiece(pieceId);
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
@@ -158,13 +198,11 @@ namespace SaturdayGame.Chess.View
         {
             selected = piece;
             selectedMoves = game.MovesFor(piece);
-            board.Highlight(piece.Pos, selectedMoves, null, lastMove);
-            if (piece.IsHidden)
-                hud.SetStatus($"Moving the {Name(piece)} hiding in the castle. Click the castle again to switch back.");
-            else if (piece.HasGuest)
-                hud.SetStatus("Click the castle again to move the piece hiding inside.");
-            else if (piece.IsFrozen)
+            board.Highlight(piece.Pos, selectedMoves, null, lastMove, DangerSquare());
+            if (piece.IsFrozen)
                 hud.SetStatus($"That {Name(piece)} is frozen.");
+            else if (piece.IsHellhorse)
+                hud.SetStatus("Hellhorse: one step forward, back, left or right. It can walk on lava.");
             else
                 UpdateStatus();
         }
@@ -173,8 +211,15 @@ namespace SaturdayGame.Chess.View
         {
             selected = null;
             selectedMoves.Clear();
-            if (game.Phase != GamePhase.ChoosingTarget) board.Highlight(null, null, null, lastMove);
+            if (game.Phase != GamePhase.ChoosingTarget) board.Highlight(null, null, null, lastMove, DangerSquare());
             UpdateStatus();
+        }
+
+        /// <summary>玩家被将军时王所在的格子（标红）。</summary>
+        Coord? DangerSquare()
+        {
+            if (game.Phase == GamePhase.GameOver || game.InStage3 || !game.InCheck(game.PlayerSide)) return null;
+            return game.Board.King(game.PlayerSide)?.Pos;
         }
 
         IEnumerator OpponentTurn()
@@ -204,8 +249,14 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.Moved:
                         yield return board.AnimateMove(e.PieceId, e.From, e.To, moveDuration);
                         break;
+                    case GameEventType.Sacrificed:
+                        yield return board.AnimateSacrifice(e.PieceId, e.To, moveDuration);
+                        break;
+                    case GameEventType.KnockedBack:
+                        yield return board.AnimateKnockback(e.PieceId, e.To, effectDuration * 2);
+                        break;
                     case GameEventType.Captured:
-                        yield return board.AnimateCapture(e.PieceId, e.Text == "burned", effectDuration);
+                        yield return board.AnimateCapture(e.PieceId, e.Text == "burned" || e.Text == "lava", effectDuration);
                         break;
                     case GameEventType.Promoted:
                     case GameEventType.AppearanceChanged:
@@ -214,27 +265,52 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.Revived:
                         yield return board.AnimateSpawn(e.PieceId, effectDuration * 2);
                         break;
-                    case GameEventType.EnteredCastle:
-                        yield return board.AnimateEnterCastle(e.PieceId, e.To, effectDuration * 1.5f);
-                        board.RefreshPiece(e.SourcePieceId);
-                        break;
                     case GameEventType.LavaAdded:
                         board.Highlight(null, null, null, lastMove);
                         yield return new WaitForSeconds(effectDuration);
+                        break;
+                    case GameEventType.Storm:
+                        // 沙尘卷起，盖住整个画面；棋盘在 BoardRebuilt 时换掉
+                        for (float t = 0; t < 1f; t += Time.deltaTime / stormDuration)
+                        {
+                            hud.SetStorm(t);
+                            yield return null;
+                        }
+                        hud.SetStorm(1);
+                        break;
+                    case GameEventType.BoardRebuilt:
+                        lastMove = null;
+                        selected = null;
+                        board.RebuildTerrain();
+                        board.SyncAll();
+                        board.Highlight(null, null, null, null);
+                        yield return new WaitForSeconds(0.3f);
+                        for (float t = 1f; t > 0f; t -= Time.deltaTime / stormDuration)
+                        {
+                            hud.SetStorm(t);
+                            yield return null;
+                        }
+                        hud.SetStorm(0);
+                        break;
+                    case GameEventType.OpponentSkill:
+                        hud.ShowCaption(Speakers.Friend, $"*casts {e.Rule.Title}*");
+                        yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.TurnPassed:
                         hud.ShowCaption(null, e.Side == game.PlayerSide ? "You can't move. Turn skipped." : "Your friend can't move. Turn skipped.");
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.RulesOffered:
-                        hud.ShowOffers(e.Rules);
+                        hud.ShowOffers(e.Rules, e.OfferKind);
+                        hud.ShowSkip(e.OfferKind != OfferKind.StageCard);
                         break;
                     case GameEventType.RuleActivated:
                         hud.HideOffers();
+                        hud.ShowSkip(false);
                         hud.AddRule(e.Rule);
                         break;
                     case GameEventType.TargetRequested:
-                        board.Highlight(null, null, e.Request.Options, lastMove);
+                        if (!e.Request.IsPieceRequest) board.Highlight(null, null, e.Request.Options, lastMove);
                         hud.ShowSkip(e.Request.AllowSkip);
                         break;
                     case GameEventType.Dialogue:
@@ -249,10 +325,12 @@ namespace SaturdayGame.Chess.View
             // 对白播完就收起字幕，不挡住棋盘
             hud.HideCaption();
             board.SyncAll();
-            if (game.Phase == GamePhase.ChoosingTarget)
+            bool pickingPiece = game.Phase == GamePhase.ChoosingTarget && game.PendingTarget.IsPieceRequest;
+            hud.SetLostPieces(game.Board.CapturedOf(game.PlayerSide), pickingPiece ? game.PendingTarget.PieceOptions.ToList() : null);
+            if (game.Phase == GamePhase.ChoosingTarget && !pickingPiece)
                 board.Highlight(null, null, game.PendingTarget.Options, lastMove);
             else
-                board.Highlight(null, null, null, lastMove);
+                board.Highlight(null, null, null, lastMove, DangerSquare());
             UpdateStatus();
             busy = false;
         }
@@ -260,16 +338,26 @@ namespace SaturdayGame.Chess.View
         void UpdateStatus()
         {
             int turn = game.Board.FullMove;
+            var b = game.Board;
             switch (game.Phase)
             {
                 case GamePhase.PlayerTurn:
-                    hud.SetStatus($"Turn {turn} - your move");
+                    if (game.InStage3 && !b.TaskComplete)
+                        hud.SetStatus($"Turn {turn} - feed the lava ({b.Sacrifices}/{b.SacrificesNeeded}) or move");
+                    else if (game.InStage3)
+                        hud.SetStatus($"Turn {turn} - get a knight into the castle!");
+                    else if (game.InCheck(game.PlayerSide))
+                        hud.SetStatus($"Turn {turn} - Check! Your move");
+                    else
+                        hud.SetStatus($"Turn {turn} - your move");
                     break;
                 case GamePhase.OpponentTurn:
                     hud.SetStatus($"Turn {turn} - your friend is thinking...");
                     break;
                 case GamePhase.ChoosingRule:
-                    hud.SetStatus($"Turn {turn} - pick a new house rule");
+                    hud.SetStatus(game.CurrentOfferKind == OfferKind.StageCard
+                        ? $"Turn {turn} - pick a new house rule"
+                        : $"Turn {turn} - pick a skill, or skip");
                     break;
                 case GamePhase.ChoosingTarget:
                     hud.SetStatus(game.PendingTarget.Prompt);
@@ -281,9 +369,11 @@ namespace SaturdayGame.Chess.View
 
             if (game.Phase != GamePhase.ChoosingRule)
             {
-                hud.SetNewHint(game.NextStageTurn > 0
-                    ? $"A new rule appears on turn {game.NextStageTurn}."
-                    : "No more new rules... for now.");
+                string hint;
+                if (game.InStage3) hint = "Castle rescue! Skills show up every few turns.";
+                else if (game.NextStageTurn > 0) hint = $"A new rule appears on turn {game.NextStageTurn}.";
+                else hint = "No more new rules... but something is brewing.";
+                hud.SetNewHint(hint);
             }
         }
 

@@ -147,73 +147,54 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void Lava_SpawnsOnEmptyMiddleSquaresAwayFromKings()
-        {
-            for (int seed = 0; seed < 50; seed++)
-            {
-                var board = Board.CreateStandard();
-                // 把王挪到中间，检查岩浆不会贴着王
-                var whiteKing = board.King(Side.White);
-                board.RemovePiece(whiteKing);
-                board.RestorePiece(whiteKing, C("d4"));
-
-                var events = new List<GameEvent>();
-                Run(new LavaFloorRule(), Context(board, seed, events));
-                var lava = events.Single(e => e.Type == GameEventType.LavaAdded).Squares;
-                Assert.AreEqual(LavaFloorRule.LavaCount, lava.Count);
-                foreach (var c in lava)
-                {
-                    Assert.IsTrue(board.IsLava(c));
-                    Assert.IsTrue(board.IsEmpty(c));
-                    Assert.That(c.Y, Is.InRange(2, 5));
-                    Assert.Greater(c.DistanceTo(board.King(Side.White).Pos), 1);
-                    Assert.Greater(c.DistanceTo(board.King(Side.Black).Pos), 1);
-                }
-            }
-        }
-
-        [Test]
-        public void Castle_AsksForRookThenGuest()
+        public void RevivePiece_PlayerPicksWhichLostPieceComesBack()
         {
             var board = Board.CreateStandard();
-            var rule = new CastleRule();
+            Capture(board, "b1", "e2", "d1");
+            var rule = new RevivePieceRule();
             var ctx = Context(board, 1);
+            Assert.IsTrue(rule.IsAvailable(ctx));
+
             var requests = rule.Activate(ctx).GetEnumerator();
-
             Assert.IsTrue(requests.MoveNext());
-            CollectionAssert.AreEquivalent(new[] { C("a1"), C("h1") }, requests.Current.Options);
-            Assert.IsFalse(requests.Current.AllowSkip);
-            requests.Current.Result = C("h1");
+            var request = requests.Current;
+            Assert.IsTrue(request.IsPieceRequest);
+            Assert.IsTrue(request.AllowSkip);
+            var queen = board.AllPieces.Single(p => p.Type == PieceType.Queen && p.Side == Side.White);
+            CollectionAssert.Contains(request.PieceOptions, queen.Id, "any lost piece can be picked, even the queen");
+            Assert.AreEqual(3, request.PieceOptions.Count);
 
-            Assert.IsTrue(requests.MoveNext());
-            var castle = board.PieceAt(C("h1"));
-            Assert.IsTrue(castle.IsCastle);
-            Assert.AreEqual("castle", castle.Skin);
-            Assert.IsTrue(requests.Current.AllowSkip);
-            CollectionAssert.DoesNotContain(requests.Current.Options, C("e1"), "the king may not hide");
-            CollectionAssert.DoesNotContain(requests.Current.Options, C("h1"), "the castle cannot hide in itself");
-            requests.Current.Result = C("d1");
-
+            request.PieceResult = queen.Id;
             Assert.IsFalse(requests.MoveNext());
-            var queen = board.GetPiece(castle.GuestId);
-            Assert.AreEqual(PieceType.Queen, queen.Type);
-            Assert.IsTrue(queen.IsHidden);
-            Assert.IsNull(board.PieceAt(C("d1")));
+            Assert.IsTrue(queen.OnBoard);
+            Assert.AreEqual(C("d1"), queen.Pos, "goes back to its start square when it is free");
         }
 
         [Test]
-        public void Castle_WithOneRookAndSkip()
+        public void RevivePiece_UnavailableWithNothingLost_AndSkipKeepsBoard()
         {
             var board = Board.CreateStandard();
-            Capture(board, "a1");
-            var rule = new CastleRule();
-            var requests = rule.Activate(Context(board, 1)).GetEnumerator();
+            Assert.IsFalse(new RevivePieceRule().IsAvailable(Context(board, 1)));
+
+            Capture(board, "b1");
+            var requests = new RevivePieceRule().Activate(Context(board, 1)).GetEnumerator();
             Assert.IsTrue(requests.MoveNext());
-            Assert.IsTrue(requests.Current.AllowSkip, "with one rook the first request is already the guest");
-            requests.Current.Result = null;
+            requests.Current.PieceResult = null;
             Assert.IsFalse(requests.MoveNext());
-            Assert.IsTrue(board.PieceAt(C("h1")).IsCastle);
-            Assert.IsFalse(board.PieceAt(C("h1")).HasGuest);
+            Assert.IsNull(board.PieceAt(C("b1")));
+        }
+
+        [Test]
+        public void WizardBirds_CastByFriend_FreezesPlayerPieces()
+        {
+            var board = Board.CreateStandard();
+            var events = new List<GameEvent>();
+            var friend = new RuleContext(board, new Random(3), Side.Black, events.Add);
+            Assert.IsTrue(friend.CastByFriend);
+            Run(new WizardBirdsRule(), friend);
+            Assert.AreEqual(WizardBirdsRule.MaxTargets, board.PiecesOf(Side.White).Count(p => p.IsFrozen));
+            Assert.IsTrue(board.PiecesOf(Side.Black).All(p => !p.IsFrozen));
+            Assert.AreEqual(Speakers.Friend, events.First(e => e.Type == GameEventType.Dialogue).Speaker);
         }
 
         [Test]

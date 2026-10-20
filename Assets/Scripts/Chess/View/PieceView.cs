@@ -4,7 +4,7 @@ namespace SaturdayGame.Chess.View
 {
     /// <summary>
     /// 一枚棋子的占位显示：圆柱底座（阵营颜色）+ 字母，外观（Skin）用底下的彩色圆环和小字表示，
-    /// 冻结用头顶的小方块表示，城堡换成方块。PieceArt 里配了贴图的棋子类型改用朝向镜头的贴图显示。
+    /// 冻结用头顶的小方块表示。PieceArt 里配了贴图的棋子类型改用朝向镜头的贴图显示。
     /// </summary>
     public sealed class PieceView
     {
@@ -18,7 +18,6 @@ namespace SaturdayGame.Chess.View
 
         readonly ChessViewFactory factory;
         readonly GameObject disc;
-        readonly GameObject tower;
         readonly GameObject ring;
         readonly GameObject frozenMarker;
         readonly TextMesh letter;
@@ -33,14 +32,14 @@ namespace SaturdayGame.Chess.View
             Root.transform.SetParent(parent, false);
 
             disc = factory.Primitive(PrimitiveType.Cylinder, Root.transform, new Vector3(0, 0.1f, 0), new Vector3(0.72f, 0.1f, 0.72f));
-            tower = factory.Primitive(PrimitiveType.Cube, Root.transform, new Vector3(0, 0.3f, 0), new Vector3(0.8f, 0.6f, 0.8f));
             ring = factory.Primitive(PrimitiveType.Cylinder, Root.transform, new Vector3(0, 0.02f, 0), new Vector3(0.9f, 0.02f, 0.9f));
             frozenMarker = factory.Primitive(PrimitiveType.Cube, Root.transform, new Vector3(0.28f, 0.45f, 0.28f), new Vector3(0.22f, 0.22f, 0.22f));
 
             letter = factory.Label(Root.transform, new Vector3(0, 0.32f, 0), 0.06f, "");
             caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "");
             caption.fontStyle = FontStyle.Bold;
-            if (factory.Art != null) sprite = factory.Billboard(Root.transform, new Vector3(0, 0.01f, 0));
+            // 调整棋子在棋盘上的高度
+            if (factory.Art != null) sprite = factory.Billboard(Root.transform, new Vector3(0, 0.01f, -0.45f));
 
             Refresh(piece);
         }
@@ -56,26 +55,26 @@ namespace SaturdayGame.Chess.View
                 sprite.enabled = useSprite;
                 sprite.sprite = resolved.Sprite;
                 sprite.color = resolved.Tint;
-                // 城堡在 3D 模型做好之前先用放大的车表示
-                sprite.transform.localScale = Vector3.one * art.pieceHeight * (piece.IsCastle ? 1.2f : 1f);
+                sprite.transform.localScale = Vector3.one * art.pieceHeight;
             }
             letter.gameObject.SetActive(!useSprite);
 
-            disc.SetActive(!useSprite && !piece.IsCastle);
-            tower.SetActive(!useSprite && piece.IsCastle);
-            factory.SetColor(piece.IsCastle ? tower : disc, white ? WhiteBody : BlackBody);
+            disc.SetActive(!useSprite);
+            factory.SetColor(disc, white ? WhiteBody : BlackBody);
 
             // 贴图已经画出来的外观就不再显示占位圆环 / 冻结方块和对应的小字
+            // 用贴图显示时不画圆环（俯视角下圆环会盖住贴图），改成给贴图染上外观的颜色
             string skin = resolved.ShowsSkin ? null : piece.Skin;
-            ring.SetActive(skin != null);
-            if (skin != null) factory.SetColor(ring, SkinColor(skin));
+            ring.SetActive(skin != null && !useSprite);
+            if (skin != null && !useSprite) factory.SetColor(ring, SkinColor(skin));
+            if (skin != null && useSprite && sprite != null)
+                sprite.color = resolved.Tint * Color.Lerp(Color.white, SkinColor(skin), 0.6f);
 
             frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen);
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
 
             letter.text = PieceValues.Letter(piece.Type);
-            letter.color = piece.IsCastle ? WhiteInk : (white ? WhiteInk : BlackInk);
-            letter.transform.localPosition = new Vector3(0, piece.IsCastle ? 0.72f : 0.32f, 0);
+            letter.color = white ? WhiteInk : BlackInk;
 
             string text = skin ?? "";
             if (piece.IsFrozen)
@@ -84,7 +83,6 @@ namespace SaturdayGame.Chess.View
                 string frozen = resolved.ShowsFrozen ? piece.FrozenTurns.ToString() : $"{piece.FrozenSkin} {piece.FrozenTurns}";
                 text = frozen + (text.Length > 0 ? "\n" + text : "");
             }
-            if (piece.HasGuest) text += "\n+guest";
             caption.text = text;
             caption.color = new Color(0.1f, 0.06f, 0.04f);
         }
@@ -107,7 +105,7 @@ namespace SaturdayGame.Chess.View
                 case "bishblob": return new Color(0.3f, 0.9f, 0.6f);
                 case "dragon": return new Color(1f, 0.45f, 0.05f);
                 case "crayon": return new Color(1f, 0.85f, 0.2f);
-                case "castle": return new Color(0.6f, 0.6f, 0.62f);
+                case "hellhorse": return new Color(0.55f, 0.05f, 0.05f);
                 case "tree": return new Color(0.15f, 0.55f, 0.2f);
                 case "poop": return new Color(0.45f, 0.3f, 0.15f);
                 default: return Color.magenta;

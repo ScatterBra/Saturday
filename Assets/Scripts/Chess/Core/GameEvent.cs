@@ -4,16 +4,14 @@ namespace SaturdayGame.Chess
 {
     public enum GameEventType
     {
-        /// <summary>棋子移动（包括从城堡里走出来）。</summary>
+        /// <summary>棋子移动。</summary>
         Moved,
-        /// <summary>棋子被吃或被规则消灭。Text 是原因（captured / burned）。</summary>
+        /// <summary>棋子被吃、被规则消灭，或被击飞进岩浆。Text 是原因（captured / burned / lava）。</summary>
         Captured,
         Promoted,
         /// <summary>被吃的棋子回到棋盘。</summary>
         Revived,
-        /// <summary>棋子藏进城堡。</summary>
-        EnteredCastle,
-        /// <summary>外观、冻结、城堡等显示状态变了，表现层刷新这枚棋子即可。</summary>
+        /// <summary>外观、冻结等显示状态变了，表现层刷新这枚棋子即可。</summary>
         AppearanceChanged,
         LavaAdded,
         TurnPassed,
@@ -23,6 +21,29 @@ namespace SaturdayGame.Chess
         TargetRequested,
         Dialogue,
         GameOver,
+        /// <summary>某一方被将军（王正被攻击）。</summary>
+        Check,
+        /// <summary>第三阶段：对手掀起风暴。</summary>
+        Storm,
+        /// <summary>第三阶段：风暴过后棋盘换成新的地形和阵型，表现层整体重建。</summary>
+        BoardRebuilt,
+        /// <summary>第三阶段：棋子走进岩浆献祭。</summary>
+        Sacrificed,
+        /// <summary>第三阶段：我方棋子被击飞（From → To）。</summary>
+        KnockedBack,
+        /// <summary>对手放了一个技能（Rule）。</summary>
+        OpponentSkill,
+    }
+
+    /// <summary>规则卡是在什么情况下弹出的。</summary>
+    public enum OfferKind
+    {
+        /// <summary>第 4、10 回合的固定选卡（必须选）。</summary>
+        StageCard,
+        /// <summary>被将军时的救急技能（可以跳过）。</summary>
+        Emergency,
+        /// <summary>第三阶段的技能（可以跳过）。</summary>
+        Stage3,
     }
 
     /// <summary>
@@ -40,6 +61,7 @@ namespace SaturdayGame.Chess
         /// <summary>GameOver 时的赢家，平局为 null。</summary>
         public Side? Winner;
         public int Stage = -1;
+        public OfferKind OfferKind;
         public string Speaker;
         public string Text;
         public RuleBase Rule;
@@ -63,13 +85,6 @@ namespace SaturdayGame.Chess
         public static GameEvent Revived(Piece piece) =>
             new GameEvent { Type = GameEventType.Revived, PieceId = piece.Id, To = piece.Pos, Side = piece.Side };
 
-        public static GameEvent EnteredCastle(Piece guest, Coord from, Piece castle) =>
-            new GameEvent
-            {
-                Type = GameEventType.EnteredCastle, PieceId = guest.Id, SourcePieceId = castle.Id,
-                From = from, To = castle.Pos, Side = guest.Side,
-            };
-
         public static GameEvent AppearanceChanged(Piece piece) =>
             new GameEvent { Type = GameEventType.AppearanceChanged, PieceId = piece.Id, To = piece.Pos, Side = piece.Side };
 
@@ -82,8 +97,8 @@ namespace SaturdayGame.Chess
         public static GameEvent StageStarted(int stage) =>
             new GameEvent { Type = GameEventType.StageStarted, Stage = stage };
 
-        public static GameEvent RulesOffered(int stage, IReadOnlyList<RuleBase> rules) =>
-            new GameEvent { Type = GameEventType.RulesOffered, Stage = stage, Rules = rules };
+        public static GameEvent RulesOffered(int stage, OfferKind kind, IReadOnlyList<RuleBase> rules) =>
+            new GameEvent { Type = GameEventType.RulesOffered, Stage = stage, OfferKind = kind, Rules = rules };
 
         public static GameEvent RuleActivated(RuleBase rule) =>
             new GameEvent { Type = GameEventType.RuleActivated, Rule = rule, Stage = rule.Stage };
@@ -96,6 +111,26 @@ namespace SaturdayGame.Chess
 
         public static GameEvent GameOver(Side? winner, string text) =>
             new GameEvent { Type = GameEventType.GameOver, Winner = winner, Text = text };
+
+        public static GameEvent Check(Side side) =>
+            new GameEvent { Type = GameEventType.Check, Side = side };
+
+        public static GameEvent Storm() => new GameEvent { Type = GameEventType.Storm };
+
+        public static GameEvent BoardRebuilt() => new GameEvent { Type = GameEventType.BoardRebuilt };
+
+        public static GameEvent Sacrificed(Piece piece, Coord from, Coord at) =>
+            new GameEvent { Type = GameEventType.Sacrificed, PieceId = piece.Id, From = from, To = at, Side = piece.Side };
+
+        public static GameEvent KnockedBack(Piece piece, Coord from, Coord to, Piece attacker) =>
+            new GameEvent
+            {
+                Type = GameEventType.KnockedBack, PieceId = piece.Id, From = from, To = to, Side = piece.Side,
+                SourcePieceId = attacker?.Id ?? -1,
+            };
+
+        public static GameEvent OpponentSkill(RuleBase rule) =>
+            new GameEvent { Type = GameEventType.OpponentSkill, Rule = rule, Stage = rule.Stage };
 
         public override string ToString() => $"{Type} piece={PieceId} {From}->{To} {Text}";
     }

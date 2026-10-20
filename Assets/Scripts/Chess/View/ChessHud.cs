@@ -33,6 +33,8 @@ namespace SaturdayGame.Chess.View
         public event Action SkipClicked;
         public event Action PlayAgainClicked;
         public event Action BackClicked;
+        /// <summary>点了被吃区里的一枚棋子（只有在复活技能等待点选时才能点）。</summary>
+        public event Action<int> LostPieceClicked;
 
         Font font;
         Text statusText;
@@ -49,8 +51,11 @@ namespace SaturdayGame.Chess.View
         RectTransform cardsRoot;
         readonly List<GameObject> cards = new List<GameObject>();
         readonly List<RuleBase> ruleBook = new List<RuleBase>();
+        RectTransform lostRoot;
+        Image stormOverlay;
+        PieceArt art;
 
-        public static ChessHud Create(Transform parent, Camera deskCamera)
+        public static ChessHud Create(Transform parent, Camera deskCamera, PieceArt art = null)
         {
             var go = new GameObject("HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             go.transform.SetParent(parent, false);
@@ -62,6 +67,7 @@ namespace SaturdayGame.Chess.View
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 0.5f;
             var hud = go.AddComponent<ChessHud>();
+            hud.art = art;
             hud.Build(parent, deskCamera);
             return hud;
         }
@@ -108,8 +114,21 @@ namespace SaturdayGame.Chess.View
             var right = Panel(rightCanvas, "RuleBook", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Paper);
             Label(right, "Title", "Rule Book", 40, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
             ruleBookText = Label(right, "Rules", "", 26, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, -110));
-            ruleBookText.rectTransform.anchorMin = new Vector2(0, 0);
+            // 规则多了就自动缩小字号，不会压到下面的被吃区
+            ruleBookText.resizeTextForBestFit = true;
+            ruleBookText.resizeTextMinSize = 12;
+            ruleBookText.resizeTextMaxSize = 26;
+            ruleBookText.verticalOverflow = VerticalWrapMode.Truncate;
+            ruleBookText.rectTransform.anchorMin = new Vector2(0, 0.36f);
             ruleBookText.rectTransform.sizeDelta = new Vector2(-48, -110);
+
+            // 规则书下半部分：我方被吃的棋子（复活技能在这里点选）
+            Label(right, "LostTitle", "Lost pieces", 26, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -582), new Vector2(-48, 34));
+            lostRoot = Rect(right, "Lost", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 20), new Vector2(-40, 260));
+            var grid = lostRoot.gameObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(84, 84);
+            grid.spacing = new Vector2(10, 10);
+            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
 
             // 上方状态栏
             var statusPanel = Panel(root, "Status", new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -16), new Vector2(980, 56), new Color(0.1f, 0.08f, 0.08f, 0.8f));
@@ -138,6 +157,10 @@ namespace SaturdayGame.Chess.View
             playAgainButton = (RectTransform)Button(buttonRow, "PlayAgain", "Play again", new Vector2(0.5f, 0.5f), new Vector2(-150, 0), new Vector2(260, 64), () => PlayAgainClicked?.Invoke()).transform;
             backButton = Button(buttonRow, "Back", "Back to office", new Vector2(0.5f, 0.5f), new Vector2(150, 0), new Vector2(260, 64), () => BackClicked?.Invoke()).gameObject;
             gameOverRoot.SetActive(false);
+
+            // 风暴：盖住整个画面的沙尘，透明度由控制器控制
+            stormOverlay = Panel(root, "Storm", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.62f, 0.55f, 0.45f, 0f)).GetComponent<Image>();
+            stormOverlay.raycastTarget = false;
         }
 
         // ---------- 对外接口 ----------
@@ -156,10 +179,15 @@ namespace SaturdayGame.Chess.View
 
         public void SetNewHint(string text) => newHintText.text = text;
 
-        public void ShowOffers(IReadOnlyList<RuleBase> rules)
+        public void ShowOffers(IReadOnlyList<RuleBase> rules, OfferKind kind = OfferKind.StageCard)
         {
             HideOffers();
-            newHintText.text = "Pick a house rule:";
+            switch (kind)
+            {
+                case OfferKind.Emergency: newHintText.text = "Check! Pick a skill, or skip:"; break;
+                case OfferKind.Stage3: newHintText.text = "Pick a skill, or skip:"; break;
+                default: newHintText.text = "Pick a house rule:"; break;
+            }
             for (int i = 0; i < rules.Count; i++)
             {
                 int index = i;
@@ -190,6 +218,50 @@ namespace SaturdayGame.Chess.View
 
         public void ShowSkip(bool show) => skipButton.SetActive(show);
 
+        /// <summary>风暴沙尘的浓度，0 = 看不见，1 = 完全盖住画面。</summary>
+        public void SetStorm(float amount)
+        {
+            var c = stormOverlay.color;
+            c.a = Mathf.Clamp01(amount);
+            stormOverlay.color = c;
+        }
+
+        /// <summary>
+        /// 刷新规则书下半部分的被吃棋子。pickable 里的棋子可以点（复活技能等待点选时），其余只是显示。
+        /// </summary>
+        public void SetLostPieces(IEnumerable<Piece> lost, ICollection<int> pickable)
+        {
+            foreach (Transform child in lostRoot) Destroy(child.gameObject);
+            foreach (var piece in lost)
+            {
+                int id = piece.Id;
+                bool canPick = pickable != null && pickable.Contains(id);
+                var go = new GameObject($"Lost {piece.Type}", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(lostRoot, false);
+                var image = go.GetComponent<Image>();
+                var sprite = art != null ? art.Resolve(piece).Sprite : null;
+                if (sprite != null)
+                {
+                    image.sprite = sprite;
+                    image.preserveAspect = true;
+                    image.color = canPick || pickable == null ? Color.white : new Color(1f, 1f, 1f, 0.45f);
+                }
+                else
+                {
+                    image.color = new Color(0.85f, 0.8f, 0.7f, canPick || pickable == null ? 1f : 0.45f);
+                    var letter = Label((RectTransform)go.transform, "Letter", PieceValues.Letter(piece.Type), 40, FontStyle.Bold, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, stretch: true);
+                    letter.color = Ink;
+                }
+                if (canPick)
+                {
+                    var outline = go.AddComponent<Outline>();
+                    outline.effectColor = new Color(0.2f, 0.6f, 1f);
+                    outline.effectDistance = new Vector2(4, 4);
+                    go.AddComponent<Button>().onClick.AddListener(() => LostPieceClicked?.Invoke(id));
+                }
+            }
+        }
+
         public void ShowGameOver(string text, bool canGoBack)
         {
             gameOverText.text = text;
@@ -204,15 +276,16 @@ namespace SaturdayGame.Chess.View
         {
             var sb = new StringBuilder();
             sb.Append("<b>Regular chess, except:</b>\n");
-            sb.Append("  • capture the king to win\n");
+            sb.Append("  • lose your king and you lose\n");
+            sb.Append("  • in check? you may use a skill\n");
             sb.Append("  • no castling, no en passant\n");
             sb.Append("  • pawns always become queens\n");
             foreach (var rule in ruleBook)
             {
                 sb.Append($"\n<b>{RuleCatalog.StageNames[rule.Stage]}: {rule.Title}</b>\n");
-                sb.Append($"<size=23>{rule.Description}</size>\n");
+                sb.Append($"{rule.Description}\n");
             }
-            if (ruleBook.Count < RuleCatalog.StageCount) sb.Append("\n<i><size=22>(the rest of the pages are blank)</size></i>");
+            if (ruleBook.Count < RuleCatalog.StageCount) sb.Append("\n<i>(the rest of the pages are blank)</i>");
             ruleBookText.text = sb.ToString();
         }
 

@@ -4,17 +4,30 @@ using System.Collections.Generic;
 namespace SaturdayGame.Chess
 {
     /// <summary>
-    /// 棋盘状态：棋子、岩浆格、轮到谁、第几回合。纯数据，可以 Clone 给 AI 推演。
-    /// 一个“回合”是双方各走一步（full move），白方先走。
+    /// 棋盘状态：棋子、地形（岩浆、高度、城堡）、轮到谁、第几回合，以及第三阶段的任务进度。
+    /// 纯数据，可以 Clone 给 AI 推演。一个“回合”是双方各走一步（full move），白方先走。
     /// </summary>
     public sealed class Board
     {
         readonly Piece[] squares = new Piece[64];
         readonly bool[] lava = new bool[64];
+        readonly int[] height = new int[64];
+        readonly bool[] castle = new bool[64];
+        readonly bool[] playerZone = new bool[64];
         readonly List<Piece> pieces = new List<Piece>();
 
         public Side SideToMove { get; private set; } = Side.White;
         public int FullMove { get; private set; } = 1;
+
+        /// <summary>第三阶段（城堡营救）已经开始。</summary>
+        public bool Stage3 { get; private set; }
+        /// <summary>第三阶段里要救公主的一方（玩家）。</summary>
+        public Side Rescuer { get; private set; } = Side.White;
+        /// <summary>已经献祭进岩浆的棋子数。</summary>
+        public int Sacrifices { get; private set; }
+        public int SacrificesNeeded { get; private set; }
+        /// <summary>献祭任务完成：马变成地狱马，我方不再被限制在岩浆这一侧。</summary>
+        public bool TaskComplete => Stage3 && Sacrifices >= SacrificesNeeded;
 
         /// <summary>整局出现过的所有棋子（包括被吃掉的），下标就是 Piece.Id。</summary>
         public IReadOnlyList<Piece> AllPieces => pieces;
@@ -49,12 +62,21 @@ namespace SaturdayGame.Chess
 
         public Piece GetPiece(int id) => pieces[id];
 
-        /// <summary>这个格子上看得见的棋子（藏在城堡里的不算），没有则为 null。</summary>
+        /// <summary>这个格子上的棋子，没有则为 null。</summary>
         public Piece PieceAt(Coord c) => squares[c.Index];
 
         public bool IsEmpty(Coord c) => squares[c.Index] == null;
 
         public bool IsLava(Coord c) => lava[c.Index];
+
+        /// <summary>地面高度，0 是平地。只有第三阶段的高原和城堡大于 0。</summary>
+        public int Height(Coord c) => height[c.Index];
+
+        /// <summary>是不是公主的城堡格。</summary>
+        public bool IsCastle(Coord c) => castle[c.Index];
+
+        /// <summary>献祭完成前，我方棋子只能落在这些格子（岩浆这一侧）。</summary>
+        public bool InPlayerZone(Coord c) => playerZone[c.Index];
 
         public void SetLava(Coord c)
         {
@@ -62,18 +84,18 @@ namespace SaturdayGame.Chess
             lava[c.Index] = true;
         }
 
-        /// <summary>这一方还在场上的棋子（包括藏在城堡里的）。</summary>
+        /// <summary>这一方还在场上的棋子。</summary>
         public IEnumerable<Piece> PiecesOf(Side side)
         {
             foreach (var p in pieces)
                 if (p.OnBoard && p.Side == side) yield return p;
         }
 
-        /// <summary>这一方被吃掉的棋子。</summary>
+        /// <summary>这一方被吃掉、可以复活的棋子（不含献祭的和被风暴卷走的）。</summary>
         public IEnumerable<Piece> CapturedOf(Side side)
         {
             foreach (var p in pieces)
-                if (!p.OnBoard && p.Side == side) yield return p;
+                if (p.Side == side && p.IsRevivable) yield return p;
         }
 
         public Piece King(Side side)
@@ -83,89 +105,176 @@ namespace SaturdayGame.Chess
             return null;
         }
 
-        /// <summary>把棋子从棋盘上拿走（被吃）。城堡被拿走时里面藏的棋子一起拿走。</summary>
+        /// <summary>把棋子从棋盘上拿走（被吃）。</summary>
         public void RemovePiece(Piece piece)
         {
             if (!piece.OnBoard) return;
-            if (piece.IsHidden)
-            {
-                var host = pieces[piece.HostId];
-                host.GuestId = -1;
-                piece.IsHidden = false;
-                piece.HostId = -1;
-            }
-            else if (squares[piece.Pos.Index] == piece)
-            {
-                squares[piece.Pos.Index] = null;
-            }
-
-            if (piece.HasGuest)
-            {
-                var guest = pieces[piece.GuestId];
-                piece.GuestId = -1;
-                guest.IsHidden = false;
-                guest.HostId = -1;
-                guest.OnBoard = false;
-            }
+            if (squares[piece.Pos.Index] == piece) squares[piece.Pos.Index] = null;
             piece.OnBoard = false;
             piece.FrozenTurns = 0;
             piece.FrozenSkin = null;
         }
 
-        /// <summary>把被吃掉的棋子放回棋盘（复活）。</summary>
+        /// <summary>把被吃掉的棋子放回棋盘（复活）。献祭完成后复活的马直接是地狱马。</summary>
         public void RestorePiece(Piece piece, Coord at)
         {
             if (piece.OnBoard) throw new InvalidOperationException($"{piece} is already on the board");
-            if (squares[at.Index] != null || lava[at.Index]) throw new InvalidOperationException($"Cannot restore onto {at}");
+            if (squares[at.Index] != null || lava[at.Index] || castle[at.Index])
+                throw new InvalidOperationException($"Cannot restore onto {at}");
             piece.OnBoard = true;
             piece.Pos = at;
             piece.FrozenTurns = 0;
             piece.FrozenSkin = null;
+            if (TaskComplete && piece.Side == Rescuer && piece.Type == PieceType.Knight) piece.IsHellhorse = true;
             squares[at.Index] = piece;
         }
 
-        /// <summary>让棋子藏进己方城堡。</summary>
-        public void HideInCastle(Piece guest, Piece castle)
+        /// <summary>
+        /// 进入第三阶段：清掉棋盘，铺上地形；对手原来的棋子被风暴卷走，换成阵型里的守卫；
+        /// 我方棋子保留种类、数量和身上的效果，按阵型重新摆。之后轮到我方。
+        /// </summary>
+        public void ApplyLayout(Stage3Layout layout, Side rescuer, int sacrificesNeeded)
         {
-            if (!castle.IsCastle || castle.HasGuest || castle.Side != guest.Side || !guest.IsVisible || guest.IsCastle)
-                throw new InvalidOperationException($"{guest} cannot hide in {castle}");
-            squares[guest.Pos.Index] = null;
-            guest.IsHidden = true;
-            guest.HostId = castle.Id;
-            guest.Pos = castle.Pos;
-            castle.GuestId = guest.Id;
+            Array.Clear(squares, 0, squares.Length);
+            Array.Copy(layout.Lava, lava, 64);
+            Array.Copy(layout.Heights, height, 64);
+            Array.Copy(layout.Castle, castle, 64);
+            Array.Copy(layout.PlayerZone, playerZone, 64);
+            Stage3 = true;
+            Rescuer = rescuer;
+            Sacrifices = 0;
+            SacrificesNeeded = sacrificesNeeded;
+
+            var mine = new List<Piece>();
+            foreach (var p in pieces)
+            {
+                if (!p.OnBoard) continue;
+                if (p.Side == rescuer) mine.Add(p);
+                else
+                {
+                    p.OnBoard = false;
+                    p.Retired = true;
+                    p.FrozenTurns = 0;
+                    p.FrozenSkin = null;
+                }
+            }
+
+            foreach (var (type, at) in layout.FriendPieces) AddPiece(type, rescuer.Opponent(), at);
+
+            // 我方：王放 K，马优先放 N，其余放 *，位置不够再放进我方一侧的任意空格
+            var knightSlots = new Queue<Coord>(layout.KnightSlots);
+            var otherSlots = new Queue<Coord>(layout.OtherSlots);
+            mine.Sort((a, b) => Order(a.Type).CompareTo(Order(b.Type)));
+            foreach (var p in mine)
+            {
+                Coord? at = null;
+                if (p.Type == PieceType.King && layout.PlayerKing.HasValue && IsEmpty(layout.PlayerKing.Value)) at = layout.PlayerKing;
+                if (at == null && p.Type == PieceType.Knight) at = Take(knightSlots);
+                if (at == null) at = Take(otherSlots) ?? Take(knightSlots) ?? FreeZoneSquare();
+                if (at == null) throw new InvalidOperationException("Stage 3 layout has no room for all of the player's pieces");
+                p.Pos = at.Value;
+                squares[at.Value.Index] = p;
+            }
+            SideToMove = rescuer;
+        }
+
+        static int Order(PieceType t)
+        {
+            switch (t)
+            {
+                case PieceType.King: return 0;
+                case PieceType.Knight: return 1;
+                case PieceType.Queen: return 2;
+                case PieceType.Rook: return 3;
+                case PieceType.Bishop: return 4;
+                default: return 5;
+            }
+        }
+
+        Coord? Take(Queue<Coord> slots)
+        {
+            while (slots.Count > 0)
+            {
+                var c = slots.Dequeue();
+                if (IsEmpty(c)) return c;
+            }
+            return null;
+        }
+
+        Coord? FreeZoneSquare()
+        {
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                if (playerZone[i] && IsEmpty(c) && !lava[i] && !castle[i]) return c;
+            }
+            return null;
         }
 
         /// <summary>
         /// 执行一步走法（不检查合法性，调用方负责只传入 MoveGenerator 生成的走法），然后交换走子方。
+        /// 第三阶段：走进岩浆 = 献祭；对手走到我方棋子上 = 把它击飞；马走进城堡 = 救出公主。
         /// </summary>
         public MoveResult Apply(Move move)
         {
             var mover = pieces[move.PieceId];
-            var result = new MoveResult { Mover = mover, From = move.From, To = move.To, GuestExit = move.GuestExit };
+            var result = new MoveResult { Mover = mover, From = move.From, To = move.To };
+            squares[move.From.Index] = null;
 
-            if (move.GuestExit)
+            // 献祭：走进岩浆（地狱马可以站在岩浆上，不算献祭）
+            if (lava[move.To.Index] && !mover.IsHellhorse)
             {
-                var host = pieces[mover.HostId];
-                host.GuestId = -1;
-                mover.IsHidden = false;
-                mover.HostId = -1;
-            }
-            else
-            {
-                squares[move.From.Index] = null;
+                mover.Pos = move.To;
+                mover.OnBoard = false;
+                mover.Sacrificed = true;
+                mover.FrozenTurns = 0;
+                mover.FrozenSkin = null;
+                Sacrifices++;
+                result.Sacrificed = true;
+                if (Sacrifices == SacrificesNeeded)
+                {
+                    result.TaskCompleted = true;
+                    foreach (var p in PiecesOf(Rescuer))
+                        if (p.Type == PieceType.Knight) p.IsHellhorse = true;
+                }
+                EndTurn();
+                return result;
             }
 
             var target = squares[move.To.Index];
             if (target != null)
             {
-                RemovePiece(target);
-                result.Captured = target;
+                if (Stage3 && target.Side == Rescuer && mover.Side != Rescuer)
+                {
+                    // 第三阶段对手不吃我方棋子，而是把它击飞
+                    var landing = Knockback.FindLanding(this, target, move.From);
+                    if (landing == null) throw new InvalidOperationException($"{target} cannot be knocked back");
+                    squares[target.Pos.Index] = null;
+                    result.KnockedBack = target;
+                    result.KnockFrom = target.Pos;
+                    result.KnockTo = landing.Value;
+                    target.Pos = landing.Value;
+                    if (lava[landing.Value.Index] && !target.IsHellhorse)
+                    {
+                        target.OnBoard = false;
+                        target.FrozenTurns = 0;
+                        target.FrozenSkin = null;
+                        result.KnockedIntoLava = true;
+                    }
+                    else
+                    {
+                        squares[landing.Value.Index] = target;
+                    }
+                }
+                else
+                {
+                    RemovePiece(target);
+                    result.Captured = target;
+                }
             }
 
             squares[move.To.Index] = mover;
             mover.Pos = move.To;
-            if (mover.HasGuest) pieces[mover.GuestId].Pos = move.To;
 
             // 兵升变：自动变后
             if (mover.Type == PieceType.Pawn && move.To.Y == mover.Side.PromotionRank())
@@ -173,6 +282,8 @@ namespace SaturdayGame.Chess
                 mover.Type = PieceType.Queen;
                 result.Promoted = true;
             }
+
+            if (Stage3 && castle[move.To.Index] && mover.Type == PieceType.Knight) result.Rescued = true;
 
             EndTurn();
             return result;
@@ -198,15 +309,91 @@ namespace SaturdayGame.Chess
 
         public Board Clone()
         {
-            var copy = new Board { SideToMove = SideToMove, FullMove = FullMove };
-            Array.Copy(lava, copy.lava, lava.Length);
+            var copy = new Board
+            {
+                SideToMove = SideToMove, FullMove = FullMove, Stage3 = Stage3, Rescuer = Rescuer,
+                Sacrifices = Sacrifices, SacrificesNeeded = SacrificesNeeded,
+            };
+            Array.Copy(lava, copy.lava, 64);
+            Array.Copy(height, copy.height, 64);
+            Array.Copy(castle, copy.castle, 64);
+            Array.Copy(playerZone, copy.playerZone, 64);
             foreach (var p in pieces)
             {
                 var c = p.Clone();
                 copy.pieces.Add(c);
-                if (c.IsVisible) copy.squares[c.Pos.Index] = c;
+                if (c.OnBoard) copy.squares[c.Pos.Index] = c;
             }
             return copy;
+        }
+    }
+
+    /// <summary>
+    /// 第三阶段的击飞：被打的棋子沿八个方向之一飞出两格；第二格落不下就落在第一格，第一格都落不下的方向不能选。
+    /// 方向由对手（朋友）选：优先把棋子打进岩浆，其次打得离城堡越远越好、越低越好。
+    /// 王不会被打进岩浆（第三阶段对手本来也不会攻击王）。
+    /// </summary>
+    public static class Knockback
+    {
+        static readonly Coord[] Directions =
+        {
+            new Coord(0, -1), new Coord(-1, -1), new Coord(1, -1), new Coord(-1, 0),
+            new Coord(1, 0), new Coord(0, 1), new Coord(-1, 1), new Coord(1, 1),
+        };
+
+        public static Coord? FindLanding(Board board, Piece victim, Coord attackerFrom)
+        {
+            Coord? best = null;
+            int bestScore = int.MinValue;
+            foreach (var dir in Directions)
+            {
+                var landing = Landing(board, victim, dir, attackerFrom);
+                if (landing == null) continue;
+                int score = Score(board, victim, landing.Value);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = landing;
+                }
+            }
+            return best;
+        }
+
+        static Coord? Landing(Board board, Piece victim, Coord dir, Coord attackerFrom)
+        {
+            var first = victim.Pos + dir;
+            if (!Free(board, victim, first, attackerFrom)) return null;
+            var second = first + dir;
+            return Free(board, victim, second, attackerFrom) ? second : first;
+        }
+
+        static bool Free(Board board, Piece victim, Coord c, Coord attackerFrom)
+        {
+            if (!c.IsValid || board.IsCastle(c)) return false;
+            if (!board.IsEmpty(c) && c != attackerFrom) return false;
+            if (board.IsLava(c) && victim.Type == PieceType.King) return false;
+            return true;
+        }
+
+        static int Score(Board board, Piece victim, Coord c)
+        {
+            int score = 0;
+            if (board.IsLava(c) && !victim.IsHellhorse) score += 1000;
+            score += 10 * DistanceToCastle(board, c);
+            score -= 3 * board.Height(c);
+            return score;
+        }
+
+        /// <summary>到最近城堡格的切比雪夫距离；没有城堡时为 0。</summary>
+        public static int DistanceToCastle(Board board, Coord c)
+        {
+            int best = int.MaxValue;
+            for (int i = 0; i < 64; i++)
+            {
+                var castle = Coord.FromIndex(i);
+                if (board.IsCastle(castle)) best = Math.Min(best, castle.DistanceTo(c));
+            }
+            return best == int.MaxValue ? 0 : best;
         }
     }
 }

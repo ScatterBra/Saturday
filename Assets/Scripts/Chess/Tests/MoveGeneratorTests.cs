@@ -115,32 +115,14 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void CastleCannotBeCaptured_AndGuestCanExit()
+        public void InCheck_DetectsAttackedKing_FrozenAttackerDoesNotCount()
         {
             var board = EmptyBoard();
-            var castle = board.AddPiece(PieceType.Rook, Side.White, C("d4"));
-            castle.IsCastle = true;
-            var bishop = board.AddPiece(PieceType.Bishop, Side.White, C("a1"));
-            board.HideInCastle(bishop, castle);
-            var enemyQueen = board.AddPiece(PieceType.Queen, Side.Black, C("d7"));
-
-            Assert.IsNull(board.PieceAt(C("a1")));
-            Assert.AreSame(castle, board.PieceAt(C("d4")));
-            CollectionAssert.DoesNotContain(MoveGenerator.MovesFor(board, enemyQueen).Select(m => m.To).ToList(), C("d4"));
-
-            // 城堡移动时客人跟着走
-            board.Apply(new Move(castle.Id, C("d4"), C("d5")));
-            Assert.AreEqual(C("d5"), bishop.Pos);
-            board.Pass();
-
-            var exits = MoveGenerator.Generate(board, Side.White).Where(m => m.GuestExit).ToList();
-            Assert.IsTrue(exits.All(m => m.PieceId == bishop.Id && m.From == C("d5")));
-            var exit = exits.First(m => m.To == C("e6"));
-            board.Apply(exit);
-            Assert.IsFalse(bishop.IsHidden);
-            Assert.AreSame(bishop, board.PieceAt(C("e6")));
-            Assert.AreSame(castle, board.PieceAt(C("d5")));
-            Assert.IsFalse(castle.HasGuest);
+            Assert.IsFalse(MoveGenerator.InCheck(board, Side.White));
+            var rook = board.AddPiece(PieceType.Rook, Side.Black, C("e5"));
+            Assert.IsTrue(MoveGenerator.InCheck(board, Side.White));
+            rook.FrozenTurns = 1;
+            Assert.IsFalse(MoveGenerator.InCheck(board, Side.White));
         }
 
         [Test]

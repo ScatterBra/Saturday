@@ -43,7 +43,7 @@ namespace SaturdayGame.Chess
         {
             var knights = ctx.Visible(ctx.Player, PieceType.Knight);
             var dragon = knights[ctx.Rng.Next(knights.Count)];
-            ctx.SetSkin(dragon, "dragon");
+            if (!dragon.IsHellhorse) ctx.SetSkin(dragon, "dragon"); // 地狱马保持地狱马的样子
             ctx.Say(Speakers.You, "Dragon fire!");
 
             var victim = TargetPicker.Pick(Targets(ctx), TargetPicker.BurnWeight, ctx.Rng);
@@ -99,29 +99,7 @@ namespace SaturdayGame.Chess
             return list;
         }
 
-        /// <summary>
-        /// 放回原来的起始格；被占了就放到离起始格最近的空格（同样近时离自己底线近的优先）。
-        /// 兵不能放在底线和升变线上。
-        /// </summary>
-        public static Coord? FindSquare(Board board, Piece piece)
-        {
-            Coord? best = null;
-            int bestDistance = int.MaxValue, bestHome = int.MaxValue;
-            for (int i = 0; i < 64; i++)
-            {
-                var c = Coord.FromIndex(i);
-                if (!board.IsEmpty(c) || board.IsLava(c)) continue;
-                if (piece.Type == PieceType.Pawn && (c.Y == piece.Side.HomeRank() || c.Y == piece.Side.PromotionRank())) continue;
-                int distance = c.DistanceTo(piece.StartPos);
-                int home = System.Math.Abs(c.Y - piece.Side.HomeRank());
-                if (distance < bestDistance || (distance == bestDistance && home < bestHome))
-                {
-                    best = c;
-                    bestDistance = distance;
-                    bestHome = home;
-                }
-            }
-            return best;
-        }
+        /// <summary>复活位置规则见 RevivalPlacement。</summary>
+        public static Coord? FindSquare(Board board, Piece piece) => RevivalPlacement.FindSquare(board, piece);
     }
 }
