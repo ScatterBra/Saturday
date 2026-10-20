@@ -37,20 +37,133 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void BishopPuns_AdvanceAfterEachFullTurn()
+        public void BishopVariants_FourBishopsGetFourDifferentLooks_AndKeepThem()
+        {
+            var firstSkins = new HashSet<string>();
+            for (int seed = 0; seed < 30; seed++)
+            {
+                var board = Board.CreateStandard();
+                var ctx = Context(board, seed);
+                var rule = new BishopVariantsRule();
+                Run(rule, ctx);
+                var skins = board.AllPieces.Where(p => p.Type == PieceType.Bishop).Select(p => p.Skin).ToList();
+                Assert.AreEqual(4, skins.Count);
+                CollectionAssert.AreEquivalent(BishopVariantsRule.Skins, skins);
+                firstSkins.Add(board.PieceAt(C("c1")).Skin);
+
+                for (int i = 0; i < 6; i++) rule.OnTurnEnded(ctx, i % 2 == 0 ? Side.White : Side.Black);
+                CollectionAssert.AreEqual(skins, board.AllPieces.Where(p => p.Type == PieceType.Bishop).Select(p => p.Skin).ToList());
+            }
+            Assert.Greater(firstSkins.Count, 1, "the looks should be assigned at random");
+        }
+
+        /// <summary>只留下两个王，再按 "Pa3" 这样的写法摆子（大写白方，小写黑方）。</summary>
+        static Board Setup(params string[] pieces)
         {
             var board = Board.CreateStandard();
-            var ctx = Context(board, 1);
-            var rule = new BishopPunsRule();
-            Run(rule, ctx);
-            var bishop = board.PieceAt(C("c1"));
-            Assert.AreEqual("bish_hop", bishop.Skin);
-            rule.OnTurnEnded(ctx, Side.White);
-            Assert.AreEqual("bish_hop", bishop.Skin);
-            rule.OnTurnEnded(ctx, Side.Black);
-            Assert.AreEqual("fish_shop", bishop.Skin);
-            for (int i = 0; i < 10; i++) rule.OnTurnEnded(ctx, Side.Black);
-            Assert.AreEqual("bishblob", bishop.Skin);
+            foreach (var p in board.AllPieces.ToList())
+                if (p.Type != PieceType.King) board.RemovePiece(p);
+            foreach (var s in pieces)
+            {
+                char letter = s[0];
+                var side = char.IsUpper(letter) ? Side.White : Side.Black;
+                var type = "PNBRQK".IndexOf(char.ToUpper(letter)) switch
+                {
+                    0 => PieceType.Pawn, 1 => PieceType.Knight, 2 => PieceType.Bishop,
+                    3 => PieceType.Rook, 4 => PieceType.Queen, _ => PieceType.King,
+                };
+                board.AddPiece(type, side, C(s.Substring(1)));
+            }
+            return board;
+        }
+
+        static void Spray(Board board, string hydrant, int seed = 1, List<GameEvent> events = null)
+        {
+            var rook = board.PieceAt(C(hydrant));
+            new FireHydrantRule().OnPieceMoved(Context(board, seed, events), rook, rook.Pos);
+        }
+
+        [Test]
+        public void Hydrant_PushesTheNeighbourTwoSquaresAway_FriendOrFoe()
+        {
+            var board = Setup("Rd4", "Pd5", "nf6");
+            var pawn = board.PieceAt(C("d5"));
+            var events = new List<GameEvent>();
+            Spray(board, "d4", 1, events);
+            Assert.AreEqual(C("d7"), pawn.Pos, "own pawn pushed straight up two squares");
+            Assert.IsNull(board.PieceAt(C("d5")));
+            var push = events.Single(e => e.Type == GameEventType.Pushed);
+            Assert.AreEqual(C("d5"), push.From);
+            Assert.AreEqual(C("d7"), push.To);
+        }
+
+        [Test]
+        public void Hydrant_PrefersOrthogonalNeighbours_ThenDiagonal()
+        {
+            var board = Setup("Rd4", "pe5", "Nd3");
+            Spray(board, "d4");
+            Assert.AreEqual(C("d1"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight).Pos, "the knight below is closer than the diagonal pawn");
+            Assert.AreEqual(C("e5"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos);
+
+            board = Setup("Rd4", "pe5");
+            Spray(board, "d4");
+            Assert.AreEqual(C("g7"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos, "diagonal push goes on along the diagonal");
+        }
+
+        [Test]
+        public void Hydrant_StopsAtPiecesAndTheEdge_AndSkipsWhatCannotMove()
+        {
+            // d5 后面一格就有子：推不动，换另一枚
+            var board = Setup("Rd4", "Pd5", "pd6", "Nc4");
+            Spray(board, "d4");
+            Assert.AreEqual(C("d5"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn && p.Side == Side.White).Pos);
+            Assert.AreEqual(C("a4"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight).Pos);
+
+            // 第二格被挡住：只推一格
+            board = Setup("Rd4", "Pd5", "pd7");
+            Spray(board, "d4");
+            Assert.AreEqual(C("d6"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn && p.Side == Side.White).Pos);
+
+            // 贴着棋盘边：推不出去
+            board = Setup("Ra2", "Na1");
+            Spray(board, "a2");
+            Assert.AreEqual(C("a1"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight).Pos);
+        }
+
+        [Test]
+        public void Hydrant_PushesKings_AndPicksRandomlyAmongTheClosest()
+        {
+            var board = Setup("Rd1");
+            var whiteKing = board.King(Side.White);
+            Spray(board, "d1");
+            Assert.AreEqual(C("g1"), whiteKing.Pos, "the king next to the hydrant gets pushed too");
+
+            var pushed = new HashSet<string>();
+            for (int seed = 0; seed < 40; seed++)
+            {
+                board = Setup("Rd4", "Pd5", "Pc4", "Pe4", "Pd3");
+                var before = board.AllPieces.Where(p => p.OnBoard && p.Type == PieceType.Pawn).ToDictionary(p => p.Id, p => p.Pos);
+                Spray(board, "d4", seed);
+                var moved = board.AllPieces.Where(p => p.OnBoard && p.Type == PieceType.Pawn && p.Pos != before[p.Id]).ToList();
+                Assert.AreEqual(1, moved.Count, "only one piece is pushed");
+                pushed.Add(before[moved[0].Id].ToString());
+            }
+            Assert.Greater(pushed.Count, 1, "ties are broken at random");
+        }
+
+        [Test]
+        public void Hydrant_PawnPushedOntoTheLastRankPromotes_AndOnlyRooksSpray()
+        {
+            var board = Setup("Rd5", "Pd6");
+            Spray(board, "d5");
+            var pawn = board.AllPieces.First(p => p.OnBoard && p.Side == Side.White && p.StartPos == C("d6"));
+            Assert.AreEqual(C("d8"), pawn.Pos);
+            Assert.AreEqual(PieceType.Queen, pawn.Type);
+
+            board = Setup("Nd4", "Pd5");
+            var knight = board.PieceAt(C("d4"));
+            new FireHydrantRule().OnPieceMoved(Context(board, 1), knight, knight.Pos);
+            Assert.AreEqual(C("d5"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos);
         }
 
         [Test]

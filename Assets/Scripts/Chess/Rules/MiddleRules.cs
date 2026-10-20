@@ -43,7 +43,7 @@ namespace SaturdayGame.Chess
         {
             var knights = ctx.Visible(ctx.Player, PieceType.Knight);
             var dragon = knights[ctx.Rng.Next(knights.Count)];
-            if (!dragon.IsHellhorse) ctx.SetSkin(dragon, "dragon"); // 地狱马保持地狱马的样子
+            ctx.SetSkin(dragon, "dragon");
             ctx.Say(Speakers.You, "Dragon fire!");
 
             var victim = TargetPicker.Pick(Targets(ctx), TargetPicker.BurnWeight, ctx.Rng);

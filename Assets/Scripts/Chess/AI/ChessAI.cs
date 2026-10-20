@@ -4,9 +4,11 @@ using System.Collections.Generic;
 namespace SaturdayGame.Chess
 {
     /// <summary>
-    /// 弱 AI：能吃王就吃王；偶尔随手乱走（犯错）；其余时候看两步——自己这一步之后，
+    /// 弱 AI：能将死就将死；偶尔随手乱走（犯错）；其余时候看两步——自己这一步之后，
     /// 对方最贪心的回应会吃掉什么，选子力最划算的走法，再加一点随机噪声。
+    /// 走法都是走法生成器给的合法走法，所以它不会送将，也不会吃王。
     /// AI 不知道有哪些规则，它只调用走法生成器，所以自然会遵守冻结、城堡、岩浆等状态。
+    /// 不过第三阶段的打分知道“马要进城堡、要先献祭”这个目标。
     /// </summary>
     public sealed class ChessAI
     {
@@ -15,7 +17,7 @@ namespace SaturdayGame.Chess
         /// <summary>评分噪声幅度（单位：兵的价值）。</summary>
         public double Noise = 0.6;
 
-        const double KingLost = -1000;
+        const double CastleLost = -1000;
 
         readonly Random rng;
 
@@ -33,8 +35,9 @@ namespace SaturdayGame.Chess
 
             foreach (var move in moves)
             {
-                var target = board.PieceAt(move.To);
-                if (target != null && target.Type == PieceType.King) return move;
+                var next = board.Clone();
+                next.Apply(move);
+                if (MoveGenerator.IsCheckmated(next, side.Opponent())) return move;
             }
 
             if (rng.NextDouble() < BlunderChance) return moves[rng.Next(moves.Count)];
@@ -90,7 +93,7 @@ namespace SaturdayGame.Chess
         static double GuardScore(Board board, Side me)
         {
             foreach (var reply in MoveGenerator.Generate(board, me.Opponent()))
-                if (board.IsCastle(reply.To)) return KingLost;
+                if (board.IsCastle(reply.To)) return CastleLost;
             return 1.5 * KnightDistance(board) + Material(board, me);
         }
 
@@ -103,20 +106,46 @@ namespace SaturdayGame.Chess
             return score;
         }
 
-        /// <summary>玩家最靠近城堡的那匹马离城堡还有多远（考虑还要爬的高度）；没有马时给一个大数。</summary>
+        static readonly Coord[] KnightJumps =
+        {
+            new Coord(1, 2), new Coord(2, 1), new Coord(2, -1), new Coord(1, -2),
+            new Coord(-1, -2), new Coord(-2, -1), new Coord(-2, 1), new Coord(-1, 2),
+        };
+
+        /// <summary>
+        /// 玩家最靠近城堡的那匹马还要跳几步才能进城堡（马无视高度，只按 L 形跳数算，不管路上有没有子）；
+        /// 没有马时给一个大数。
+        /// </summary>
         static double KnightDistance(Board board)
         {
+            var steps = new int[64];
+            for (int i = 0; i < 64; i++) steps[i] = -1;
+            var queue = new Queue<Coord>();
+            for (int i = 0; i < 64; i++)
+            {
+                if (!board.IsCastle(Coord.FromIndex(i))) continue;
+                steps[i] = 0;
+                queue.Enqueue(Coord.FromIndex(i));
+            }
+            while (queue.Count > 0)
+            {
+                var c = queue.Dequeue();
+                foreach (var jump in KnightJumps)
+                {
+                    var next = c + jump;
+                    if (!next.IsValid || steps[next.Index] >= 0) continue;
+                    steps[next.Index] = steps[c.Index] + 1;
+                    queue.Enqueue(next);
+                }
+            }
+
             double best = 12;
             foreach (var p in board.PiecesOf(board.Rescuer))
-            {
-                if (p.Type != PieceType.Knight) continue;
-                double d = Knockback.DistanceToCastle(board, p.Pos) + 0.5 * (Stage3Layout.CastleHeight - board.Height(p.Pos));
-                best = Math.Min(best, d);
-            }
+                if (p.Type == PieceType.Knight && steps[p.Pos.Index] >= 0) best = Math.Min(best, 2 * steps[p.Pos.Index]);
             return best;
         }
 
-        /// <summary>对方回应时会吃掉我们最值钱的子（如果能吃到王就直接判输）。</summary>
+        /// <summary>对方回应时会吃掉我们最值钱的子。</summary>
         static double ScoreAfterReply(Board board, Side me)
         {
             double material = Material(board, me);
@@ -124,9 +153,7 @@ namespace SaturdayGame.Chess
             foreach (var reply in MoveGenerator.Generate(board, me.Opponent()))
             {
                 var target = board.PieceAt(reply.To);
-                if (target == null) continue;
-                if (target.Type == PieceType.King) return KingLost;
-                worstLoss = Math.Max(worstLoss, PieceValues.Of(target.Type));
+                if (target != null) worstLoss = Math.Max(worstLoss, PieceValues.Of(target.Type));
             }
             return material - worstLoss;
         }

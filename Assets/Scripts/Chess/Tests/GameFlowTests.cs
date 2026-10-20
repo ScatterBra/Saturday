@@ -8,7 +8,7 @@ namespace SaturdayGame.Chess.Tests
     public class GameFlowTests
     {
         /// <summary>
-        /// 双方都用 AI 走棋。固定选卡按 wanted 里的 Id 选（选不到就选第一张）；
+        /// 双方都用 AI 走棋。固定选卡按 wanted[阶段] 里的 Id 选（选不到就选第一张）；
         /// 救急技能和第三阶段技能随机选或跳过；点选目标随机。
         /// </summary>
         public sealed class AutoPlayer
@@ -97,10 +97,9 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void StageCardsOnTurns4And10_BeforePlayerMoves()
+        public void TheOnlyStageCardIsOnTurn10_BeforePlayerMoves()
         {
-            int[] expectedTurns = { 4, 10 };
-            int bothSeen = 0;
+            int seenGames = 0;
             for (int seed = 0; seed < 20; seed++)
             {
                 var auto = new AutoPlayer(seed, null);
@@ -109,18 +108,47 @@ namespace SaturdayGame.Chess.Tests
                 {
                     if (auto.Game.Phase == GamePhase.ChoosingRule && auto.Game.CurrentOfferKind == OfferKind.StageCard)
                     {
-                        int stage = auto.Game.Offers[0].Stage;
                         Assert.LessOrEqual(auto.Game.Offers.Count, 3);
-                        Assert.IsTrue(auto.Game.Offers.All(r => r.Stage == stage));
-                        Assert.AreEqual(expectedTurns[stage], auto.Game.Board.FullMove);
+                        Assert.IsTrue(auto.Game.Offers.All(r => r.Stage == 1));
+                        Assert.AreEqual(10, auto.Game.Board.FullMove);
                         Assert.AreEqual(Side.White, auto.Game.Board.SideToMove);
                         seen++;
                     }
                     auto.Step();
                 }
-                if (seen == 2) bothSeen++;
+                Assert.LessOrEqual(seen, 1);
+                if (seen == 1) seenGames++;
             }
-            Assert.Greater(bothSeen, 0, "at least one game should see both stage cards");
+            Assert.Greater(seenGames, 0, "at least one game should reach the turn-10 card");
+        }
+
+        [Test]
+        public void OpeningRulesTakeEffectOnTheirTurns_WithoutCards()
+        {
+            int reachedTurn7 = 0;
+            for (int seed = 0; seed < 10; seed++)
+            {
+                var auto = new AutoPlayer(seed, null);
+                var game = auto.Game;
+                Assert.AreEqual(-1, game.Settings.OpeningRules.ToList().FindIndex(r => r.Turn < 4), "opening rules start after turn 4");
+                while (!game.InStage3 && game.Phase != GamePhase.GameOver && game.Board.FullMove < 10)
+                {
+                    Assert.IsFalse(game.Phase == GamePhase.ChoosingRule && game.CurrentOfferKind == OfferKind.StageCard, "no cards before turn 10");
+                    var ids = game.ActiveRules.Select(r => r.Id).ToList();
+                    int turn = game.Board.FullMove;
+                    if (turn < 5) Assert.IsFalse(ids.Contains("bishop_variants"), $"bishops changed on turn {turn}");
+                    if (turn < 7) Assert.IsFalse(ids.Contains("fire_hydrant"), $"hydrants on turn {turn}");
+                    if (turn >= 7 && game.Phase == GamePhase.PlayerTurn)
+                    {
+                        Assert.IsTrue(ids.Contains("bishop_variants") && ids.Contains("fire_hydrant"));
+                        reachedTurn7++;
+                        break;
+                    }
+                    auto.Step();
+                }
+                Assert.IsTrue(auto.Events.Any(e => e.Type == GameEventType.StageStarted && e.Stage == 0) || game.Board.FullMove < 4);
+            }
+            Assert.Greater(reachedTurn7, 0);
         }
 
         [Test]
@@ -178,32 +206,31 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void CapturingTheFriendsKing_StartsTheStormInsteadOfWinning()
+        public void CheckmatingTheFriend_StartsTheStormInsteadOfWinning()
         {
             var game = new ChessGame(new GameSettings { Seed = 1 });
-            KeepOnly(game.Board, "e1", "e8", "e2");
-            game.Board.RemovePiece(game.Board.PieceAt(C("e2")));
-            var rook = game.Board.CapturedOf(Side.White).First(p => p.Type == PieceType.Rook);
-            game.Board.RestorePiece(rook, C("e2"));
-            Move(game, "e2", "e8");
+            KeepOnly(game.Board, "e1", "e8", "g7", "h7", "a1");
+            game.Board.Relocate(game.Board.King(Side.Black), C("h8"));
+            Move(game, "a1", "a8"); // 底线将死
             Assert.IsTrue(game.InStage3);
             Assert.AreNotEqual(GamePhase.GameOver, game.Phase);
             Assert.IsNull(game.Winner);
         }
 
         [Test]
-        public void LosingYourKingBeforeStage3_LosesTheGame()
+        public void GettingCheckmatedBeforeStage3_LosesTheGame_AfterTheEmergencySkill()
         {
             var game = new ChessGame(new GameSettings { Seed = 1 });
-            KeepOnly(game.Board, "e1", "e8", "h2", "d8");
-            Move(game, "h2", "h3");
-            Move(game, "d8", "d1"); // 将军
-            Assert.AreEqual(OfferKind.Emergency, game.CurrentOfferKind);
+            KeepOnly(game.Board, "e1", "e8", "g2", "h2", "c2", "a8");
+            game.Board.Relocate(game.Board.King(Side.White), C("h1"));
+            Move(game, "c2", "c3");
+            Move(game, "a8", "a1"); // 底线将死
+            Assert.AreEqual(GamePhase.ChoosingRule, game.Phase);
+            Assert.AreEqual(OfferKind.Emergency, game.CurrentOfferKind, "a last chance before the game ends");
             game.SkipOffers();
-            Move(game, "h3", "h4"); // 不理会将军
-            Move(game, "d1", "e1");
             Assert.AreEqual(GamePhase.GameOver, game.Phase);
             Assert.AreEqual(Side.Black, game.Winner);
+            Assert.IsNotNull(game.Board.King(Side.White), "the king is never captured");
         }
 
         [Test]
@@ -248,35 +275,41 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void RuleActivationEmitsEventsInOrder()
         {
-            var auto = new AutoPlayer(7, new[] { "fire_hydrant", "tree_pawns" });
-            while (auto.Game.NextStage == 0) auto.Step();
+            AutoPlayer auto = null;
+            for (int seed = 7; auto == null; seed++)
+            {
+                var candidate = new AutoPlayer(seed, new[] { null, "tree_pawns" });
+                while (candidate.Game.NextStage < 2 && candidate.Game.Phase != GamePhase.GameOver && !candidate.Game.InStage3)
+                    candidate.Step();
+                if (candidate.Game.Phase == GamePhase.ChoosingRule && candidate.Game.CurrentOfferKind == OfferKind.StageCard) auto = candidate;
+            }
             Assert.AreEqual(GamePhase.ChoosingRule, auto.Game.Phase);
             Assert.AreEqual(GameEventType.RulesOffered, auto.Events.Last().Type);
             auto.Events.Clear();
 
             auto.Step();
             Assert.AreEqual(GameEventType.RuleActivated, auto.Events[0].Type);
-            Assert.AreEqual("fire_hydrant", auto.Events[0].Rule.Id);
+            Assert.AreEqual("tree_pawns", auto.Events[0].Rule.Id);
             Assert.IsTrue(auto.Events.Any(e => e.Type == GameEventType.AppearanceChanged));
             Assert.Contains(auto.Game.ActiveRules.Last(), auto.Game.ActiveRules.ToList());
         }
 
         /// <summary>
-        /// 9 种固定选卡组合 × 多个种子，AI 对 AI 一直下到第三阶段结束（或回合上限），每一步都检查不变量。
+        /// 第一阶段的自动规则 + 第 10 回合的每种选卡 × 多个种子，AI 对 AI 一直下到第三阶段结束（或回合上限），每一步都检查不变量。
         /// </summary>
         [Test]
         public void AllRuleCombinations_PlayThroughStage3WithoutBreakingInvariants()
         {
             var pools = Enumerable.Range(0, RuleCatalog.StageCount).Select(s => RuleCatalog.CreatePool(s).Select(r => r.Id).ToArray()).ToArray();
             var activated = new Dictionary<string, int>();
-            int games = 0, stage3 = 0, sacrificeTasks = 0, knockbacks = 0, rescues = 0, emergencies = 0, friendSkills = 0;
+            int games = 0, stage3 = 0, sacrificeTasks = 0, knockbacks = 0, rescues = 0, emergencies = 0, friendSkills = 0, pushes = 0, undying = 0;
+            const string a = "auto";
 
-            foreach (var a in pools[0])
             foreach (var b in pools[1])
             {
-                for (int seed = 0; seed < 4; seed++)
+                for (int seed = 0; seed < 12; seed++)
                 {
-                    var auto = new AutoPlayer(seed * 1000 + games, new[] { a, b });
+                    var auto = new AutoPlayer(seed * 1000 + games, new[] { null, b });
                     try
                     {
                         auto.PlayToEnd();
@@ -293,24 +326,28 @@ namespace SaturdayGame.Chess.Tests
                         if (e.Type == GameEventType.Captured && e.Text == "burned")
                             CollectionAssert.Contains(Revivable, auto.Game.Board.GetPiece(e.PieceId).Type);
                         if (e.Type == GameEventType.KnockedBack) knockbacks++;
+                        if (e.Type == GameEventType.Pushed) pushes++;
                         if (e.Type == GameEventType.OpponentSkill) friendSkills++;
                         if (e.Type == GameEventType.RulesOffered && e.OfferKind == OfferKind.Emergency) emergencies++;
                     }
                     if (auto.Game.InStage3) stage3++;
                     if (auto.Game.Board.TaskComplete) sacrificeTasks++;
                     if (auto.Game.Winner == Side.White) rescues++;
+                    undying += auto.Game.Board.AllPieces.Count(p => p.Undying);
                     games++;
                 }
             }
 
             TestContext.WriteLine($"{games} games, {stage3} reached stage 3, {sacrificeTasks} finished the lava task, " +
-                                  $"{rescues} rescued the princess, {knockbacks} knockbacks, {emergencies} emergency offers, {friendSkills} friend skills");
+                                  $"{rescues} rescued the princess, {knockbacks} knockbacks, {pushes} hydrant pushes, {undying} undying pieces, {emergencies} emergency offers, {friendSkills} friend skills");
             foreach (var kv in activated.OrderBy(kv => kv.Key)) TestContext.WriteLine($"  {kv.Key}: {kv.Value}");
-            foreach (var pool in pools)
-                foreach (var id in pool)
-                    Assert.IsTrue(activated.ContainsKey(id), $"rule {id} was never activated");
+            foreach (var id in pools.SelectMany(p => p).Concat(new GameSettings().OpeningRules.Select(r => r.RuleId)))
+                Assert.IsTrue(activated.ContainsKey(id), $"rule {id} was never activated");
+            Assert.Greater(pushes, 0, "hydrants should push pieces around");
             Assert.Greater(stage3, games / 2, "most games should reach stage 3");
             Assert.Greater(sacrificeTasks, 0, "someone should finish the lava task");
+            Assert.Greater(undying, 0, "sacrifices should make pieces undying");
+            Assert.Greater(rescues, games / 2, "most games should end with a rescue");
             Assert.Greater(knockbacks, 0, "the friend should knock pieces back");
             Assert.Greater(emergencies, 0, "being in check should offer emergency skills");
             Assert.Greater(friendSkills, 0, "the friend should cast its scheduled skills");
@@ -333,7 +370,9 @@ namespace SaturdayGame.Chess.Tests
                 if (p == null) continue;
                 Assert.IsTrue(p.OnBoard, $"{p} on {c} should be on the board");
                 Assert.AreEqual(c, p.Pos, $"{p} square mismatch");
-                if (board.IsLava(c)) Assert.IsTrue(p.IsHellhorse, $"{p} is standing on lava");
+                if (board.IsLava(c))
+                    Assert.IsTrue(p.Side == game.PlayerSide && (board.TaskComplete || p.Undying),
+                        $"{p} is standing on lava before the lava task is done");
                 if (board.IsCastle(c)) Assert.AreEqual(GamePhase.GameOver, game.Phase, $"{p} is in the castle but the game goes on");
             }
 
@@ -342,11 +381,11 @@ namespace SaturdayGame.Chess.Tests
                 Assert.That(p.FrozenTurns, Is.InRange(0, 4), $"{p} frozen turns");
                 if (p.Type == PieceType.King) Assert.IsFalse(p.IsFrozen, "kings are never frozen");
                 if (p.Sacrificed || p.Retired) Assert.IsFalse(p.OnBoard, $"{p} came back after leaving for good");
-                if (p.IsHellhorse)
+                if (p.Undying)
                 {
-                    Assert.AreEqual(PieceType.Knight, p.Type);
+                    Assert.AreNotEqual(PieceType.King, p.Type);
                     Assert.AreEqual(game.PlayerSide, p.Side);
-                    Assert.IsTrue(board.TaskComplete, "hellhorses only after the lava task");
+                    Assert.IsTrue(board.Stage3, "undying pieces only come from lava sacrifices");
                 }
                 if (p.OnBoard) Assert.AreSame(p, board.PieceAt(p.Pos), $"{p} missing from its square");
             }

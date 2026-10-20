@@ -33,12 +33,14 @@ namespace SaturdayGame.Chess
         KnockedBack,
         /// <summary>对手放了一个技能（Rule）。</summary>
         OpponentSkill,
+        /// <summary>棋子被规则推开（From → To），例如被消防栓喷开。SourcePieceId 是推它的棋子。</summary>
+        Pushed,
     }
 
     /// <summary>规则卡是在什么情况下弹出的。</summary>
     public enum OfferKind
     {
-        /// <summary>第 4、10 回合的固定选卡（必须选）。</summary>
+        /// <summary>第 10 回合的固定选卡（必须选）。第一阶段的规则按回合自动生效，不弹卡。</summary>
         StageCard,
         /// <summary>被将军时的救急技能（可以跳过）。</summary>
         Emergency,
@@ -127,6 +129,13 @@ namespace SaturdayGame.Chess
             {
                 Type = GameEventType.KnockedBack, PieceId = piece.Id, From = from, To = to, Side = piece.Side,
                 SourcePieceId = attacker?.Id ?? -1,
+            };
+
+        public static GameEvent Pushed(Piece piece, Coord from, Coord to, Piece source) =>
+            new GameEvent
+            {
+                Type = GameEventType.Pushed, PieceId = piece.Id, From = from, To = to, Side = piece.Side,
+                SourcePieceId = source?.Id ?? -1,
             };
 
         public static GameEvent OpponentSkill(RuleBase rule) =>

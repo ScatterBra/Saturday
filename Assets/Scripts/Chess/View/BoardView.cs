@@ -246,6 +246,23 @@ namespace SaturdayGame.Chess.View
             view.SetPosition(end);
         }
 
+        /// <summary>被消防栓喷开：贴着棋盘滑过去，先快后慢，最后晃一下。</summary>
+        public IEnumerator AnimatePush(int id, Coord to, float duration)
+        {
+            if (!pieces.TryGetValue(id, out var view)) yield break;
+            var start = view.Root.transform.localPosition;
+            var end = PiecePosition(to);
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                float k = 1f - (1f - t) * (1f - t);
+                view.SetPosition(Vector3.Lerp(start, end, k));
+                view.Root.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Sin(t * Mathf.PI * 3f) * 12f * (1f - t));
+                yield return null;
+            }
+            view.Root.transform.localRotation = Quaternion.identity;
+            view.SetPosition(end);
+        }
+
         /// <summary>献祭：走进岩浆，慢慢沉下去。</summary>
         public IEnumerator AnimateSacrifice(int id, Coord at, float duration)
         {

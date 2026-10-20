@@ -12,6 +12,7 @@ namespace SaturdayGame.Chess.View
         static readonly Color BlackBody = new Color(0.2f, 0.2f, 0.25f);
         static readonly Color WhiteInk = new Color(0.15f, 0.12f, 0.1f);
         static readonly Color BlackInk = new Color(0.95f, 0.93f, 0.88f);
+        static readonly Color UndyingTint = new Color(0.6f, 0.85f, 1f);
 
         public readonly int PieceId;
         public readonly GameObject Root;
@@ -74,6 +75,17 @@ namespace SaturdayGame.Chess.View
             if (skin != null && useSprite && sprite != null)
                 sprite.color = resolved.Tint * Color.Lerp(Color.white, SkinColor(skin), 0.6f);
 
+            // 不死的棋子：贴图泛一层幽蓝的光；占位图形用幽蓝的环（俯视时环会盖住贴图，所以有贴图时不画环）
+            if (piece.Undying)
+            {
+                if (useSprite && sprite != null) sprite.color *= UndyingTint;
+                else
+                {
+                    ring.SetActive(true);
+                    factory.SetColor(ring, UndyingTint);
+                }
+            }
+
             frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen);
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
 
@@ -81,6 +93,7 @@ namespace SaturdayGame.Chess.View
             letter.color = white ? WhiteInk : BlackInk;
 
             string text = skin ?? "";
+            if (piece.Undying) text = text.Length > 0 ? text + "\nundying" : "undying";
             if (piece.IsFrozen)
             {
                 // 冻结外观有图时只显示剩余回合数
@@ -118,9 +131,10 @@ namespace SaturdayGame.Chess.View
                 case "bishbug": return new Color(0.4f, 0.75f, 0.2f);
                 case "bishbird": return new Color(0.95f, 0.75f, 0.2f);
                 case "bishblob": return new Color(0.3f, 0.9f, 0.6f);
+                case "cake": return new Color(1f, 0.6f, 0.8f);
                 case "dragon": return new Color(1f, 0.45f, 0.05f);
                 case "crayon": return new Color(1f, 0.85f, 0.2f);
-                case "hellhorse": return new Color(0.55f, 0.05f, 0.05f);
+                case "scorched": return new Color(1f, 0.35f, 0.1f);
                 case "tree": return new Color(0.15f, 0.55f, 0.2f);
                 case "poop": return new Color(0.45f, 0.3f, 0.15f);
                 default: return Color.magenta;

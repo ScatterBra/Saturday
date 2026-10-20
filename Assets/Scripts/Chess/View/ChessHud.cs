@@ -276,7 +276,7 @@ namespace SaturdayGame.Chess.View
         {
             var sb = new StringBuilder();
             sb.Append("<b>Regular chess, except:</b>\n");
-            sb.Append("  • lose your king and you lose\n");
+            sb.Append("  • get checkmated and you lose\n");
             sb.Append("  • in check? you may use a skill\n");
             sb.Append("  • no castling, no en passant\n");
             sb.Append("  • pawns always become queens\n");

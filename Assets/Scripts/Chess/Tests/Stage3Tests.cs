@@ -38,12 +38,14 @@ namespace SaturdayGame.Chess.Tests
             Assert.AreEqual(3, layout.Castle.Count(c => c));
             Assert.AreEqual(Stage3Layout.CastleHeight, layout.Heights[C("a8").Index]);
             Assert.AreEqual(2, layout.Heights[C("b7").Index]);
-            Assert.AreEqual(7, layout.Lava.Count(l => l));
+            var lava = new[] { "h4", "g4", "g3", "f3", "e3", "d3", "c3", "c2", "b2", "b1", "a1" };
+            CollectionAssert.AreEquivalent(lava.Select(C), Enumerable.Range(0, 64).Where(i => layout.Lava[i]).Select(Coord.FromIndex));
             Assert.IsTrue(layout.PlayerZone[C("h3").Index], "gap in the river");
-            Assert.AreEqual(17, layout.PlayerZone.Count(z => z));
+            Assert.AreEqual(12, layout.PlayerZone.Count(z => z));
             Assert.AreEqual(12, layout.FriendPieces.Count);
-            Assert.AreEqual(C("e1"), layout.PlayerKing);
-            CollectionAssert.AreEqual(new[] { C("b2"), C("g2") }, layout.KnightSlots);
+            Assert.AreEqual(C("f1"), layout.PlayerKing);
+            CollectionAssert.AreEqual(new[] { C("e2"), C("h2") }, layout.KnightSlots);
+            Assert.IsTrue(layout.OtherSlots.All(c => layout.PlayerZone[c.Index]), "every slot is on the player's side");
         }
 
         [Test]
@@ -70,9 +72,15 @@ namespace SaturdayGame.Chess.Tests
 
             Assert.IsTrue(board.Stage3);
             Assert.AreEqual(Side.White, board.SideToMove);
-            Assert.AreEqual(C("e1"), board.King(Side.White).Pos);
-            Assert.AreEqual(C("b2"), board.PieceAt(C("b2")).Pos);
-            Assert.AreEqual(PieceType.Knight, board.PieceAt(C("b2")).Type, "the remaining knight goes to the first knight slot");
+            Assert.AreEqual(C("f1"), board.King(Side.White).Pos);
+            Assert.AreEqual(PieceType.Knight, board.PieceAt(C("e2")).Type, "the remaining knight goes to the first knight slot");
+            foreach (var p in board.PiecesOf(Side.White))
+            {
+                Assert.IsFalse(board.IsLava(p.Pos), $"{p} placed on lava");
+                Assert.AreEqual(0, board.Height(p.Pos), $"{p} placed on the plateau");
+            }
+            Assert.AreEqual(3, board.PiecesOf(Side.White).Count(p => !board.InPlayerZone(p.Pos)),
+                "15 pieces, 12 squares on the player's side: the rest go to the nearest free ground");
             Assert.AreEqual("hydrant", rook.Skin);
             Assert.IsTrue(rook.OnBoard);
             Assert.AreEqual(2, pawn.FrozenTurns, "effects carry over");
@@ -106,47 +114,47 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void SacrificingEnough_TurnsKnightsIntoHellhorses_ThatWalkOnLava()
+        public void KnightsJumpNormally_AndAfterTheTaskEveryoneCanStandOnAndCrossLava()
         {
-            const string pieces = "........\n........\n........\n........\n........\n........\n*N**....\n....K...";
+            const string pieces = "........\n........\n........\n........\n........\n........\n*N**....\n....K..*";
             var board = Setup(RiverTerrain, pieces, 3,
-                PieceType.King, PieceType.Knight, PieceType.Pawn, PieceType.Pawn, PieceType.Pawn);
+                PieceType.King, PieceType.Knight, PieceType.Rook, PieceType.Pawn, PieceType.Pawn, PieceType.Pawn);
+            // 我方位置顺序：h1、a2、c2、d2 → 车在 h1，兵在 a2、c2、d2，马在 b2，王在 e1
+            var before = Targets(board, "b2");
+            CollectionAssert.Contains(before, C("d3"), "a knight may jump into the lava to sacrifice itself");
+            CollectionAssert.Contains(before, C("d1"));
+            CollectionAssert.DoesNotContain(before, C("a4"), "before the task the far side is closed");
+            CollectionAssert.DoesNotContain(before, C("c4"));
+
             Play(board, "a2", "a3");
             Play(board, "c2", "c3");
-            Assert.IsFalse(board.PieceAt(C("b2")).IsHellhorse);
             var last = Play(board, "d2", "d3");
             Assert.IsTrue(last.TaskCompleted);
             Assert.IsTrue(board.TaskComplete);
 
-            var horse = board.PieceAt(C("b2"));
-            Assert.IsTrue(horse.IsHellhorse);
-            CollectionAssert.AreEquivalent(new[] { C("b3"), C("a2"), C("c2"), C("b1") }, Targets(board, "b2"),
-                "one step forward/back/left/right, lava included");
+            CollectionAssert.AreEquivalent(new[] { C("a4"), C("c4"), C("d3"), C("d1") }, Targets(board, "b2"),
+                "an ordinary knight jump, lava and the far side included");
 
-            Play(board, "b2", "b3");
-            Assert.AreSame(horse, board.PieceAt(C("b3")), "a hellhorse stands on lava");
-            CollectionAssert.Contains(Targets(board, "b3"), C("b4"), "after the task the far side is open");
+            Play(board, "h1", "h3");
+            CollectionAssert.IsSubsetOf(new[] { C("g3"), C("d3"), C("a3"), C("h8") }, Targets(board, "h3"),
+                "the rook slides over the lava and across the river");
+            var result = Play(board, "h3", "e3");
+            Assert.IsFalse(result.Sacrificed, "after the task lava is just ground");
+            Assert.AreEqual(PieceType.Rook, board.PieceAt(C("e3")).Type);
         }
 
         const string PlateauTerrain =
             "C2......\n21......\n1.1.....\n........\n........\n........\n........\n........";
 
         [Test]
-        public void Plateau_ClimbOneLevelAtATime_AndOnlyKnightsEnterTheCastle()
+        public void Plateau_OthersClimbOneLevelAtATime_KnightsJumpAnywhere_OnlyKnightsEnterTheCastle()
         {
             const string pieces = ".*......\n........\n........\nN.......\n........\n........\n........\n..*.K...";
             var board = Setup(PlateauTerrain, pieces, 0, PieceType.King, PieceType.Knight, PieceType.Rook, PieceType.Rook);
             // 我方位置顺序：c1、b8 → 两个车在 c1 和 b8，马在 a5
 
-            var knightMoves = Targets(board, "a5");
-            CollectionAssert.Contains(knightMoves, C("a6"), "climb one level by stepping");
-            CollectionAssert.Contains(knightMoves, C("c4"));
-            CollectionAssert.DoesNotContain(knightMoves, C("b7"), "no jumping onto the plateau");
-            CollectionAssert.DoesNotContain(knightMoves, C("c6"), "c6 is raised too");
-
-            Play(board, "a5", "a6");
-            CollectionAssert.AreEquivalent(new[] { C("a7"), C("a5"), C("b6") }, Targets(board, "a6"),
-                "on the plateau: orthogonal single steps only");
+            CollectionAssert.AreEquivalent(new[] { C("b7"), C("c6"), C("c4"), C("b3") }, Targets(board, "a5"),
+                "knights ignore height: straight onto the plateau");
 
             var rookTargets = Targets(board, "b8");
             CollectionAssert.DoesNotContain(rookTargets, C("a8"), "only knights may enter the castle");
@@ -157,9 +165,83 @@ namespace SaturdayGame.Chess.Tests
             CollectionAssert.Contains(low, C("c5"));
             CollectionAssert.DoesNotContain(low, C("c6"), "the plateau blocks sliding");
 
-            Play(board, "a6", "a7");
-            var result = Play(board, "a7", "a8");
+            Play(board, "a5", "c4");
+            Play(board, "c4", "b6");
+            CollectionAssert.Contains(Targets(board, "b6"), C("a8"));
+            var result = Play(board, "b6", "a8");
             Assert.IsTrue(result.Rescued);
+        }
+
+        [Test]
+        public void TheCastleStaysShut_UntilTheLavaTaskIsDone()
+        {
+            const string pieces = "........\n........\n.N......\n........\n........\n........\n........\n....K...";
+            var board = Setup(PlateauTerrain.Replace('.', '_'), pieces, 1, PieceType.King, PieceType.Knight);
+            var targets = Targets(board, "b6");
+            CollectionAssert.DoesNotContain(targets, C("a8"));
+            CollectionAssert.Contains(targets, C("d5"), "the knight can still jump elsewhere");
+        }
+
+        [Test]
+        public void UndyingPieces_KnockedIntoLava_SitOutOneTurnInsteadOfDying()
+        {
+            const string terrain = "........\n........\n........\n........\n........\n........\n...~....\n........";
+            const string pieces = "r.......\n........\n...r....\n........\n...N....\n........\n........\nK.......";
+            var board = Setup(terrain, pieces, 0, PieceType.King, PieceType.Knight);
+            var knight = board.PieceAt(C("d4"));
+            knight.Undying = true;
+
+            board.Pass();
+            var result = board.Apply(new Move(board.PieceAt(C("d6")).Id, C("d6"), C("d4")));
+            Assert.AreSame(knight, result.KnockedBack);
+            Assert.AreEqual(C("d2"), result.KnockTo, "the friend still likes knocking it into the lava");
+            Assert.IsTrue(result.Scorched);
+            Assert.IsFalse(result.KnockedIntoLava);
+            Assert.IsTrue(knight.OnBoard);
+            Assert.AreSame(knight, board.PieceAt(C("d2")));
+            Assert.AreEqual(0, MoveGenerator.MovesFor(board, knight).Count, "it can't move this turn");
+
+            board.Pass(); // 玩家这一回合动不了
+            Assert.IsFalse(knight.IsFrozen);
+            Assert.Greater(MoveGenerator.MovesFor(board, knight).Count, 0);
+        }
+
+        [Test]
+        public void EveryTwoSacrifices_ThePlayerPicksAnUndyingPiece()
+        {
+            var game = new ChessGame(new GameSettings { Seed = 5, StageTurns = new int[0], StormTurn = 1, FriendSkillTurns = new int[0] });
+            Assert.IsTrue(game.InStage3);
+            int sacrifices = 0, guard = 0;
+            while (sacrifices < 2)
+            {
+                Assert.Less(++guard, 100);
+                switch (game.Phase)
+                {
+                    case GamePhase.ChoosingRule:
+                        game.SkipOffers();
+                        break;
+                    case GamePhase.PlayerTurn:
+                        game.PlayMove(game.LegalMoves().First(m => game.Board.IsLava(m.To)));
+                        sacrifices++;
+                        if (sacrifices == 1) Assert.AreEqual(GamePhase.OpponentTurn, game.Phase, "one sacrifice is not enough yet");
+                        break;
+                    case GamePhase.OpponentTurn:
+                        game.PlayMove(game.LegalMoves().First());
+                        break;
+                    default:
+                        Assert.Fail($"unexpected phase {game.Phase}");
+                        break;
+                }
+            }
+            Assert.AreEqual(2, game.Board.Sacrifices);
+            Assert.AreEqual(GamePhase.ChoosingTarget, game.Phase);
+            var request = game.PendingTarget;
+            Assert.IsFalse(request.AllowSkip);
+            Assert.IsTrue(request.Options.All(c => game.Board.PieceAt(c).Side == Side.White && game.Board.PieceAt(c).Type != PieceType.King));
+            var chosen = game.Board.PieceAt(request.Options[0]);
+            game.ResolveTarget(request.Options[0]);
+            Assert.IsTrue(chosen.Undying);
+            Assert.AreEqual(GamePhase.OpponentTurn, game.Phase, "after picking, it's the friend's move");
         }
 
         [Test]
@@ -205,7 +287,7 @@ namespace SaturdayGame.Chess.Tests
             var knight = board.PieceAt(C("b1"));
             board.RemovePiece(knight);
             board.ApplyLayout(Stage3Layout.Default, Side.White, 3);
-            board.RemovePiece(board.PieceAt(C("d1"))); // 腾出位置
+            board.RemovePiece(board.PieceAt(C("e1"))); // 腾出王旁边的位置
             var square = RevivalPlacement.FindSquare(board, knight).Value;
             Assert.IsTrue(board.InPlayerZone(square));
             Assert.AreEqual(0, board.Height(square));

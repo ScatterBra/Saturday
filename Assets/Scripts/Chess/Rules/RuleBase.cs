@@ -42,6 +42,12 @@ namespace SaturdayGame.Chess
         /// </summary>
         public abstract IEnumerable<TargetRequest> Activate(RuleContext ctx);
 
+        /// <summary>
+        /// 任何一方的棋子走完一步、落在新格子上之后调用（献祭进岩浆的不算）。
+        /// 例如消防栓落地后喷开旁边的棋子。
+        /// </summary>
+        public virtual void OnPieceMoved(RuleContext ctx, Piece mover, Coord from) { }
+
         /// <summary>每走完一步（或跳过一回合）调用一次。</summary>
         public virtual void OnTurnEnded(RuleContext ctx, Side sideThatMoved) { }
 
@@ -128,13 +134,25 @@ namespace SaturdayGame.Chess
             emit(GameEvent.Captured(piece, at, cause, source));
         }
 
-        /// <summary>复活棋子。skin 为 null 时保留原来的外观；复活成地狱马时外观换成 hellhorse。</summary>
+        /// <summary>复活棋子。skin 为 null 时保留原来的外观。</summary>
         public void Revive(Piece piece, Coord at, string skin)
         {
             Board.RestorePiece(piece, at);
             if (skin != null) piece.Skin = skin;
-            if (piece.IsHellhorse) piece.Skin = "hellhorse";
             emit(GameEvent.Revived(piece));
+        }
+
+        /// <summary>把棋子推到另一个空格。兵被推到对方底线时照常升变成后。</summary>
+        public void Push(Piece piece, Coord to, Piece source)
+        {
+            var from = piece.Pos;
+            Board.Relocate(piece, to);
+            emit(GameEvent.Pushed(piece, from, to, source));
+            if (piece.Type == PieceType.Pawn && to.Y == piece.Side.PromotionRank())
+            {
+                piece.Type = PieceType.Queen;
+                emit(GameEvent.Promoted(piece));
+            }
         }
 
         public void AddLava(IReadOnlyList<Coord> squares)

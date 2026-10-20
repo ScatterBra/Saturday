@@ -20,6 +20,9 @@ namespace SaturdayGame.Chess.View
         /// <summary>棋子贴图配置，为 null 时全部用占位图形。</summary>
         public readonly PieceArt Art;
 
+        /// <summary>棋子贴图和文字固定用的俯仰角：开局时相机的俯仰角，之后相机再倾斜它们也不跟着倾斜。</summary>
+        public readonly float FlatPitch = 90f;
+
         /// <summary>3D 模型是否投影子。</summary>
         public readonly bool Shadows;
 
@@ -39,9 +42,10 @@ namespace SaturdayGame.Chess.View
             }
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             cameraTransform = camera != null ? camera.transform : null;
+            if (cameraTransform != null) FlatPitch = FaceCamera.PitchOf(cameraTransform);
         }
 
-        /// <summary>让物体始终和相机朝向一致（相机转了也跟着转）。</summary>
+        /// <summary>让物体朝着相机（跟着相机水平转，俯仰角固定在 FlatPitch）。</summary>
         void Face(GameObject go)
         {
             if (cameraTransform == null)
@@ -49,8 +53,10 @@ namespace SaturdayGame.Chess.View
                 go.transform.rotation = Quaternion.Euler(90, 0, 0);
                 return;
             }
-            go.transform.rotation = cameraTransform.rotation;
-            go.AddComponent<FaceCamera>().target = cameraTransform;
+            go.transform.rotation = FaceCamera.Rotation(cameraTransform, FlatPitch);
+            var face = go.AddComponent<FaceCamera>();
+            face.target = cameraTransform;
+            face.pitch = FlatPitch;
         }
 
         /// <param name="surface">桌面、棋盘格子这类地面：打开阴影时用受光照的材质并接收影子。</param>

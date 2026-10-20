@@ -56,12 +56,43 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void KingCanBeCaptured()
+        public void TheKingIsNeverCaptured()
         {
             var board = EmptyBoard();
             var rook = board.AddPiece(PieceType.Rook, Side.White, C("e5"));
-            var capture = MoveGenerator.MovesFor(board, rook).Single(m => m.To == C("e8"));
-            Assert.IsTrue(board.Apply(capture).KingCaptured);
+            var targets = MoveGenerator.MovesFor(board, rook).Select(m => m.To).ToList();
+            CollectionAssert.DoesNotContain(targets, C("e8"));
+            CollectionAssert.Contains(targets, C("e7"));
+        }
+
+        [Test]
+        public void PinnedPiecesStay_AndChecksMustBeAnswered()
+        {
+            var board = EmptyBoard();
+            board.AddPiece(PieceType.Rook, Side.Black, C("e7"));
+            var bishop = board.AddPiece(PieceType.Bishop, Side.White, C("e2"));
+            Assert.AreEqual(0, MoveGenerator.MovesFor(board, bishop).Count, "the bishop is pinned to its king");
+
+            board = EmptyBoard();
+            board.AddPiece(PieceType.Rook, Side.Black, C("e5"));
+            var knight = board.AddPiece(PieceType.Knight, Side.White, C("b1"));
+            Assert.AreEqual(0, MoveGenerator.MovesFor(board, knight).Count, "no knight move answers the check");
+            var king = board.King(Side.White);
+            CollectionAssert.AreEquivalent(new[] { C("d1"), C("d2"), C("f1"), C("f2") },
+                MoveGenerator.MovesFor(board, king).Select(m => m.To), "the king can't stay on the e-file");
+        }
+
+        [Test]
+        public void Checkmate_IsCheckWithNoLegalMoves()
+        {
+            var board = new Board();
+            board.AddPiece(PieceType.King, Side.White, C("h1"));
+            board.AddPiece(PieceType.Pawn, Side.White, C("g2"));
+            board.AddPiece(PieceType.Pawn, Side.White, C("h2"));
+            board.AddPiece(PieceType.King, Side.Black, C("e8"));
+            board.AddPiece(PieceType.Rook, Side.Black, C("a1"));
+            Assert.IsTrue(MoveGenerator.IsCheckmated(board, Side.White));
+            Assert.IsFalse(MoveGenerator.IsCheckmated(board, Side.Black));
         }
 
         [Test]

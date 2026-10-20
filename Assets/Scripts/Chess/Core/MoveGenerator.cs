@@ -3,16 +3,17 @@ using System.Collections.Generic;
 namespace SaturdayGame.Chess
 {
     /// <summary>
-    /// 走法生成。简化象棋：吃掉王就结束（第一、二阶段），没有“走完不能被将军”的限制，
+    /// 走法生成。第一、二阶段按正式的将军规则：不能走让自己的王被攻击的棋（被将军必须应将），王永远不会被吃；
     /// 去掉了王车易位和吃过路兵，兵升变自动变后。
     /// 规则和地形带来的状态都在这里统一处理，AI 和玩家用的是同一套：
-    /// - 冻结的子不能动；岩浆不能进入也不能滑过。
+    /// - 冻结的子不能动。
     /// - 第三阶段：
-    ///   * 高原（高度 &gt; 0 的格子）和城堡挡住滑行和跳跃；站在高原上的棋子只能前后左右走一格，
+    ///   * 马照常跳 L 形，无视高度（可以直接跳上高原、跳进城堡）。
+    ///   * 其他棋子：高原（高度 &gt; 0 的格子）和城堡挡住滑行；站在高原上只能前后左右走一格，
     ///     一次最多爬升或下降一级；平地上的棋子也能前后左右一格爬上高度 1。
-    ///   * 只有我方的马能进城堡。
-    ///   * 献祭完成前，我方棋子只能落在岩浆这一侧，或者走进岩浆献祭（王除外）。
-    ///   * 地狱马只能前后左右走一格，可以走上岩浆。
+    ///   * 只有我方的马能进城堡，而且要先完成献祭。
+    ///   * 献祭完成前，我方棋子只能落在岩浆这一侧，或者走进岩浆献祭（王除外）；
+    ///     完成后我方棋子可以站在岩浆上、滑过岩浆。对手的棋子不上岩浆。
     ///   * 对手不攻击我方的王；对手打我方棋子时要能把它击飞，否则这步不能走。
     /// </summary>
     public static class MoveGenerator
@@ -34,6 +35,7 @@ namespace SaturdayGame.Chess
         {
             var moves = new List<Move>();
             foreach (var piece in board.PiecesOf(side)) AddMoves(board, piece, moves);
+            RemoveIllegal(board, side, moves);
             return moves;
         }
 
@@ -41,26 +43,49 @@ namespace SaturdayGame.Chess
         {
             var moves = new List<Move>();
             if (piece.OnBoard) AddMoves(board, piece, moves);
+            RemoveIllegal(board, piece.Side, moves);
             return moves;
         }
 
         public static bool HasAnyMove(Board board, Side side) => Generate(board, side).Count > 0;
 
-        /// <summary>这一方的王正被攻击（对方下一步就能吃掉它）。冻结的子不算在攻击。</summary>
+        /// <summary>这一方的王正被攻击（被将军）。冻结的子不算在攻击。</summary>
         public static bool InCheck(Board board, Side side)
         {
             var king = board.King(side);
             if (king == null) return false;
-            foreach (var move in Generate(board, side.Opponent()))
+            var attacks = new List<Move>();
+            foreach (var piece in board.PiecesOf(side.Opponent())) AddMoves(board, piece, attacks);
+            foreach (var move in attacks)
                 if (move.To == king.Pos) return true;
             return false;
+        }
+
+        /// <summary>被将死：正被将军，而且没有任何合法走法。</summary>
+        public static bool IsCheckmated(Board board, Side side) => InCheck(board, side) && !HasAnyMove(board, side);
+
+        /// <summary>
+        /// 第一、二阶段的将军规则：去掉吃王的走法，以及走完之后自己的王会被攻击的走法。
+        /// 第三阶段不用：朋友不攻击王，玩家的王本来就不会被将军。
+        /// </summary>
+        static void RemoveIllegal(Board board, Side side, List<Move> moves)
+        {
+            if (board.Stage3 || moves.Count == 0) return;
+            moves.RemoveAll(move =>
+            {
+                var target = board.PieceAt(move.To);
+                if (target != null && target.Type == PieceType.King) return true;
+                var next = board.Clone();
+                next.Apply(move);
+                return InCheck(next, side);
+            });
         }
 
         static void AddMoves(Board board, Piece piece, List<Move> moves)
         {
             if (piece.IsFrozen) return;
             var from = piece.Pos;
-            if (board.Stage3 && (piece.IsHellhorse || board.Height(from) > 0))
+            if (board.Stage3 && piece.Type != PieceType.Knight && board.Height(from) > 0)
             {
                 AddPlateauSteps(board, piece, from, moves);
                 return;
@@ -71,7 +96,7 @@ namespace SaturdayGame.Chess
                     AddPawnMoves(board, piece, from, moves);
                     break;
                 case PieceType.Knight:
-                    AddSteps(board, piece, from, KnightJumps, moves);
+                    AddJumps(board, piece, from, moves);
                     break;
                 case PieceType.King:
                     AddSteps(board, piece, from, AllDirections, moves);
@@ -86,7 +111,7 @@ namespace SaturdayGame.Chess
                     AddSlides(board, piece, from, AllDirections, moves);
                     break;
             }
-            if (board.Stage3) AddClimbSteps(board, piece, from, moves);
+            if (board.Stage3 && piece.Type != PieceType.Knight) AddClimbSteps(board, piece, from, moves);
         }
 
         /// <summary>落点检查结果：能不能落，以及（滑行时）要不要在这里停下。</summary>
@@ -105,12 +130,13 @@ namespace SaturdayGame.Chess
         {
             if (board.IsCastle(to))
             {
-                bool mayEnter = piece.Side == board.Rescuer && piece.Type == PieceType.Knight;
+                bool mayEnter = piece.Side == board.Rescuer && piece.Type == PieceType.Knight && board.TaskComplete;
                 return mayEnter && board.IsEmpty(to) ? Landing.Free : Landing.Blocked;
             }
             if (board.IsLava(to))
             {
-                if (piece.IsHellhorse) return OccupantCheck(board, piece, from, to);
+                // 献祭完成后我方可以站在岩浆上；对手的棋子不上岩浆
+                if (board.Stage3 && piece.Side == board.Rescuer && board.TaskComplete) return OccupantCheck(board, piece, from, to);
                 return CanSacrifice(board, piece) ? Landing.Sacrifice : Landing.Blocked;
             }
             if (board.Stage3 && piece.Side == board.Rescuer && !board.TaskComplete && !board.InPlayerZone(to))
@@ -160,6 +186,17 @@ namespace SaturdayGame.Chess
             }
         }
 
+        /// <summary>马跳 L 形。第三阶段无视高度，所以只做高度以外的检查。</summary>
+        static void AddJumps(Board board, Piece piece, Coord from, List<Move> moves)
+        {
+            foreach (var offset in KnightJumps)
+            {
+                var to = from + offset;
+                if (!to.IsValid) continue;
+                if (CheckCommon(board, piece, from, to) != Landing.Blocked) moves.Add(new Move(piece.Id, from, to));
+            }
+        }
+
         static void AddSteps(Board board, Piece piece, Coord from, Coord[] offsets, List<Move> moves)
         {
             foreach (var offset in offsets)
@@ -185,7 +222,7 @@ namespace SaturdayGame.Chess
             }
         }
 
-        /// <summary>站在高原上（或地狱马）：只能前后左右走一格，高度差最多 1。</summary>
+        /// <summary>站在高原上（马除外）：只能前后左右走一格，高度差最多 1。</summary>
         static void AddPlateauSteps(Board board, Piece piece, Coord from, List<Move> moves)
         {
             foreach (var dir in Straight)

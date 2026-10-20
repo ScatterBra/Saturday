@@ -26,7 +26,7 @@ namespace SaturdayGame.Chess
         /// <summary>已经献祭进岩浆的棋子数。</summary>
         public int Sacrifices { get; private set; }
         public int SacrificesNeeded { get; private set; }
-        /// <summary>献祭任务完成：马变成地狱马，我方不再被限制在岩浆这一侧。</summary>
+        /// <summary>献祭任务完成：岩浆不再吞子，我方棋子可以站在岩浆上、穿过岩浆，也不再被限制在岩浆这一侧。</summary>
         public bool TaskComplete => Stage3 && Sacrifices >= SacrificesNeeded;
 
         /// <summary>整局出现过的所有棋子（包括被吃掉的），下标就是 Piece.Id。</summary>
@@ -115,7 +115,18 @@ namespace SaturdayGame.Chess
             piece.FrozenSkin = null;
         }
 
-        /// <summary>把被吃掉的棋子放回棋盘（复活）。献祭完成后复活的马直接是地狱马。</summary>
+        /// <summary>规则把棋盘上的棋子直接挪到另一个空格（例如被消防栓喷开）。不算走棋，不换走子方。</summary>
+        public void Relocate(Piece piece, Coord to)
+        {
+            if (!piece.OnBoard) throw new InvalidOperationException($"{piece} is not on the board");
+            if (squares[to.Index] != null || lava[to.Index] || castle[to.Index])
+                throw new InvalidOperationException($"Cannot move {piece} onto {to}");
+            squares[piece.Pos.Index] = null;
+            piece.Pos = to;
+            squares[to.Index] = piece;
+        }
+
+        /// <summary>把被吃掉的棋子放回棋盘（复活）。</summary>
         public void RestorePiece(Piece piece, Coord at)
         {
             if (piece.OnBoard) throw new InvalidOperationException($"{piece} is already on the board");
@@ -125,7 +136,6 @@ namespace SaturdayGame.Chess
             piece.Pos = at;
             piece.FrozenTurns = 0;
             piece.FrozenSkin = null;
-            if (TaskComplete && piece.Side == Rescuer && piece.Type == PieceType.Knight) piece.IsHellhorse = true;
             squares[at.Index] = piece;
         }
 
@@ -170,7 +180,7 @@ namespace SaturdayGame.Chess
                 Coord? at = null;
                 if (p.Type == PieceType.King && layout.PlayerKing.HasValue && IsEmpty(layout.PlayerKing.Value)) at = layout.PlayerKing;
                 if (at == null && p.Type == PieceType.Knight) at = Take(knightSlots);
-                if (at == null) at = Take(otherSlots) ?? Take(knightSlots) ?? FreeZoneSquare();
+                if (at == null) at = Take(otherSlots) ?? Take(knightSlots) ?? FreeZoneSquare() ?? NearestFreeGround(layout.PlayerKing);
                 if (at == null) throw new InvalidOperationException("Stage 3 layout has no room for all of the player's pieces");
                 p.Pos = at.Value;
                 squares[at.Value.Index] = p;
@@ -211,9 +221,29 @@ namespace SaturdayGame.Chess
             return null;
         }
 
+        /// <summary>我方一侧摆不下时：离我方王的位置最近的空平地（可能在岩浆对面）。</summary>
+        Coord? NearestFreeGround(Coord? anchor)
+        {
+            Coord? best = null;
+            int bestDistance = int.MaxValue;
+            var center = anchor ?? new Coord(4, 0);
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                if (!IsEmpty(c) || lava[i] || castle[i] || height[i] > 0) continue;
+                int d = c.DistanceTo(center);
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = c;
+                }
+            }
+            return best;
+        }
+
         /// <summary>
         /// 执行一步走法（不检查合法性，调用方负责只传入 MoveGenerator 生成的走法），然后交换走子方。
-        /// 第三阶段：走进岩浆 = 献祭；对手走到我方棋子上 = 把它击飞；马走进城堡 = 救出公主。
+        /// 第三阶段：献祭完成前我方走进岩浆 = 献祭；对手走到我方棋子上 = 把它击飞；马走进城堡 = 救出公主。
         /// </summary>
         public MoveResult Apply(Move move)
         {
@@ -221,8 +251,8 @@ namespace SaturdayGame.Chess
             var result = new MoveResult { Mover = mover, From = move.From, To = move.To };
             squares[move.From.Index] = null;
 
-            // 献祭：走进岩浆（地狱马可以站在岩浆上，不算献祭）
-            if (lava[move.To.Index] && !mover.IsHellhorse)
+            // 献祭：献祭完成前我方棋子走进岩浆（完成后岩浆可以站）
+            if (lava[move.To.Index] && Stage3 && mover.Side == Rescuer && !TaskComplete)
             {
                 mover.Pos = move.To;
                 mover.OnBoard = false;
@@ -231,12 +261,7 @@ namespace SaturdayGame.Chess
                 mover.FrozenSkin = null;
                 Sacrifices++;
                 result.Sacrificed = true;
-                if (Sacrifices == SacrificesNeeded)
-                {
-                    result.TaskCompleted = true;
-                    foreach (var p in PiecesOf(Rescuer))
-                        if (p.Type == PieceType.Knight) p.IsHellhorse = true;
-                }
+                if (Sacrifices == SacrificesNeeded) result.TaskCompleted = true;
                 EndTurn();
                 return result;
             }
@@ -254,7 +279,15 @@ namespace SaturdayGame.Chess
                     result.KnockFrom = target.Pos;
                     result.KnockTo = landing.Value;
                     target.Pos = landing.Value;
-                    if (lava[landing.Value.Index] && !target.IsHellhorse)
+                    if (lava[landing.Value.Index] && target.Undying)
+                    {
+                        // 不死的棋子掉进岩浆不会死，只是被烫得动不了一回合
+                        squares[landing.Value.Index] = target;
+                        target.FrozenTurns = Math.Max(target.FrozenTurns, 1);
+                        target.FrozenSkin = "scorched";
+                        result.Scorched = true;
+                    }
+                    else if (lava[landing.Value.Index])
                     {
                         target.OnBoard = false;
                         target.FrozenTurns = 0;
@@ -331,6 +364,7 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 第三阶段的击飞：被打的棋子沿八个方向之一飞出两格；第二格落不下就落在第一格，第一格都落不下的方向不能选。
     /// 方向由对手（朋友）选：优先把棋子打进岩浆，其次打得离城堡越远越好、越低越好。
+    /// 普通棋子掉进岩浆就死（可以复活）；不死的棋子不死，禁止行动一回合。
     /// 王不会被打进岩浆（第三阶段对手本来也不会攻击王）。
     /// </summary>
     public static class Knockback
@@ -378,7 +412,8 @@ namespace SaturdayGame.Chess
         static int Score(Board board, Piece victim, Coord c)
         {
             int score = 0;
-            if (board.IsLava(c) && !victim.IsHellhorse) score += 1000;
+            // 打进岩浆最好（普通棋子会死）；不死的棋子打进去只能让它停一回合，没那么值
+            if (board.IsLava(c)) score += victim.Undying ? 200 : 1000;
             score += 10 * DistanceToCastle(board, c);
             score -= 3 * board.Height(c);
             return score;

@@ -14,15 +14,37 @@ namespace SaturdayGame.Chess
         GameOver,
     }
 
+    /// <summary>到第 Turn 回合（玩家走之前）自动生效的规则，RuleId 见 RuleCatalog.Create。</summary>
+    [Serializable]
+    public struct ScheduledRule
+    {
+        public int Turn;
+        public string RuleId;
+
+        public ScheduledRule(int turn, string ruleId)
+        {
+            Turn = turn;
+            RuleId = ruleId;
+        }
+    }
+
     public sealed class GameSettings
     {
         public int Seed = Environment.TickCount;
-        /// <summary>在这些回合开始时（轮到玩家走之前）弹出固定选卡，一个阶段一次。</summary>
+        /// <summary>在这些回合开始时（轮到玩家走之前）进入下一个阶段：第一阶段不弹卡，第二阶段弹固定选卡。</summary>
         public int[] StageTurns = { 4, 10 };
+        /// <summary>第一阶段的规则：到回合就自动生效，不用选。</summary>
+        public ScheduledRule[] OpeningRules =
+        {
+            new ScheduledRule(5, "bishop_variants"),
+            new ScheduledRule(7, "fire_hydrant"),
+        };
         /// <summary>到这个回合（玩家走之前）朋友掀起风暴，进入第三阶段。</summary>
         public int StormTurn = 20;
-        /// <summary>第三阶段要往岩浆里献祭几个棋子，马才能变成地狱马。</summary>
+        /// <summary>第三阶段要往岩浆里献祭几个棋子，岩浆才能站、才能过河。</summary>
         public int SacrificesNeeded = 3;
+        /// <summary>第三阶段每献祭这么多个棋子，玩家选一枚棋子变成不死。0 = 不给。</summary>
+        public int UndyingEvery = 2;
         /// <summary>第三阶段开始时弹一次技能，之后每隔这么多回合再弹一次。</summary>
         public int Stage3SkillEvery = 5;
         /// <summary>第三阶段开始后的第几回合朋友放技能（例如 2 = 风暴后第 2 回合）。</summary>
@@ -38,9 +60,12 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 一整局棋：棋盘 + 阶段 + 规则 + 胜负。玩家固定执白（下方），对手是朋友（AI，执黑）。
     ///
-    /// 第一、二阶段：第 4、10 回合固定选卡；玩家被将军时可以选一个救急技能；王被吃就输。
-    /// 进入第三阶段（风暴）：第 20 回合，或者第 10 回合选卡之后将军了对手，或者在那之前吃掉了对手的王。
+    /// 第一阶段（第 4 回合起）：规则按 OpeningRules 的回合表自动生效，不弹卡。
+    /// 第二阶段：第 10 回合固定选卡。
+    /// 第一、二阶段按正式的将军规则（不能送将，王不会被吃）：玩家被将军时可以选一个救急技能；被将死就输。
+    /// 进入第三阶段（风暴）：第 20 回合，或者第 10 回合选卡之后将军了对手，或者将死了对手。
     /// 第三阶段（城堡营救）：棋盘换成预设的地形和阵型，马进城堡就赢，不会输；朋友只守城堡，并按时间表放技能。
+    /// 献祭完成前我方走进岩浆 = 献祭，每献祭 UndyingEvery 个选一枚棋子变成不死；献祭完成后岩浆可以站、可以过。
     ///
     /// 所有操作都会往事件队列里加事件，表现层用 DrainEvents() 取出来按顺序演出。
     /// </summary>
@@ -55,11 +80,14 @@ namespace SaturdayGame.Chess
         OfferKind offerKind;
         IEnumerator<TargetRequest> activation;
         int nextStage;
+        readonly ScheduledRule[] openingRules;
+        int nextOpeningRule;
         int passesInARow;
         int lastEmergencyTurn = -1;
         int stage3StartTurn = -1;
         int nextStage3Offer;
         int friendSkillIndex;
+        bool undyingPickDue;
 
         public Board Board { get; }
         public Random Rng { get; }
@@ -78,7 +106,24 @@ namespace SaturdayGame.Chess
         public bool CanSkipOffers => Phase == GamePhase.ChoosingRule && offerKind != OfferKind.StageCard;
         /// <summary>ChoosingTarget 阶段等待的点选请求。</summary>
         public TargetRequest PendingTarget { get; private set; }
-        /// <summary>下一个固定选卡阶段（0..StageTurns.Length）。</summary>
+        /// <summary>下一次出现新规则的回合（第一阶段排好的规则，或固定选卡），没有了返回 -1。</summary>
+        public int NextRuleTurn
+        {
+            get
+            {
+                if (InStage3) return -1;
+                int best = nextOpeningRule < openingRules.Length ? openingRules[nextOpeningRule].Turn : -1;
+                for (int stage = nextStage; stage < CardStages; stage++)
+                {
+                    if (RuleCatalog.CreatePool(stage).Count == 0) continue;
+                    int turn = settings.StageTurns[stage];
+                    if (best < 0 || turn < best) best = turn;
+                    break;
+                }
+                return best;
+            }
+        }
+        /// <summary>下一个阶段（0..StageTurns.Length）。</summary>
         public int NextStage => nextStage;
         public int NextStageTurn => !InStage3 && nextStage < CardStages ? settings.StageTurns[nextStage] : -1;
         public int StormTurn => settings.StormTurn;
@@ -91,6 +136,8 @@ namespace SaturdayGame.Chess
         public ChessGame(GameSettings settings = null)
         {
             this.settings = settings ?? new GameSettings();
+            openingRules = (ScheduledRule[])(this.settings.OpeningRules ?? new ScheduledRule[0]).Clone();
+            Array.Sort(openingRules, (a, b) => a.Turn.CompareTo(b.Turn));
             Rng = new Random(this.settings.Seed);
             Board = Board.CreateStandard();
             ctx = new RuleContext(Board, Rng, PlayerSide, events.Add);
@@ -136,6 +183,7 @@ namespace SaturdayGame.Chess
             if (result.Sacrificed)
             {
                 events.Add(GameEvent.Sacrificed(mover, move.From, move.To));
+                if (settings.UndyingEvery > 0 && Board.Sacrifices % settings.UndyingEvery == 0) undyingPickDue = true;
                 if (result.TaskCompleted) OnSacrificeTaskCompleted();
                 else events.Add(GameEvent.Dialogue(Speakers.Friend, $"The lava wants {settings.SacrificesNeeded - Board.Sacrifices} more."));
             }
@@ -147,9 +195,16 @@ namespace SaturdayGame.Chess
             {
                 events.Add(GameEvent.KnockedBack(result.KnockedBack, result.KnockFrom, result.KnockTo, mover));
                 if (result.KnockedIntoLava) events.Add(GameEvent.Captured(result.KnockedBack, result.KnockTo, "lava", mover));
+                if (result.Scorched)
+                {
+                    events.Add(GameEvent.AppearanceChanged(result.KnockedBack));
+                    events.Add(GameEvent.Dialogue(Speakers.You, "Ha! Undying. It just needs a turn to cool off."));
+                }
             }
             if (result.Captured != null) events.Add(GameEvent.Captured(result.Captured, move.To, "captured", mover));
             if (result.Promoted) events.Add(GameEvent.Promoted(mover));
+            if (!result.Sacrificed)
+                foreach (var rule in activeRules) rule.OnPieceMoved(ctx, mover, move.From);
 
             if (result.Rescued)
             {
@@ -159,27 +214,27 @@ namespace SaturdayGame.Chess
 
             bool storm = false;
             string stormLine = null;
-            if (!InStage3)
+            // 第 10 回合选卡之后将军朋友：朋友掀起风暴。在那之前只有将死朋友才会（见 BeginTurn）
+            if (!InStage3 && side == PlayerSide && nextStage >= CardStages && InCheck(OpponentSide))
             {
-                if (result.KingCaptured)
-                {
-                    if (side != PlayerSide)
-                    {
-                        EndGame(OpponentSide, "Your friend captured your king.");
-                        return result;
-                    }
-                    storm = true;
-                    stormLine = "You took my king?! Fine. Let's see you handle THIS.";
-                }
-                else if (side == PlayerSide && nextStage >= CardStages && InCheck(OpponentSide))
-                {
-                    storm = true;
-                    stormLine = "Check? Oh no you don't. Watch this!";
-                }
+                storm = true;
+                stormLine = "Check? Oh no you don't. Watch this!";
             }
 
             foreach (var rule in activeRules) rule.OnTurnEnded(ctx, side);
             if (storm) StartStorm(stormLine);
+            if (undyingPickDue)
+            {
+                // 献祭奖励：马上让玩家点选一枚棋子变成不死，选完轮到对手
+                undyingPickDue = false;
+                var reward = new UndyingRule();
+                if (reward.IsAvailable(ctx))
+                {
+                    activation = reward.Activate(ctx).GetEnumerator();
+                    ContinueActivation();
+                    return result;
+                }
+            }
             BeginTurn();
             return result;
         }
@@ -271,8 +326,22 @@ namespace SaturdayGame.Chess
                     {
                         int stage = nextStage++;
                         events.Add(GameEvent.StageStarted(stage));
-                        if (Offer(OfferKind.StageCard, stage, RuleCatalog.CreatePool(stage), StageLine(stage))) return;
+                        var pool = RuleCatalog.CreatePool(stage);
+                        // 规则池是空的（第一阶段）：只宣布进入新阶段，规则之后按回合表自动生效
+                        if (pool.Count == 0) events.Add(GameEvent.Dialogue(Speakers.Friend, StageLine(stage)));
+                        else if (Offer(OfferKind.StageCard, stage, pool, StageLine(stage))) return;
                         continue;
+                    }
+
+                    if (!InStage3 && nextOpeningRule < openingRules.Length && Board.FullMove >= openingRules[nextOpeningRule].Turn)
+                    {
+                        var rule = RuleCatalog.Create(openingRules[nextOpeningRule++].RuleId);
+                        if (rule == null || !rule.IsAvailable(ctx)) continue;
+                        activeRules.Add(rule);
+                        events.Add(GameEvent.RuleActivated(rule));
+                        activation = rule.Activate(ctx).GetEnumerator();
+                        ContinueActivation();
+                        return;
                     }
 
                     if (InStage3 && Board.FullMove >= nextStage3Offer)
@@ -301,6 +370,18 @@ namespace SaturdayGame.Chess
                 {
                     Phase = side == PlayerSide ? GamePhase.PlayerTurn : GamePhase.OpponentTurn;
                     return;
+                }
+
+                // 将死（救急技能已经给过了）：玩家输；朋友被将死就掀起风暴
+                if (!InStage3 && InCheck(side))
+                {
+                    if (side == PlayerSide)
+                    {
+                        EndGame(OpponentSide, "Checkmate. Your friend wins this one.");
+                        return;
+                    }
+                    StartStorm("Checkmate?! No no no. Let's see you handle THIS.");
+                    continue;
                 }
 
                 // 没有合法走法：跳过这一回合
@@ -343,14 +424,15 @@ namespace SaturdayGame.Chess
             events.Add(GameEvent.BoardRebuilt());
             events.Add(GameEvent.Dialogue(Speakers.Friend, "The princess is up in that castle. Only a knight can get her out."));
             events.Add(GameEvent.Dialogue(Speakers.Friend,
-                $"But first, the lava. Feed it {settings.SacrificesNeeded} of your pieces and your knight might learn a trick."));
+                $"But first, the lava. Feed it {settings.SacrificesNeeded} of your pieces and it'll let you cross."));
+            if (settings.UndyingEvery > 0)
+                events.Add(GameEvent.Dialogue(Speakers.Friend,
+                    $"Every {settings.UndyingEvery} you feed it, one of your pieces becomes undying."));
         }
 
         void OnSacrificeTaskCompleted()
         {
-            foreach (var p in Board.PiecesOf(PlayerSide))
-                if (p.IsHellhorse) ctx.SetSkin(p, "hellhorse");
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "Is your knight... on fire? It can walk on lava now. One step at a time."));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "The lava's had enough. You can walk on it now. Just don't get knocked in."));
         }
 
         void CastFriendSkill()
@@ -377,7 +459,7 @@ namespace SaturdayGame.Chess
         {
             switch (stage)
             {
-                case 0: return "Wait. We don't have to play like that. Pick a new rule.";
+                case 0: return "Wait. We don't have to play like that. From now on, house rules. You'll see.";
                 default: return "Your turn to change something.";
             }
         }

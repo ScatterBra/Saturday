@@ -1,7 +1,7 @@
 namespace SaturdayGame.Chess
 {
     /// <summary>
-    /// 一枚棋子。规则不会改写走法，只会修改这里的状态（冻结、地狱马、外观），
+    /// 一枚棋子。规则不会改写走法，只会修改这里的状态（冻结、不死、外观），
     /// 走法生成器读取这些状态来决定能怎么走。
     /// </summary>
     public sealed class Piece
@@ -28,8 +28,11 @@ namespace SaturdayGame.Chess
         /// <summary>冻结时叠加的外观，例如 tree、poop。解冻后清空。</summary>
         public string FrozenSkin;
 
-        /// <summary>第三阶段献祭完成后马变成地狱马：只能前后左右走一格，可以走上岩浆。</summary>
-        public bool IsHellhorse;
+        /// <summary>
+        /// 第三阶段每献祭两个棋子，玩家选一枚棋子变成不死：被弹进岩浆不会死，只是禁止行动一回合。
+        /// （第三阶段朋友本来就不吃子，只击飞。）
+        /// </summary>
+        public bool Undying;
 
         public bool IsFrozen => FrozenTurns > 0;
 

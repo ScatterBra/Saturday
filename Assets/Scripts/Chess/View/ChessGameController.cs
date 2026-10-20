@@ -19,12 +19,20 @@ namespace SaturdayGame.Chess.View
         [Header("Game")]
         [Tooltip("随机种子，0 表示每局随机")]
         public int seed;
-        [Tooltip("在这些回合开始时弹出固定选卡（第一、二阶段）")]
+        [Tooltip("在这些回合开始时进入第一、二阶段：第一阶段不弹卡，第二阶段弹固定选卡")]
         public int[] stageTurns = { 4, 10 };
+        [Tooltip("第一阶段的规则：到回合自动生效。Rule Id：bishop_variants（主教四变）、fire_hydrant（消防栓）")]
+        public ScheduledRule[] openingRules =
+        {
+            new ScheduledRule(5, "bishop_variants"),
+            new ScheduledRule(7, "fire_hydrant"),
+        };
         [Tooltip("到这个回合朋友掀起风暴，进入第三阶段")]
         public int stormTurn = 20;
-        [Tooltip("第三阶段要往岩浆里献祭几个棋子，马才能变成地狱马")]
+        [Tooltip("第三阶段要往岩浆里献祭几个棋子，岩浆才能站、才能过河（马才能进城堡）")]
         public int sacrificesNeeded = 3;
+        [Tooltip("第三阶段每献祭这么多个棋子，玩家选一枚棋子变成不死；0 = 不给")]
+        public int undyingEvery = 2;
         [Tooltip("第三阶段每隔几回合弹一次技能")]
         public int stage3SkillEvery = 5;
         [Tooltip("第三阶段开始后的第几回合朋友放技能（鸟群）")]
@@ -93,8 +101,10 @@ namespace SaturdayGame.Chess.View
             var settings = new GameSettings
             {
                 StageTurns = stageTurns,
+                OpeningRules = openingRules,
                 StormTurn = stormTurn,
                 SacrificesNeeded = sacrificesNeeded,
+                UndyingEvery = undyingEvery,
                 Stage3SkillEvery = stage3SkillEvery,
                 FriendSkillTurns = friendSkillTurns,
                 Layout = stage3Layout != null ? stage3Layout.Build() : null,
@@ -220,8 +230,8 @@ namespace SaturdayGame.Chess.View
             board.Highlight(piece.Pos, selectedMoves, null, lastMove, DangerSquare());
             if (piece.IsFrozen)
                 hud.SetStatus($"That {Name(piece)} is frozen.");
-            else if (piece.IsHellhorse)
-                hud.SetStatus("Hellhorse: one step forward, back, left or right. It can walk on lava.");
+            else if (piece.Undying)
+                hud.SetStatus($"That {Name(piece)} is undying: lava only stops it for a turn.");
             else
                 UpdateStatus();
         }
@@ -270,6 +280,9 @@ namespace SaturdayGame.Chess.View
                         break;
                     case GameEventType.Sacrificed:
                         yield return board.AnimateSacrifice(e.PieceId, e.To, moveDuration);
+                        break;
+                    case GameEventType.Pushed:
+                        yield return board.AnimatePush(e.PieceId, e.To, effectDuration * 1.5f);
                         break;
                     case GameEventType.KnockedBack:
                         yield return board.AnimateKnockback(e.PieceId, e.To, effectDuration * 2);
@@ -392,7 +405,7 @@ namespace SaturdayGame.Chess.View
             {
                 string hint;
                 if (game.InStage3) hint = "Castle rescue! Skills show up every few turns.";
-                else if (game.NextStageTurn > 0) hint = $"A new rule appears on turn {game.NextStageTurn}.";
+                else if (game.NextRuleTurn > 0) hint = $"A new rule appears on turn {game.NextRuleTurn}.";
                 else hint = "No more new rules... but something is brewing.";
                 hud.SetNewHint(hint);
             }

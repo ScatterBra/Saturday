@@ -41,6 +41,47 @@ namespace SaturdayGame.Chess
         }
     }
 
+    /// <summary>
+    /// 第三阶段的献祭奖励（不是规则卡）：每献祭 Board.UndyingEvery 个棋子，玩家在棋盘上点选自己的一枚棋子（王除外）变成不死。
+    /// 不死的棋子被弹进岩浆不会死，只是禁止行动一回合。
+    /// </summary>
+    public sealed class UndyingRule : RuleBase
+    {
+        public override string Id => "undying";
+        public override string Title => "Undying";
+        public override string Description => "One of your pieces can't die anymore. Lava only stops it for a turn.";
+        public override RuleKind Kind => RuleKind.Buff;
+        public override int Stage => 2;
+
+        public override bool IsAvailable(RuleContext ctx) => Candidates(ctx).Count > 0;
+
+        public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
+        {
+            var candidates = Candidates(ctx);
+            if (candidates.Count == 0) yield break;
+            ctx.Say(Speakers.Friend, "The lava liked that. Pick one of your pieces. It won't die anymore.");
+            var request = new TargetRequest
+            {
+                Prompt = "Pick a piece to become undying.",
+                Options = candidates.ConvertAll(p => p.Pos),
+            };
+            yield return request;
+
+            var piece = ctx.Board.PieceAt(request.Result.Value);
+            piece.Undying = true;
+            ctx.Emit(GameEvent.AppearanceChanged(piece));
+            ctx.Say(Speakers.You, "Undying army, rise!");
+        }
+
+        static List<Piece> Candidates(RuleContext ctx)
+        {
+            var list = new List<Piece>();
+            foreach (var p in ctx.Board.PiecesOf(ctx.Player))
+                if (p.Type != PieceType.King && !p.Undying) list.Add(p);
+            return list;
+        }
+    }
+
     /// <summary>复活一枚自己被吃掉的棋子，由玩家在规则书下方的被吃区里选。</summary>
     public sealed class RevivePieceRule : RuleBase
     {
@@ -69,7 +110,7 @@ namespace SaturdayGame.Chess
             if (square.HasValue)
             {
                 ctx.Revive(piece, square.Value, null);
-                ctx.Say(Speakers.Friend, piece.IsHellhorse ? "It came back... on fire?" : "Welcome back, I guess.");
+                ctx.Say(Speakers.Friend, "Welcome back, I guess.");
             }
         }
 
