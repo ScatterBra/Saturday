@@ -23,8 +23,13 @@ namespace SaturdayGame.Chess.View
         readonly TextMesh letter;
         readonly TextMesh caption;
         readonly SpriteRenderer sprite;
+        readonly FaceCamera spriteFacing;
         GameObject model;
         GameObject modelSource;
+
+        // 调整棋子在棋盘上的位置：平躺的贴图枢轴在底边，往近处挪半格让图居中；立起来的贴图站在格子中间
+        static readonly Vector3 FlatOffset = new Vector3(0, 0.01f, -0.45f);
+        static readonly Vector3 StandOffset = new Vector3(0, 0.01f, 0f);
 
         public PieceView(ChessViewFactory factory, Transform parent, Piece piece)
         {
@@ -40,8 +45,11 @@ namespace SaturdayGame.Chess.View
             letter = factory.Label(Root.transform, new Vector3(0, 0.32f, 0), 0.06f, "");
             caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "");
             caption.fontStyle = FontStyle.Bold;
-            // 调整棋子在棋盘上的高度
-            if (factory.Art != null) sprite = factory.Billboard(Root.transform, new Vector3(0, 0.01f, -0.45f));
+            if (factory.Art != null)
+            {
+                sprite = factory.Billboard(Root.transform, FlatOffset);
+                spriteFacing = sprite.GetComponent<FaceCamera>();
+            }
 
             Refresh(piece);
         }
@@ -60,6 +68,14 @@ namespace SaturdayGame.Chess.View
                 sprite.sprite = resolved.Sprite;
                 sprite.color = resolved.Tint;
                 sprite.transform.localScale = Vector3.one * art.pieceHeight;
+                // 立起来的贴图（例如树）站在格子中间，和棋盘垂直；其余贴图平躺在棋盘上
+                bool stand = useSprite && resolved.StandUp;
+                sprite.transform.localPosition = stand ? StandOffset : FlatOffset;
+                if (spriteFacing != null)
+                {
+                    spriteFacing.standUp = stand;
+                    spriteFacing.standAngle = art.standAngle;
+                }
             }
             letter.gameObject.SetActive(!useSprite && !useModel);
 

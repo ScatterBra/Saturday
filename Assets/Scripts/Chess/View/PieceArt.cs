@@ -24,6 +24,8 @@ namespace SaturdayGame.Chess.View
             public Sprite[] white = Array.Empty<Sprite>();
             [Tooltip("留空时黑方用白方的图乘上 variantBlackTint")]
             public Sprite[] black = Array.Empty<Sprite>();
+            [Tooltip("立起来，和棋盘垂直（相机倾斜时像立牌一样站着），例如树")]
+            public bool standUp;
             [Tooltip("3D 模型（FBX 或预制体）。配了模型就在棋盘上用模型代替贴图（贴图仍用在被吃区等 2D 界面里），多个模型按棋子编号固定选一个")]
             public GameObject[] models = Array.Empty<GameObject>();
         }
@@ -34,6 +36,8 @@ namespace SaturdayGame.Chess.View
             public Sprite Sprite;
             /// <summary>不为 null 时棋盘上用这个 3D 模型代替贴图。</summary>
             public GameObject Model;
+            /// <summary>贴图立起来，和棋盘垂直。</summary>
+            public bool StandUp;
             public Color Tint;
             /// <summary>贴图已经表现了 Skin，不用再画彩色圆环。</summary>
             public bool ShowsSkin;
@@ -63,6 +67,8 @@ namespace SaturdayGame.Chess.View
         public Color variantBlackTint = new Color(0.75f, 0.75f, 0.8f);
         [Tooltip("棋子贴图在棋盘上的高度（一格 = 1）")]
         public float pieceHeight = 0.95f;
+        [Tooltip("勾了 standUp 的贴图（例如树）和棋盘的夹角，90 = 垂直，越小越往后仰（相机倾斜时显得更高）")]
+        [Range(0f, 90f)] public float standAngle = 90f;
         [Tooltip("3D 模型在棋盘上的高度（一格 = 1），按模型包围盒自动缩放")]
         public float modelHeight = 1.1f;
         [Tooltip("3D 模型最宽不超过这么多（一格 = 1）")]
@@ -107,6 +113,7 @@ namespace SaturdayGame.Chess.View
                 if (list != null && list.Length > 0) result.Sprite = list[piece.Id % list.Length];
                 if (hasModel) result.Model = entry.models[piece.Id % entry.models.Length];
                 result.Tint = piece.Side == Side.Black && !hasBlack ? variantBlackTint : Color.white;
+                result.StandUp = entry.standUp;
                 return result.Sprite != null || result.Model != null;
             }
             return false;
