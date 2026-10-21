@@ -12,7 +12,7 @@ namespace SaturdayGame.Chess.View
     public sealed class BoardView
     {
         /// <summary>高原每升一级在画面上抬高多少（世界单位，一格 = 1）。</summary>
-        public const float LevelHeight = 0.35f;
+        public const float LevelHeight = 0.5f;
 
         static readonly Color Light = new Color(0.93f, 0.87f, 0.74f);
         static readonly Color Dark = new Color(0.72f, 0.56f, 0.4f);
@@ -131,6 +131,30 @@ namespace SaturdayGame.Chess.View
                 castleLabel = label.gameObject;
             }
         }
+
+        /// <summary>
+        /// 升起来的地形里必须框进画面的点（城堡顶的四角和 Princess 字样），坐标在 Chess 根物体的本地空间，
+        /// 给 DeskCameraFit 用。没有城堡时为空。
+        /// </summary>
+        public List<Vector3> TallPoints()
+        {
+            var points = new List<Vector3>();
+            if (board == null) return points;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                if (!board.IsCastle(c)) continue;
+                var top = SquareCenter(c) + Vector3.up * TopOf(c);
+                for (int dx = -1; dx <= 1; dx += 2)
+                for (int dz = -1; dz <= 1; dz += 2)
+                    points.Add(ToParent(top + new Vector3(dx * 0.5f, 0, dz * 0.5f)));
+            }
+            if (castleLabel != null) points.Add(ToParent(castleLabel.transform.localPosition + Vector3.up * 0.3f));
+            return points;
+        }
+
+        Vector3 ToParent(Vector3 local) =>
+            root.parent != null ? root.parent.InverseTransformPoint(root.TransformPoint(local)) : root.TransformPoint(local);
 
         /// <summary>按棋盘状态把所有棋子摆正（演出结束后调用，保证显示和逻辑一致）。</summary>
         public void SyncAll()

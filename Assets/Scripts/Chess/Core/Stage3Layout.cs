@@ -10,7 +10,7 @@ namespace SaturdayGame.Chess
     /// 地形：
     ///   _  我方一侧的平地（献祭完成前我方棋子只能在这些格子活动，或者走进岩浆献祭）
     ///   .  对面的平地
-    ///   1-9 升起的高原，数字是高度（一次只能爬一级）
+    ///   1-9 升起的高原，数字是高度（只是画面效果，不影响走法；画面上每级 0.5 格）
     ///   C  城堡（高度固定为 CastleHeight），只有马能进（要先完成献祭），马进去就赢
     ///   ~  岩浆（献祭完成前走进去 = 献祭；完成后可以站。被弹进去：普通棋子死，不死的棋子停一回合）
     ///
@@ -24,13 +24,13 @@ namespace SaturdayGame.Chess
     /// </summary>
     public sealed class Stage3Layout
     {
-        public const int CastleHeight = 3;
+        public const int CastleHeight = 5;
 
         public static readonly string DefaultTerrain =
-            "CC21....\n" +
-            "C221....\n" +
-            "2211....\n" +
-            "11......\n" +
+            "CC43....\n" +
+            "C432....\n" +
+            "3321....\n" +
+            "21......\n" +
             "......~~\n" +
             "..~~~~~_\n" +
             ".~~_____\n" +

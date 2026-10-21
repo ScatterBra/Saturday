@@ -8,10 +8,8 @@ namespace SaturdayGame.Chess
     /// 规则和地形带来的状态都在这里统一处理，AI 和玩家用的是同一套：
     /// - 冻结的子不能动。
     /// - 第三阶段：
-    ///   * 马照常跳 L 形，无视高度（可以直接跳上高原、跳进城堡）。
-    ///   * 其他棋子：高原（高度 &gt; 0 的格子）和城堡挡住滑行；站在高原上只能前后左右走一格，
-    ///     一次最多爬升或下降一级；平地上的棋子也能前后左右一格爬上高度 1。
-    ///   * 只有我方的马能进城堡，而且要先完成献祭。
+    ///   * 高原的高度只是画面效果，所有棋子照常走。
+    ///   * 城堡挡住所有棋子；只有我方的马能跳进城堡，而且要先完成献祭。
     ///   * 献祭完成前，我方棋子只能落在岩浆这一侧，或者走进岩浆献祭（王除外）；
     ///     完成后我方棋子可以站在岩浆上、滑过岩浆。对手的棋子不上岩浆。
     ///   * 对手不攻击我方的王；对手打我方棋子时要能把它击飞，否则这步不能走。
@@ -85,18 +83,13 @@ namespace SaturdayGame.Chess
         {
             if (piece.IsFrozen) return;
             var from = piece.Pos;
-            if (board.Stage3 && piece.Type != PieceType.Knight && board.Height(from) > 0)
-            {
-                AddPlateauSteps(board, piece, from, moves);
-                return;
-            }
             switch (piece.Type)
             {
                 case PieceType.Pawn:
                     AddPawnMoves(board, piece, from, moves);
                     break;
                 case PieceType.Knight:
-                    AddJumps(board, piece, from, moves);
+                    AddSteps(board, piece, from, KnightJumps, moves);
                     break;
                 case PieceType.King:
                     AddSteps(board, piece, from, AllDirections, moves);
@@ -111,23 +104,15 @@ namespace SaturdayGame.Chess
                     AddSlides(board, piece, from, AllDirections, moves);
                     break;
             }
-            if (board.Stage3 && piece.Type != PieceType.Knight) AddClimbSteps(board, piece, from, moves);
         }
 
         /// <summary>落点检查结果：能不能落，以及（滑行时）要不要在这里停下。</summary>
         enum Landing { Free, Capture, Sacrifice, Blocked }
 
-        /// <summary>平地上的普通走法能不能落在 to。高原、城堡只能靠一格一格爬上去。</summary>
+        /// <summary>能不能落在 to：城堡、岩浆、我方活动范围、占位。</summary>
         static Landing Check(Board board, Piece piece, Coord from, Coord to)
         {
             if (!to.IsValid) return Landing.Blocked;
-            if (board.Stage3 && board.Height(to) > 0) return Landing.Blocked;
-            return CheckCommon(board, piece, from, to);
-        }
-
-        /// <summary>高度以外的通用检查：岩浆、我方活动范围、占位。</summary>
-        static Landing CheckCommon(Board board, Piece piece, Coord from, Coord to)
-        {
             if (board.IsCastle(to))
             {
                 bool mayEnter = piece.Side == board.Rescuer && piece.Type == PieceType.Knight && board.TaskComplete;
@@ -186,17 +171,6 @@ namespace SaturdayGame.Chess
             }
         }
 
-        /// <summary>马跳 L 形。第三阶段无视高度，所以只做高度以外的检查。</summary>
-        static void AddJumps(Board board, Piece piece, Coord from, List<Move> moves)
-        {
-            foreach (var offset in KnightJumps)
-            {
-                var to = from + offset;
-                if (!to.IsValid) continue;
-                if (CheckCommon(board, piece, from, to) != Landing.Blocked) moves.Add(new Move(piece.Id, from, to));
-            }
-        }
-
         static void AddSteps(Board board, Piece piece, Coord from, Coord[] offsets, List<Move> moves)
         {
             foreach (var offset in offsets)
@@ -219,28 +193,6 @@ namespace SaturdayGame.Chess
                     if (landing != Landing.Free) break; // 吃子、献祭后停下
                     to = to + dir;
                 }
-            }
-        }
-
-        /// <summary>站在高原上（马除外）：只能前后左右走一格，高度差最多 1。</summary>
-        static void AddPlateauSteps(Board board, Piece piece, Coord from, List<Move> moves)
-        {
-            foreach (var dir in Straight)
-            {
-                var to = from + dir;
-                if (!to.IsValid || System.Math.Abs(board.Height(to) - board.Height(from)) > 1) continue;
-                if (CheckCommon(board, piece, from, to) != Landing.Blocked) moves.Add(new Move(piece.Id, from, to));
-            }
-        }
-
-        /// <summary>平地上的棋子可以前后左右一格爬上高度 1 的高原（普通走法到不了高原）。</summary>
-        static void AddClimbSteps(Board board, Piece piece, Coord from, List<Move> moves)
-        {
-            foreach (var dir in Straight)
-            {
-                var to = from + dir;
-                if (!to.IsValid || board.Height(to) != board.Height(from) + 1) continue;
-                if (CheckCommon(board, piece, from, to) != Landing.Blocked) moves.Add(new Move(piece.Id, from, to));
             }
         }
     }

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SaturdayGame.Chess.View
@@ -23,6 +24,9 @@ namespace SaturdayGame.Chess.View
         [Range(0f, 0.3f)] public float topMargin = 0.08f;
         [Range(0f, 0.3f)] public float bottomMargin = 0.03f;
         [Range(0f, 0.3f)] public float sideMargin = 0.02f;
+
+        /// <summary>除了平面布局的四个角，还必须框进画面的点（本地坐标），例如第三阶段升起来的城堡顶。改完调用 Fit()。</summary>
+        [System.NonSerialized] public List<Vector3> extraPoints = new List<Vector3>();
 
         Camera cam;
         float fittedAspect;
@@ -137,11 +141,16 @@ namespace SaturdayGame.Chess.View
             return true;
         }
 
-        Vector3[] Corners() => new[]
+        List<Vector3> Corners()
         {
-            new Vector3(-halfExtent.x, 0, -halfExtent.y), new Vector3(halfExtent.x, 0, -halfExtent.y),
-            new Vector3(-halfExtent.x, 0, halfExtent.y), new Vector3(halfExtent.x, 0, halfExtent.y),
-        };
+            var corners = new List<Vector3>
+            {
+                new Vector3(-halfExtent.x, 0, -halfExtent.y), new Vector3(halfExtent.x, 0, -halfExtent.y),
+                new Vector3(-halfExtent.x, 0, halfExtent.y), new Vector3(halfExtent.x, 0, halfExtent.y),
+            };
+            if (extraPoints != null) corners.AddRange(extraPoints);
+            return corners;
+        }
 
         void Place(Quaternion rotation, float distance, Vector3 focus) =>
             transform.localPosition = focus - rotation * Vector3.forward * distance;

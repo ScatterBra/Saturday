@@ -37,7 +37,7 @@ namespace SaturdayGame.Chess.Tests
             foreach (var s in new[] { "a7", "a8", "b8" }) Assert.IsTrue(layout.Castle[C(s).Index], s);
             Assert.AreEqual(3, layout.Castle.Count(c => c));
             Assert.AreEqual(Stage3Layout.CastleHeight, layout.Heights[C("a8").Index]);
-            Assert.AreEqual(2, layout.Heights[C("b7").Index]);
+            Assert.AreEqual(4, layout.Heights[C("b7").Index]);
             var lava = new[] { "h4", "g4", "g3", "f3", "e3", "d3", "c3", "c2", "b2", "b1", "a1" };
             CollectionAssert.AreEquivalent(lava.Select(C), Enumerable.Range(0, 64).Where(i => layout.Lava[i]).Select(Coord.FromIndex));
             Assert.IsTrue(layout.PlayerZone[C("h3").Index], "gap in the river");
@@ -147,23 +147,20 @@ namespace SaturdayGame.Chess.Tests
             "C2......\n21......\n1.1.....\n........\n........\n........\n........\n........";
 
         [Test]
-        public void Plateau_OthersClimbOneLevelAtATime_KnightsJumpAnywhere_OnlyKnightsEnterTheCastle()
+        public void Plateau_IsOnlyForLooks_EveryoneMovesNormally_OnlyKnightsEnterTheCastle()
         {
             const string pieces = ".*......\n........\n........\nN.......\n........\n........\n........\n..*.K...";
             var board = Setup(PlateauTerrain, pieces, 0, PieceType.King, PieceType.Knight, PieceType.Rook, PieceType.Rook);
             // 我方位置顺序：c1、b8 → 两个车在 c1 和 b8，马在 a5
 
-            CollectionAssert.AreEquivalent(new[] { C("b7"), C("c6"), C("c4"), C("b3") }, Targets(board, "a5"),
-                "knights ignore height: straight onto the plateau");
+            CollectionAssert.AreEquivalent(new[] { C("b7"), C("c6"), C("c4"), C("b3") }, Targets(board, "a5"));
 
             var rookTargets = Targets(board, "b8");
             CollectionAssert.DoesNotContain(rookTargets, C("a8"), "only knights may enter the castle");
-            CollectionAssert.DoesNotContain(rookTargets, C("c8"), "a two-level drop is too steep");
-            CollectionAssert.Contains(rookTargets, C("b7"));
+            CollectionAssert.IsSubsetOf(new[] { C("c8"), C("h8"), C("b7"), C("b1") }, rookTargets,
+                "a rook on the plateau slides as usual, up and down any height");
 
-            var low = Targets(board, "c1");
-            CollectionAssert.Contains(low, C("c5"));
-            CollectionAssert.DoesNotContain(low, C("c6"), "the plateau blocks sliding");
+            CollectionAssert.IsSubsetOf(new[] { C("c6"), C("c8") }, Targets(board, "c1"), "the plateau doesn't block sliding");
 
             Play(board, "a5", "c4");
             Play(board, "c4", "b6");

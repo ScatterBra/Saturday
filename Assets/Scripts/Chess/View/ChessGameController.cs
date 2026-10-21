@@ -59,6 +59,8 @@ namespace SaturdayGame.Chess.View
         public float stormDuration = 0.8f;
         [Tooltip("选了树技能后相机转到这个俯仰角，才看得出立体的树；0 = 不转")]
         [Range(0f, 90f)] public float treeCameraPitch = 65f;
+        [Tooltip("风暴后（第三阶段）相机转到这个俯仰角，看得出高原和城堡的高度；0 = 不转")]
+        [Range(0f, 90f)] public float stage3CameraPitch = 65f;
         [Tooltip("相机转过去用多久")]
         public float cameraTurnDuration = 1f;
 
@@ -119,9 +121,10 @@ namespace SaturdayGame.Chess.View
             hud.ResetForNewGame();
             hud.SetStorm(0);
             // 上一局转过的相机回到场景里设的角度
-            if (cameraFit != null && !Mathf.Approximately(cameraFit.pitch, startPitch))
+            if (cameraFit != null)
             {
                 cameraFit.pitch = startPitch;
+                cameraFit.extraPoints.Clear();
                 cameraFit.Fit();
             }
             StartCoroutine(PlayEvents(game.DrainEvents()));
@@ -316,6 +319,15 @@ namespace SaturdayGame.Chess.View
                         board.RebuildTerrain();
                         board.SyncAll();
                         board.Highlight(null, null, null, null);
+                        // 沙尘还盖着画面时把相机转到斜视角，并把升起来的城堡框进画面
+                        if (cameraFit != null)
+                        {
+                            cameraFit.extraPoints = board.TallPoints();
+                            if (stage3CameraPitch > 0f && !Mathf.Approximately(cameraFit.pitch, stage3CameraPitch))
+                                yield return cameraFit.TurnTo(stage3CameraPitch, cameraTurnDuration);
+                            else
+                                cameraFit.Fit();
+                        }
                         yield return new WaitForSeconds(0.3f);
                         for (float t = 1f; t > 0f; t -= Time.deltaTime / stormDuration)
                         {
