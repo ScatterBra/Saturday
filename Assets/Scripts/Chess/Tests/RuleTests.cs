@@ -167,6 +167,19 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
+        public void CapturedPieces_StayMarkedAsLost_EvenAfterRevival()
+        {
+            var board = Board.CreateStandard();
+            var knight = board.PieceAt(C("b1"));
+            Assert.IsFalse(knight.WasLost);
+            board.RemovePiece(knight);
+            Assert.IsTrue(knight.WasLost);
+            board.RestorePiece(knight, C("b1"));
+            Assert.IsTrue(knight.OnBoard);
+            Assert.IsTrue(knight.WasLost, "a revived piece keeps its paper look");
+        }
+
+        [Test]
         public void TreePawns_FreezeOnlyOpponentPawns()
         {
             var board = Board.CreateStandard();

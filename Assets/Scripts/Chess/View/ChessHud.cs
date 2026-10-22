@@ -28,6 +28,8 @@ namespace SaturdayGame.Chess.View
 
         static readonly Color Paper = new Color(0.95f, 0.92f, 0.84f, 0.96f);
         static readonly Color Ink = new Color(0.16f, 0.12f, 0.1f);
+        /// <summary>直接写在深色木桌上的字（左边 NEW 区没有底图时）。</summary>
+        static readonly Color DeskInk = new Color(0.96f, 0.91f, 0.82f);
 
         public event Action<int> RuleCardClicked;
         public event Action SkipClicked;
@@ -37,6 +39,8 @@ namespace SaturdayGame.Chess.View
         public event Action<int> LostPieceClicked;
 
         Font font;
+        /// <summary>标题字体（原来用粗体的地方）；为 null 时用 font 加粗。</summary>
+        Font titleFont;
         Text statusText;
         Text newHintText;
         Text ruleBookText;
@@ -54,8 +58,10 @@ namespace SaturdayGame.Chess.View
         RectTransform lostRoot;
         Image stormOverlay;
         PieceArt art;
+        ChessDesk desk;
 
-        public static ChessHud Create(Transform parent, Camera deskCamera, PieceArt art = null)
+        public static ChessHud Create(Transform parent, Camera deskCamera, PieceArt art = null, ChessDesk desk = null,
+            Font titleFont = null, Font bodyFont = null)
         {
             var go = new GameObject("HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             go.transform.SetParent(parent, false);
@@ -68,19 +74,25 @@ namespace SaturdayGame.Chess.View
             scaler.matchWidthOrHeight = 0.5f;
             var hud = go.AddComponent<ChessHud>();
             hud.art = art;
+            hud.desk = desk;
+            hud.font = bodyFont;
+            hud.titleFont = titleFont;
             hud.Build(parent, deskCamera);
             return hud;
         }
 
-        /// <summary>平躺在桌面上的一块 World Space Canvas，中心在 (centerX, 0, 0)。</summary>
-        static RectTransform DeskCanvas(Transform parent, string name, float centerX, Camera camera)
+        /// <summary>
+        /// 平躺在桌面上的一块 World Space Canvas。场景里摆了这块区域（ChessDesk.newArea / ruleBook）时挂在它下面、跟着它走；
+        /// 没摆就放在 (centerX, -0.075, 0)。
+        /// </summary>
+        static RectTransform DeskCanvas(Transform parent, Transform area, string name, float centerX, Camera camera)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             var rt = (RectTransform)go.transform;
-            rt.SetParent(parent, false);
+            rt.SetParent(area != null ? area : parent, false);
             rt.sizeDelta = new Vector2(DeskLayout.PanelWidth, DeskLayout.PanelDepth) * DeskLayout.PixelsPerUnit;
-            // 贴在桌面上（桌面顶面 y = -0.08），比棋盘格子（y = 0）略低，像放在桌上的纸
-            rt.localPosition = new Vector3(centerX, -0.075f, 0f);
+            // 贴在桌面上（桌面顶面 y = -0.08），比棋盘格子（y = 0）略低，像放在桌上的纸；场景里的区域本身已经在桌面高度，字只抬高一点点
+            rt.localPosition = area != null ? new Vector3(0f, 0.001f, 0f) : new Vector3(centerX, -0.075f, 0f);
             // Canvas 默认面朝 -Z，绕 X 转 90° 后面朝上、顶边朝远处，平躺在桌面上
             rt.localRotation = Quaternion.Euler(90f, 0f, 0f);
             rt.localScale = Vector3.one / DeskLayout.PixelsPerUnit;
@@ -94,14 +106,19 @@ namespace SaturdayGame.Chess.View
 
         void Build(Transform deskParent, Camera deskCamera)
         {
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var root = (RectTransform)transform;
 
             // 左边：NEW 规则卡区（平放在桌面上）
-            var leftCanvas = DeskCanvas(deskParent, "Desk New", -DeskLayout.PanelCenterX, deskCamera);
+            var newArea = desk != null ? desk.newArea : null;
+            var leftCanvas = DeskCanvas(deskParent, newArea, "Desk New", -DeskLayout.PanelCenterX, deskCamera);
             var left = Panel(leftCanvas, "New", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Paper);
-            Label(left, "Title", "NEW", 44, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
+            // 场景里摆了桌面：NEW 区有底图就透出底图；没有底图就不铺纸，字直接写在木桌上
+            bool bareDesk = desk != null && !ChessDesk.HasArt(newArea);
+            if (desk != null) left.GetComponent<Image>().color = Color.clear;
+            var title = Label(left, "Title", "NEW", 44, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
             newHintText = Label(left, "Hint", "", 22, FontStyle.Italic, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, 120));
+            if (bareDesk) title.color = newHintText.color = DeskInk;
             cardsRoot = Rect(left, "Cards", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -126), new Vector2(-40, -146));
             var layout = cardsRoot.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 18;
@@ -110,21 +127,27 @@ namespace SaturdayGame.Chess.View
             layout.childForceExpandHeight = false;
 
             // 右边：规则书（平放在桌面上）
-            var rightCanvas = DeskCanvas(deskParent, "Desk RuleBook", DeskLayout.PanelCenterX, deskCamera);
+            var bookArea = desk != null ? desk.ruleBook : null;
+            var rightCanvas = DeskCanvas(deskParent, bookArea, "Desk RuleBook", DeskLayout.PanelCenterX, deskCamera);
             var right = Panel(rightCanvas, "RuleBook", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Paper);
-            Label(right, "Title", "Rule Book", 40, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
-            ruleBookText = Label(right, "Rules", "", 26, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, -110));
+            bool bookArt = ChessDesk.HasArt(bookArea);
+            // 规则书的底图是场景里的 SpriteRenderer，这里的纸就不画了
+            if (bookArt) right.GetComponent<Image>().color = Color.clear;
+            // 规则书底图左边是线圈，字往右让开；右边是本子的厚度
+            float bookLeft = bookArt ? 72f : 24f, bookRight = bookArt ? 40f : 24f;
+            Label(right, "Title", "Rule Book", 40, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(bookLeft, -22), new Vector2(-(bookLeft + bookRight), 60));
+            ruleBookText = Label(right, "Rules", "", 26, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(bookLeft, -84), new Vector2(-(bookLeft + bookRight), -110));
             // 规则多了就自动缩小字号，不会压到下面的被吃区
             ruleBookText.resizeTextForBestFit = true;
             ruleBookText.resizeTextMinSize = 12;
-            ruleBookText.resizeTextMaxSize = 26;
+            ruleBookText.resizeTextMaxSize = 22;
             ruleBookText.verticalOverflow = VerticalWrapMode.Truncate;
             ruleBookText.rectTransform.anchorMin = new Vector2(0, 0.36f);
-            ruleBookText.rectTransform.sizeDelta = new Vector2(-48, -110);
+            ruleBookText.rectTransform.sizeDelta = new Vector2(-(bookLeft + bookRight), -110);
 
             // 规则书下半部分：我方被吃的棋子（复活技能在这里点选）
-            Label(right, "LostTitle", "Lost pieces", 26, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -582), new Vector2(-48, 34));
-            lostRoot = Rect(right, "Lost", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 20), new Vector2(-40, 260));
+            Label(right, "LostTitle", "Lost pieces", 26, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(bookLeft, -582), new Vector2(-(bookLeft + bookRight), 34));
+            lostRoot = Rect(right, "Lost", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2((bookLeft - bookRight) / 2, 28), new Vector2(-(bookLeft + bookRight), 260));
             var grid = lostRoot.gameObject.AddComponent<GridLayoutGroup>();
             grid.cellSize = new Vector2(84, 84);
             grid.spacing = new Vector2(10, 10);
@@ -188,16 +211,18 @@ namespace SaturdayGame.Chess.View
                 case OfferKind.Stage3: newHintText.text = "Pick a skill, or skip:"; break;
                 default: newHintText.text = "Pick a house rule:"; break;
             }
+            var looks = ShuffledCardSprites();
             for (int i = 0; i < rules.Count; i++)
             {
                 int index = i;
-                cards.Add(Card(rules[i], () => RuleCardClicked?.Invoke(index)));
+                var look = looks.Count > 0 ? looks[i % looks.Count] : null;
+                cards.Add(Card(rules[i], look, () => RuleCardClicked?.Invoke(index)));
             }
         }
 
         public void HideOffers()
         {
-            foreach (var card in cards) Destroy(card);
+            foreach (var card in cards) ViewUtil.Destroy(card);
             cards.Clear();
         }
 
@@ -231,7 +256,7 @@ namespace SaturdayGame.Chess.View
         /// </summary>
         public void SetLostPieces(IEnumerable<Piece> lost, ICollection<int> pickable)
         {
-            foreach (Transform child in lostRoot) Destroy(child.gameObject);
+            for (int i = lostRoot.childCount - 1; i >= 0; i--) ViewUtil.Destroy(lostRoot.GetChild(i).gameObject);
             foreach (var piece in lost)
             {
                 int id = piece.Id;
@@ -289,17 +314,46 @@ namespace SaturdayGame.Chess.View
             ruleBookText.text = sb.ToString();
         }
 
-        GameObject Card(RuleBase rule, Action onClick)
+        /// <summary>规则卡的几张底图打乱顺序；没有配图时为空。</summary>
+        List<Sprite> ShuffledCardSprites()
+        {
+            var list = new List<Sprite>();
+            if (desk == null || desk.ruleCards == null) return list;
+            foreach (var sprite in desk.ruleCards)
+                if (sprite != null) list.Add(sprite);
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = UnityEngine.Random.Range(0, i + 1);
+                (list[i], list[j]) = (list[j], list[i]);
+            }
+            return list;
+        }
+
+        GameObject Card(RuleBase rule, Sprite cardSprite, Action onClick)
         {
             var go = new GameObject($"Card {rule.Id}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(cardsRoot, false);
             go.GetComponent<LayoutElement>().preferredHeight = 230;
-            go.GetComponent<Image>().color = KindColor(rule.Kind);
+            var image = go.GetComponent<Image>();
             go.GetComponent<Button>().onClick.AddListener(() => onClick());
             var rt = (RectTransform)go.transform;
-            Label(rt, "Kind", KindLabel(rule.Kind), 18, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(18, -12), new Vector2(-36, 26));
-            Label(rt, "Title", rule.Title, 28, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(18, -40), new Vector2(-36, 40));
-            Label(rt, "Description", rule.Description, 21, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(18, -86), new Vector2(-36, 140));
+            // 卡片底图是撕下来的横线纸，左边有孔，字往右让开；类型改用类型色的字标出来
+            float pad = cardSprite != null ? 52f : 18f;
+            var kind = Label(rt, "Kind", KindLabel(rule.Kind), 18, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(pad, -14), new Vector2(-(pad + 18), 26));
+            var title = Label(rt, "Title", rule.Title, 28, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(pad, -40), new Vector2(-(pad + 18), 40));
+            // 标题太长就缩小字号，保持一行，不压到下面的描述
+            title.verticalOverflow = VerticalWrapMode.Truncate;
+            title.resizeTextForBestFit = true;
+            title.resizeTextMinSize = 16;
+            title.resizeTextMaxSize = 28;
+            Label(rt, "Description", rule.Description, 21, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(pad, -86), new Vector2(-(pad + 18), 140));
+            if (cardSprite != null)
+            {
+                image.sprite = cardSprite;
+                image.color = Color.white;
+                kind.color = Color.Lerp(KindColor(rule.Kind), Color.black, 0.55f);
+            }
+            else image.color = KindColor(rule.Kind);
             return go;
         }
 
@@ -353,7 +407,11 @@ namespace SaturdayGame.Chess.View
                 ? Rect(parent, name, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), position, sizeDelta)
                 : Rect(parent, name, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), position, sizeDelta);
             var label = rt.gameObject.AddComponent<Text>();
-            label.font = font;
+            // 手写体不做假粗体、假斜体（会糊）：粗体改用标题字体，斜体直接用正文字体
+            bool title = style == FontStyle.Bold || style == FontStyle.BoldAndItalic;
+            label.font = title && titleFont != null ? titleFont : font;
+            if (titleFont != null && title) style = FontStyle.Normal;
+            if (font != null && !title && font.name != "LegacyRuntime") style = FontStyle.Normal;
             label.text = text;
             label.fontSize = size;
             label.fontStyle = style;

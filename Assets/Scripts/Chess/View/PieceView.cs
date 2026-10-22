@@ -39,8 +39,7 @@ namespace SaturdayGame.Chess.View
             frozenMarker = factory.Primitive(PrimitiveType.Cube, Root.transform, new Vector3(0.28f, 0.45f, 0.28f), new Vector3(0.22f, 0.22f, 0.22f));
 
             letter = factory.Label(Root.transform, new Vector3(0, 0.32f, 0), 0.06f, "");
-            caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "");
-            caption.fontStyle = FontStyle.Bold;
+            caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "", title: true);
             // 调整棋子在棋盘上的高度
             if (factory.Art != null) sprite = factory.Billboard(Root.transform, new Vector3(0, 0.01f, -0.45f));
 
@@ -108,7 +107,7 @@ namespace SaturdayGame.Chess.View
         void UpdateModel(GameObject source, Piece piece)
         {
             if (source == modelSource) return;
-            if (model != null) Object.Destroy(model);
+            if (model != null) ViewUtil.Destroy(model);
             modelSource = source;
             model = source != null
                 ? factory.Model(source, Root.transform, factory.Art.modelHeight, factory.Art.modelWidth, piece.Id * 137f)
@@ -117,7 +116,7 @@ namespace SaturdayGame.Chess.View
 
         public void SetPosition(Vector3 localPosition) => Root.transform.localPosition = localPosition;
 
-        public void Destroy() => Object.Destroy(Root);
+        public void Destroy() => ViewUtil.Destroy(Root);
 
         /// <summary>外观对应的占位颜色。</summary>
         public static Color SkinColor(string skin)

@@ -19,6 +19,10 @@ namespace SaturdayGame.Chess
         public bool Sacrificed;
         /// <summary>第三阶段风暴来临时被卷走的旧棋子（对手原来的棋子）：不进被吃区。</summary>
         public bool Retired;
+        /// <summary>
+        /// 被吃过（包括被规则烧掉、被弹进岩浆）。复活后也不清除，表现层据此一直用纸片版的样子。
+        /// </summary>
+        public bool WasLost;
 
         /// <summary>外观 ID，null 表示默认外观。只给表现层用，不影响逻辑。后设置的外观覆盖之前的。</summary>
         public string Skin;

@@ -13,7 +13,7 @@ namespace SaturdayGame.Chess.View
     public class DeskCameraFit : MonoBehaviour
     {
         [Tooltip("俯仰角，90 = 正上方往下看")]
-        [Range(30f, 90f)] public float pitch = 65f;
+        [Range(0f, 90f)] public float pitch = 65f;
         [Tooltip("水平转角，0 = 从白方正后方看过去；正数相机往右绕，负数往左绕")]
         [Range(-90f, 90f)] public float yaw = 0f;
         [Tooltip("缩放，1 = 刚好框住整个布局；大于 1 拉近（边缘会被裁掉），小于 1 拉远（四周露出更多桌面）")]

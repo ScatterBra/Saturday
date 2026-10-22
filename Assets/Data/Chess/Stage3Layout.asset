@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57634d9e8d00f6f48a2939c67e511e0d, type: 3}
   m_Name: Stage3Layout
   m_EditorClassIdentifier: SaturdayGame.Chess.View::SaturdayGame.Chess.View.Stage3LayoutAsset
-  terrain: 'CC43....
+  terrain: 'CC43221.
 
-    C432....
+    C432111.
 
-    3321....
+    3322.1..
 
-    21......
+    21.1.1..
 
     ......~~
 

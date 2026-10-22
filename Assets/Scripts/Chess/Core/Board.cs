@@ -111,6 +111,7 @@ namespace SaturdayGame.Chess
             if (!piece.OnBoard) return;
             if (squares[piece.Pos.Index] == piece) squares[piece.Pos.Index] = null;
             piece.OnBoard = false;
+            piece.WasLost = true;
             piece.FrozenTurns = 0;
             piece.FrozenSkin = null;
         }
@@ -290,6 +291,7 @@ namespace SaturdayGame.Chess
                     else if (lava[landing.Value.Index])
                     {
                         target.OnBoard = false;
+                        target.WasLost = true;
                         target.FrozenTurns = 0;
                         target.FrozenSkin = null;
                         result.KnockedIntoLava = true;

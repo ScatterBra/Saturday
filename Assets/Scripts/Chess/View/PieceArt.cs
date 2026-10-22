@@ -57,6 +57,22 @@ namespace SaturdayGame.Chess.View
         public Sprite blackQueen;
         public Sprite blackKing;
 
+        [Header("Paper sprites (pieces that were captured once)")]
+        [Tooltip("被吃过的普通棋子（在被吃区里、复活以后）一直用纸片版的样子；换过外观的（消防栓、主教变体等）保持原来的外观")]
+        public Sprite paperPawn;
+        public Sprite paperKnight;
+        public Sprite paperBishop;
+        public Sprite paperRook;
+        public Sprite paperQueen;
+        public Sprite paperKing;
+        [Tooltip("黑方纸片版；留空时用白方纸片版乘上 blackTint")]
+        public Sprite blackPaperPawn;
+        public Sprite blackPaperKnight;
+        public Sprite blackPaperBishop;
+        public Sprite blackPaperRook;
+        public Sprite blackPaperQueen;
+        public Sprite blackPaperKing;
+
         [Tooltip("黑方没有单独贴图时，白方贴图乘上这个颜色")]
         public Color blackTint = new Color(0.42f, 0.42f, 0.48f);
         [Tooltip("外观贴图没有黑方版本时乘上这个颜色（彩色的图压得太暗会看不清，所以比 blackTint 浅）")]
@@ -71,7 +87,7 @@ namespace SaturdayGame.Chess.View
         [Header("Skins")]
         public List<SkinArt> skins = new List<SkinArt>();
 
-        /// <summary>按优先级选图：冻结外观（例如树）> 规则外观（例如消防栓）> 基础棋子。</summary>
+        /// <summary>按优先级选图：冻结外观（例如树）> 规则外观（例如消防栓）> 纸片版（被吃过的普通棋子）> 基础棋子。</summary>
         public Resolved Resolve(Piece piece)
         {
             var result = new Resolved();
@@ -84,6 +100,21 @@ namespace SaturdayGame.Chess.View
             {
                 result.ShowsSkin = true;
                 return result;
+            }
+            // 被吃过的普通棋子：被吃区里、复活以后都一直是纸片版（换过外观的保持原来的外观）
+            if (piece.WasLost && string.IsNullOrEmpty(piece.Skin))
+            {
+                var blackPaper = piece.Side == Side.Black
+                    ? Pick(piece.Type, blackPaperPawn, blackPaperKnight, blackPaperBishop, blackPaperRook, blackPaperQueen, blackPaperKing)
+                    : null;
+                var paper = blackPaper != null ? blackPaper : Pick(piece.Type, paperPawn, paperKnight, paperBishop, paperRook, paperQueen, paperKing);
+                if (paper != null)
+                {
+                    result.Sprite = paper;
+                    result.Tint = piece.Side == Side.Black && blackPaper == null ? blackTint : Color.white;
+                    result.ShowsSkin = true;
+                    return result;
+                }
             }
 
             var black = piece.Side == Side.Black

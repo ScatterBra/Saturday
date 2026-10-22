@@ -14,16 +14,28 @@ MonoBehaviour:
   m_EditorClassIdentifier: SaturdayGame.Chess.View::SaturdayGame.Chess.View.PieceArt
   pawn: {fileID: 21300000, guid: 45f8a4347e636de4a86bea360218af87, type: 3}
   knight: {fileID: 21300000, guid: e8cdaa04297c6e54e942c03fcb577352, type: 3}
-  bishop: {fileID: 21300000, guid: d102a5cf7a02a4149b81817206b8624a, type: 3}
+  bishop: {fileID: 21300000, guid: 21582abb3af04a14fa1d67ad29f0934b, type: 3}
   rook: {fileID: 21300000, guid: a9842ebd33701a94c895e304a0d880c8, type: 3}
-  queen: {fileID: 21300000, guid: 23ea2ef6a59e2dc48bfa9388685edda6, type: 3}
-  king: {fileID: 21300000, guid: e3810390bcb83304a834feb5397460c6, type: 3}
-  blackPawn: {fileID: 21300000, guid: 7039dfa8ea5cc3e4fb7ea428f21dab22, type: 3}
-  blackKnight: {fileID: 21300000, guid: bf8c58e9ed9db3f45869371b33feff35, type: 3}
-  blackBishop: {fileID: 21300000, guid: 43a1edbb26d9db049b8df4d77dad1863, type: 3}
-  blackRook: {fileID: 21300000, guid: 1c244cb185f299442abbb99500e55894, type: 3}
-  blackQueen: {fileID: 21300000, guid: 55da88a9c9d5f4e40a334b17675e4ecc, type: 3}
-  blackKing: {fileID: 21300000, guid: 9dc0466568e0e0e4ab362062d806f59a, type: 3}
+  queen: {fileID: 21300000, guid: 5e4b305c7d0de5941949cb396fe8d00f, type: 3}
+  king: {fileID: 21300000, guid: 6cbde1cff0d82624093ecfc89c6ec8e2, type: 3}
+  blackPawn: {fileID: 21300000, guid: 63ba71b23a1204e4eac42b7fec40e0cc, type: 3}
+  blackKnight: {fileID: 21300000, guid: c99b08bb92ef20a4b8a61b7372881b0d, type: 3}
+  blackBishop: {fileID: 21300000, guid: 8b724f34573d1e845b3b5fd4bc8852e4, type: 3}
+  blackRook: {fileID: 21300000, guid: 7f0feb9471a6ac141a29d3287dec7b5b, type: 3}
+  blackQueen: {fileID: 21300000, guid: f75edf862b106dd45a17c7ab69507091, type: 3}
+  blackKing: {fileID: 21300000, guid: 650b05f9b0c99254487f7132b7c5b471, type: 3}
+  paperPawn: {fileID: 21300000, guid: d58dab09d27191f4fb70ee2057808f25, type: 3}
+  paperKnight: {fileID: 21300000, guid: 496c748e768f2ac4891ea1c2b376a273, type: 3}
+  paperBishop: {fileID: 21300000, guid: a151792b5ee09a344bf2db6dcfb5ee5b, type: 3}
+  paperRook: {fileID: 21300000, guid: fa180b0cabacb32458ebfb232f813566, type: 3}
+  paperQueen: {fileID: 21300000, guid: 49fe9a76b664e394eaf3f7d48e5d4d45, type: 3}
+  paperKing: {fileID: 21300000, guid: b44b35b7f31c5e6449a22463504ab275, type: 3}
+  blackPaperPawn: {fileID: 21300000, guid: 897c1343972f6704eaf46dad7b5af47e, type: 3}
+  blackPaperKnight: {fileID: 21300000, guid: 6aa2435a9fdaefc418e34466cca8fe95, type: 3}
+  blackPaperBishop: {fileID: 21300000, guid: b0c8c255a24dc0d418f1e0bced20e096, type: 3}
+  blackPaperRook: {fileID: 21300000, guid: e278e5e6d4039b945bf76843217c8a57, type: 3}
+  blackPaperQueen: {fileID: 21300000, guid: 2a3a2289c0507b446ab1c60b288cbe16, type: 3}
+  blackPaperKing: {fileID: 21300000, guid: f1109603aafb3f54f960162c690daa55, type: 3}
   blackTint: {r: 0, g: 0, b: 0, a: 0}
   variantBlackTint: {r: 0.75, g: 0.75, b: 0.8, a: 1}
   pieceHeight: 0.95

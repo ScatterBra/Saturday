@@ -14,6 +14,7 @@ namespace SaturdayGame.Chess.View
         readonly Material material;
         readonly Material litMaterial;
         readonly Font font;
+        readonly Font titleFont;
         readonly Transform cameraTransform;
         readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
 
@@ -26,21 +27,24 @@ namespace SaturdayGame.Chess.View
         /// <summary>3D 模型是否投影子。</summary>
         public readonly bool Shadows;
 
-        public ChessViewFactory(Material material, Camera camera, PieceArt art = null, Material surfaceMaterial = null, bool shadows = false)
+        public ChessViewFactory(Material material, Camera camera, PieceArt art = null, Material surfaceMaterial = null, bool shadows = false,
+            Font titleFont = null, Font bodyFont = null)
         {
             Art = art;
             Shadows = shadows;
-            this.material = material != null ? material : new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            // 运行时建的材质不存进场景（编辑器预览里也会建）
+            this.material = material != null ? material : new Material(Shader.Find("Universal Render Pipeline/Unlit")) { hideFlags = HideFlags.DontSave };
             if (shadows)
             {
                 litMaterial = surfaceMaterial;
                 if (litMaterial == null)
                 {
-                    litMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                    litMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit")) { hideFlags = HideFlags.DontSave };
                     litMaterial.SetFloat("_Smoothness", 0.1f);
                 }
             }
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = bodyFont != null ? bodyFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            this.titleFont = titleFont;
             cameraTransform = camera != null ? camera.transform : null;
             if (cameraTransform != null) FlatPitch = FaceCamera.PitchOf(cameraTransform);
         }
@@ -63,7 +67,7 @@ namespace SaturdayGame.Chess.View
         public GameObject Primitive(PrimitiveType type, Transform parent, Vector3 localPosition, Vector3 localScale, bool surface = false)
         {
             var go = GameObject.CreatePrimitive(type);
-            Object.Destroy(go.GetComponent<Collider>());
+            ViewUtil.Destroy(go.GetComponent<Collider>());
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
             go.transform.localScale = localScale;
@@ -85,21 +89,24 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>始终朝向镜头的 3D 文字。</summary>
-        public TextMesh Label(Transform parent, Vector3 localPosition, float characterSize, string text)
+        /// <param name="title">用标题字体（醒目的短字，例如 Princess、棋子上的小字）；没有标题字体时用正文字体加粗。</param>
+        public TextMesh Label(Transform parent, Vector3 localPosition, float characterSize, string text, bool title = false)
         {
             var go = new GameObject("Label");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
             Face(go);
             var mesh = go.AddComponent<TextMesh>();
-            mesh.font = font;
+            var useFont = title && titleFont != null ? titleFont : font;
+            mesh.font = useFont;
+            if (title && titleFont == null) mesh.fontStyle = FontStyle.Bold;
             mesh.fontSize = 64;
             mesh.characterSize = characterSize;
             mesh.anchor = TextAnchor.MiddleCenter;
             mesh.alignment = TextAlignment.Center;
             mesh.text = text;
             mesh.color = Color.black;
-            go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            go.GetComponent<MeshRenderer>().sharedMaterial = useFont.material;
             return mesh;
         }
 
@@ -125,7 +132,7 @@ namespace SaturdayGame.Chess.View
             model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = source.transform.localRotation;
             model.transform.localScale = source.transform.localScale;
-            foreach (var collider in model.GetComponentsInChildren<Collider>()) Object.Destroy(collider);
+            foreach (var collider in model.GetComponentsInChildren<Collider>()) ViewUtil.Destroy(collider);
 
             var renderers = model.GetComponentsInChildren<Renderer>();
             if (renderers.Length > 0)

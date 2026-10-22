@@ -8,6 +8,7 @@ namespace SaturdayGame.Chess.View
     /// 棋盘的显示：64 个格子 + 所有棋子的 PieceView。棋盘平放在根物体的 XZ 平面上，
     /// 格子 (x, y) 的中心在本地坐标 (x - 3.5, 0, y - 3.5)。
     /// 第三阶段的高原用一格一格升起的方块表示，每级高 LevelHeight；城堡格是灰色石块。
+    /// 场景里摆了棋盘图（ChessDesk.board）时：平地格子藏在棋盘图下面，高亮、岩浆改用盖在棋盘图上的半透明色块。
     /// </summary>
     public sealed class BoardView
     {
@@ -29,21 +30,25 @@ namespace SaturdayGame.Chess.View
         readonly Transform root;
         readonly ChessViewFactory factory;
         readonly GameObject[] squares = new GameObject[64];
+        /// <summary>有棋盘图时盖在每个格子上的色块（高亮、岩浆、暗化），没有棋盘图时为 null。</summary>
+        readonly SpriteRenderer[] overlays;
+        readonly bool hasBoardArt;
         readonly Dictionary<int, PieceView> pieces = new Dictionary<int, PieceView>();
         readonly Transform pieceRoot;
         GameObject castleLabel;
         Board board;
 
-        public BoardView(Transform parent, ChessViewFactory factory)
+        public BoardView(Transform parent, ChessViewFactory factory, ChessDesk desk = null)
         {
             this.factory = factory;
             root = new GameObject("Board").transform;
             root.SetParent(parent, false);
+            hasBoardArt = desk != null && desk.HasBoardArt;
 
             // 桌面（backdrop）：顶面在 y = -0.08，比相机能看到的范围大很多，宽屏也不会露边
-            var desk = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.13f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
-            desk.name = "Desk";
-            factory.SetColor(desk, new Color(0.42f, 0.3f, 0.22f));
+            var tableTop = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.13f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
+            tableTop.name = "Table Top";
+            factory.SetColor(tableTop, new Color(0.42f, 0.3f, 0.22f));
             var frame = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.12f, 0), new Vector3(9f, 0.1f, 9f), surface: true);
             factory.SetColor(frame, new Color(0.3f, 0.2f, 0.14f));
             for (int i = 0; i < 64; i++)
@@ -52,18 +57,45 @@ namespace SaturdayGame.Chess.View
                 squares[i] = factory.Primitive(PrimitiveType.Cube, root, SquareCenter(c) + new Vector3(0, -0.05f, 0), new Vector3(1f, 0.1f, 1f), surface: true);
                 squares[i].name = c.ToString();
             }
-            for (int i = 0; i < 8; i++)
+            bool coordinatesInArt = hasBoardArt && desk.boardHasCoordinates;
+            for (int i = 0; i < 8 && !coordinatesInArt; i++)
             {
                 var file = factory.Label(root, new Vector3(i - 3.5f, 0.01f, -4.25f), 0.035f, ((char)('a' + i)).ToString());
                 file.color = new Color(0.95f, 0.9f, 0.8f);
                 var rank = factory.Label(root, new Vector3(-4.25f, 0.01f, i - 3.5f), 0.035f, (i + 1).ToString());
                 rank.color = new Color(0.95f, 0.9f, 0.8f);
             }
+
+            if (hasBoardArt)
+            {
+                frame.SetActive(false);
+                overlays = new SpriteRenderer[64];
+                var white = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, Texture2D.whiteTexture.width, Texture2D.whiteTexture.height),
+                    new Vector2(0.5f, 0.5f), Texture2D.whiteTexture.width);
+                for (int i = 0; i < 64; i++)
+                {
+                    overlays[i] = FlatSprite($"Overlay {Coord.FromIndex(i)}", white, SquareCenter(Coord.FromIndex(i)) + Vector3.up * 0.004f, -10);
+                    overlays[i].enabled = false;
+                }
+            }
             pieceRoot = new GameObject("Pieces").transform;
             pieceRoot.SetParent(root, false);
         }
 
         public static Vector3 SquareCenter(Coord c) => new Vector3(c.X - 3.5f, 0f, c.Y - 3.5f);
+
+        /// <summary>平躺在棋盘上、面朝上的贴图。</summary>
+        SpriteRenderer FlatSprite(string name, Sprite sprite, Vector3 localPosition, int sortingOrder)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = localPosition;
+            go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var renderer = go.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.sortingOrder = sortingOrder;
+            return renderer;
+        }
 
         /// <summary>棋子站在这个格子上时的位置（考虑高原高度）。</summary>
         public Vector3 PiecePosition(Coord c) => SquareCenter(c) + Vector3.up * TopOf(c);
@@ -114,6 +146,7 @@ namespace SaturdayGame.Chess.View
                 float thickness = 0.1f + top;
                 squares[i].transform.localPosition = SquareCenter(c) + Vector3.up * (top - thickness / 2);
                 squares[i].transform.localScale = new Vector3(1f, thickness, 1f);
+                if (overlays != null) overlays[i].transform.localPosition = SquareCenter(c) + Vector3.up * (top + 0.004f);
                 if (board != null && board.IsCastle(c))
                 {
                     castleSum += SquareCenter(c) + Vector3.up * top;
@@ -121,13 +154,12 @@ namespace SaturdayGame.Chess.View
                 }
             }
 
-            if (castleLabel != null) Object.Destroy(castleLabel);
+            if (castleLabel != null) ViewUtil.Destroy(castleLabel);
             castleLabel = null;
             if (castleCount > 0)
             {
-                var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Princess");
+                var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Princess", title: true);
                 label.color = new Color(1f, 0.85f, 0.95f);
-                label.fontStyle = FontStyle.Bold;
                 castleLabel = label.gameObject;
             }
         }
@@ -195,46 +227,66 @@ namespace SaturdayGame.Chess.View
         /// <summary>
         /// 格子着色。优先级：岩浆 > 城堡 > 被将军的王 > 点选目标 > 可吃 > 可走 > 选中 > 上一步 > 普通。
         /// 第三阶段献祭完成前，我方还去不了的对面格子会暗一些；高原是岩石色。
+        /// 有棋盘图时平地格子藏在图下面，这些颜色改成盖在图上的半透明色块（岩浆不透明）。
         /// </summary>
         public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null)
         {
             var colors = new Color[64];
+            var marks = new Color[64]; // 有棋盘图时的色块，alpha = 0 表示不显示
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
-                colors[i] = (c.X + c.Y) % 2 == 0 ? Dark : Light;
+                bool dark = (c.X + c.Y) % 2 == 0;
+                colors[i] = dark ? Dark : Light;
                 if (board != null && board.Stage3)
                 {
-                    if (board.Height(c) > 0) colors[i] = Color.Lerp(colors[i], Rock, 0.6f);
-                    if (!board.TaskComplete && !board.InPlayerZone(c)) colors[i] = Color.Lerp(colors[i], Color.black, 0.2f);
+                    if (board.Height(c) > 0) colors[i] = hasBoardArt ? Color.Lerp(Rock, Color.black, dark ? 0.12f : 0f) : Color.Lerp(colors[i], Rock, 0.6f);
+                    if (!board.TaskComplete && !board.InPlayerZone(c)) Mark(colors, marks, i, Color.black, 0.2f, 0.25f);
                 }
             }
             if (lastMove.HasValue)
             {
-                colors[lastMove.Value.From.Index] = Color.Lerp(colors[lastMove.Value.From.Index], LastMove, 0.6f);
-                colors[lastMove.Value.To.Index] = Color.Lerp(colors[lastMove.Value.To.Index], LastMove, 0.6f);
+                Mark(colors, marks, lastMove.Value.From.Index, LastMove, 0.6f, 0.4f);
+                Mark(colors, marks, lastMove.Value.To.Index, LastMove, 0.6f, 0.4f);
             }
-            if (selected.HasValue) colors[selected.Value.Index] = Selected;
+            if (selected.HasValue) Mark(colors, marks, selected.Value.Index, Selected, 1f, 0.55f);
             if (moves != null)
                 foreach (var m in moves)
-                    colors[m.To.Index] = board.PieceAt(m.To) != null || board.IsLava(m.To) ? CaptureTarget : MoveTarget;
+                    Mark(colors, marks, m.To.Index, board.PieceAt(m.To) != null || board.IsLava(m.To) ? CaptureTarget : MoveTarget, 1f, 0.55f);
             if (pickOptions != null)
                 foreach (var c in pickOptions)
-                    colors[c.Index] = PickTarget;
-            if (danger.HasValue) colors[danger.Value.Index] = Danger;
+                    Mark(colors, marks, c.Index, PickTarget, 1f, 0.55f);
+            if (danger.HasValue) Mark(colors, marks, danger.Value.Index, Danger, 1f, 0.6f);
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
-                if (board != null && board.IsCastle(c)) colors[i] = CastleStone;
+                if (board != null && board.IsCastle(c))
+                {
+                    colors[i] = CastleStone;
+                    marks[i] = Color.clear;
+                }
                 if (board != null && board.IsLava(c))
                 {
-                    // 岩浆格上能走（献祭 / 地狱马）时用红色描出来，否则就是岩浆色
+                    // 岩浆格上能走（献祭）时用红色描出来，否则就是岩浆色
                     bool target = false;
                     if (moves != null) foreach (var m in moves) target |= m.To == c;
                     colors[i] = target ? Color.Lerp(Lava, CaptureTarget, 0.6f) : Lava;
+                    marks[i] = colors[i];
                 }
                 factory.SetColor(squares[i], colors[i]);
+                if (overlays != null)
+                {
+                    overlays[i].enabled = marks[i].a > 0f;
+                    overlays[i].color = marks[i];
+                }
             }
+        }
+
+        /// <summary>没有棋盘图时把格子颜色往 color 混 blend；有棋盘图时在格子上盖一层 alpha 为 overlayAlpha 的色块。</summary>
+        void Mark(Color[] colors, Color[] marks, int index, Color color, float blend, float overlayAlpha)
+        {
+            colors[index] = Color.Lerp(colors[index], color, blend);
+            if (hasBoardArt) marks[index] = new Color(color.r, color.g, color.b, overlayAlpha);
         }
 
         // ---------- 演出 ----------

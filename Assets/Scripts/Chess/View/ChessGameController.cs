@@ -47,6 +47,12 @@ namespace SaturdayGame.Chess.View
         public Material placeholderMaterial;
         [Tooltip("棋子贴图配置，留空则用占位图形")]
         public PieceArt pieceArt;
+        [Tooltip("场景里摆好的桌面（Chess/Desk：背景、棋盘图、NEW 区、规则书、规则卡底图），留空时自动在子物体里找；找不到就用占位图形")]
+        public ChessDesk desk;
+        [Tooltip("标题字体（NEW、Rule Book、卡片标题、状态栏、说话人、结束文字、按钮、棋子上的小字），留空用 Unity 默认字体加粗")]
+        public Font titleFont;
+        [Tooltip("正文字体（规则描述、规则书、提示、对白），留空用 Unity 默认字体")]
+        public Font bodyFont;
         [Tooltip("打开后 3D 模型（例如树）投影子，桌面和棋盘格子改用受光照的材质来接影子（颜色会随灯光明暗变化）")]
         public bool shadows = true;
         [Tooltip("打开阴影时桌面和棋盘格子用的受光照材质（URP Lit），留空则运行时创建")]
@@ -85,9 +91,10 @@ namespace SaturdayGame.Chess.View
             cameraFit = boardCamera != null ? boardCamera.GetComponent<DeskCameraFit>() : null;
             if (cameraFit != null) startPitch = cameraFit.pitch;
             EnsureLight();
-            var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows);
-            board = new BoardView(transform, factory);
-            hud = ChessHud.Create(transform, boardCamera, pieceArt);
+            var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows, titleFont, bodyFont);
+            if (desk == null) desk = GetComponentInChildren<ChessDesk>();
+            board = new BoardView(transform, factory, desk);
+            hud = ChessHud.Create(transform, boardCamera, pieceArt, desk, titleFont, bodyFont);
             hud.RuleCardClicked += ChooseRule;
             hud.SkipClicked += Skip;
             hud.LostPieceClicked += id => ResolvePiece(id);
@@ -120,7 +127,8 @@ namespace SaturdayGame.Chess.View
             board.Bind(game.Board);
             hud.ResetForNewGame();
             hud.SetStorm(0);
-            // 上一局转过的相机回到场景里设的角度
+            // 上一局转过的相机回到场景里设的角度，棋子重新平躺
+            FaceCamera.FollowCameraPitch = false;
             if (cameraFit != null)
             {
                 cameraFit.pitch = startPitch;
@@ -319,6 +327,8 @@ namespace SaturdayGame.Chess.View
                         board.RebuildTerrain();
                         board.SyncAll();
                         board.Highlight(null, null, null, null);
+                        // 第三阶段：棋子随着相机的角度立起来
+                        FaceCamera.FollowCameraPitch = true;
                         // 沙尘还盖着画面时把相机转到斜视角，并把升起来的城堡框进画面
                         if (cameraFit != null)
                         {
