@@ -36,6 +36,19 @@ MonoBehaviour:
   blackPaperRook: {fileID: 21300000, guid: e278e5e6d4039b945bf76843217c8a57, type: 3}
   blackPaperQueen: {fileID: 21300000, guid: 2a3a2289c0507b446ab1c60b288cbe16, type: 3}
   blackPaperKing: {fileID: 21300000, guid: f1109603aafb3f54f960162c690daa55, type: 3}
+  pawnModel: {fileID: 919132149155446097, guid: bd314880f51434e4f8d35fb6a643d89d, type: 3}
+  knightModel: {fileID: 919132149155446097, guid: dc2853872f825c14fbd23e12b02b2224, type: 3}
+  bishopModel: {fileID: 919132149155446097, guid: 6b6476645ed5b304682ba536961b7395, type: 3}
+  rookModel: {fileID: 919132149155446097, guid: 123c583226f075741a70927c14c44d72, type: 3}
+  queenModel: {fileID: 919132149155446097, guid: a294408229f37cd4fb58a355f5cae858, type: 3}
+  kingModel: {fileID: 919132149155446097, guid: cf417113c21cba945bf18339cc5605ed, type: 3}
+  blackPawnModel: {fileID: 919132149155446097, guid: 522a9b9eb2a273b46a287adce98343d0, type: 3}
+  blackKnightModel: {fileID: 919132149155446097, guid: d7d1da053486b6946b1488c9d2f67fcd, type: 3}
+  blackBishopModel: {fileID: 919132149155446097, guid: d295938004c545640a072971c06c8130, type: 3}
+  blackRookModel: {fileID: 919132149155446097, guid: 7a45d5a274d2ed841853faa6272c64ae, type: 3}
+  blackQueenModel: {fileID: 919132149155446097, guid: 16baea691e0476e45a21c865752004f7, type: 3}
+  blackKingModel: {fileID: 919132149155446097, guid: aae098ddeda2ece4db3005ac4c9372f3, type: 3}
+  stage3ModelYaw: 0
   blackTint: {r: 0, g: 0, b: 0, a: 0}
   variantBlackTint: {r: 0.75, g: 0.75, b: 0.8, a: 1}
   pieceHeight: 0.95
@@ -50,6 +63,10 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: a8fca54bfeb855c4f8b475c4d4014599, type: 3}
     models: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: 2b5f65d407df78a4ba6960287df67aec, type: 3}
+    stage3BlackModels:
+    - {fileID: 919132149155446097, guid: 5ce80593d9ef3b64ba82d92e9c9b1ae7, type: 3}
   - skin: fish_shop
     onlyForType: 0
     type: 0
@@ -57,6 +74,9 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 0e3194f2940c6bf4683ced5c93cd05b5, type: 3}
     black: []
     models: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: 11acbe4cee24b9c448a0b15f6617feb1, type: 3}
+    stage3BlackModels: []
   - skin: bishbird
     onlyForType: 0
     type: 0
@@ -64,6 +84,9 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 210ebc8f4ba940943884e00d34337894, type: 3}
     black: []
     models: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: e123dedf83bdeef4fa12a6deba5486bd, type: 3}
+    stage3BlackModels: []
   - skin: tree
     onlyForType: 0
     type: 0
@@ -79,6 +102,8 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: b8af8e31b078907488cdaf8086f1d6f5, type: 3}
     - {fileID: 919132149155446097, guid: 4a0b7e966b96b6b4bb17a1864ada60c7, type: 3}
     - {fileID: 919132149155446097, guid: 688f783b89356424ba014d1e5e3b1f13, type: 3}
+    stage3Models: []
+    stage3BlackModels: []
   - skin: crayon
     onlyForType: 1
     type: 0
@@ -87,6 +112,8 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: 897c1343972f6704eaf46dad7b5af47e, type: 3}
     models: []
+    stage3Models: []
+    stage3BlackModels: []
   - skin: crayon
     onlyForType: 1
     type: 1
@@ -95,6 +122,8 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: 6aa2435a9fdaefc418e34466cca8fe95, type: 3}
     models: []
+    stage3Models: []
+    stage3BlackModels: []
   - skin: crayon
     onlyForType: 1
     type: 4
@@ -103,6 +132,8 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: 2a3a2289c0507b446ab1c60b288cbe16, type: 3}
     models: []
+    stage3Models: []
+    stage3BlackModels: []
   - skin: crayon
     onlyForType: 1
     type: 3
@@ -111,6 +142,8 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: e278e5e6d4039b945bf76843217c8a57, type: 3}
     models: []
+    stage3Models: []
+    stage3BlackModels: []
   - skin: cake
     onlyForType: 0
     type: 0
@@ -118,6 +151,9 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 03b979098cab9d14ebc85cae39541360, type: 3}
     black: []
     models: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: cfb94b3129704dd47be3c57d7b86f5cc, type: 3}
+    stage3BlackModels: []
   - skin: watch_tower
     onlyForType: 0
     type: 0
@@ -125,6 +161,9 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 2034e094792ccd643b933687d030dbcf, type: 3}
     black: []
     models: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: 501cca75f7fdaa742acf4fcfbc92c4a2, type: 3}
+    stage3BlackModels: []
   - skin: frog
     onlyForType: 0
     type: 0
@@ -133,3 +172,7 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: b55f4507049c60e4191ab113b397de0d, type: 3}
     models: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: 73ebacaf677c47d46948a7e6e36d5745, type: 3}
+    stage3BlackModels:
+    - {fileID: 919132149155446097, guid: 827aba8e7d4ff3949925941a234c5ea2, type: 3}

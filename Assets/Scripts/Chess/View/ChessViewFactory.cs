@@ -24,6 +24,9 @@ namespace SaturdayGame.Chess.View
         /// <summary>棋子贴图和文字固定用的俯仰角：开局时相机的俯仰角，之后相机再倾斜它们也不跟着倾斜。</summary>
         public readonly float FlatPitch = 90f;
 
+        /// <summary>相机现在的水平转角（度），立牌模型按它摆正面。</summary>
+        public float CameraYaw => cameraTransform != null ? FaceCamera.Rotation(cameraTransform, 0f).eulerAngles.y : 0f;
+
         /// <summary>3D 模型是否投影子。</summary>
         public readonly bool Shadows;
 
@@ -86,6 +89,23 @@ namespace SaturdayGame.Chess.View
             block.SetColor(BaseColor, color);
             block.SetColor(LegacyColor, color);
             renderer.SetPropertyBlock(block);
+        }
+
+        /// <summary>给模型的所有部件换上颜色（用 MaterialPropertyBlock，不改共用的材质）；白色 = 还原成材质本来的颜色。</summary>
+        public void TintModel(GameObject go, Color color)
+        {
+            foreach (var renderer in go.GetComponentsInChildren<Renderer>())
+            {
+                if (color == Color.white)
+                {
+                    renderer.SetPropertyBlock(null);
+                    continue;
+                }
+                renderer.GetPropertyBlock(block);
+                block.SetColor(BaseColor, color);
+                block.SetColor(LegacyColor, color);
+                renderer.SetPropertyBlock(block);
+            }
         }
 
         /// <summary>始终朝向镜头的 3D 文字。</summary>

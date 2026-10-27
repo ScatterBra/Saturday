@@ -46,13 +46,21 @@ namespace SaturdayGame.Chess.View
             Refresh(piece);
         }
 
-        public void Refresh(Piece piece)
+        /// <param name="stage3">棋盘已经是第三阶段：配了第三阶段模型的棋子换成 3D 模型。</param>
+        public void Refresh(Piece piece, bool stage3 = false)
         {
             bool white = piece.Side == Side.White;
             var art = factory.Art;
-            var resolved = art != null ? art.Resolve(piece) : default;
-            UpdateModel(resolved.Model, piece);
+            var resolved = art != null ? art.Resolve(piece, stage3) : default;
+            UpdateModel(resolved, piece);
             bool useModel = model != null;
+            // 第三阶段模型没有黑方版本时压暗；不死棋子泛幽蓝；其他模型（例如树）保持原色
+            if (useModel)
+            {
+                var tint = resolved.Standee && resolved.Tint != default ? resolved.Tint : Color.white;
+                if (piece.Undying) tint *= UndyingTint;
+                factory.TintModel(model, tint);
+            }
             bool useSprite = !useModel && resolved.Sprite != null;
             if (sprite != null)
             {
@@ -103,14 +111,19 @@ namespace SaturdayGame.Chess.View
             caption.color = new Color(0.1f, 0.06f, 0.04f);
         }
 
-        /// <summary>外观要用的模型变了才重新生成；同一枚棋子总是同一个朝向，几棵树看起来不会一模一样。</summary>
-        void UpdateModel(GameObject source, Piece piece)
+        /// <summary>
+        /// 外观要用的模型变了才重新生成。立牌模型（第三阶段的棋子）正面朝着相机；
+        /// 其他模型（例如树）按棋子编号固定一个朝向，几棵树看起来不会一模一样。
+        /// </summary>
+        void UpdateModel(PieceArt.Resolved resolved, Piece piece)
         {
+            var source = resolved.Model;
             if (source == modelSource) return;
             if (model != null) ViewUtil.Destroy(model);
             modelSource = source;
+            float yaw = resolved.Standee ? factory.CameraYaw + factory.Art.stage3ModelYaw : piece.Id * 137f;
             model = source != null
-                ? factory.Model(source, Root.transform, factory.Art.modelHeight, factory.Art.modelWidth, piece.Id * 137f)
+                ? factory.Model(source, Root.transform, factory.Art.modelHeight, factory.Art.modelWidth, yaw)
                 : null;
         }
 

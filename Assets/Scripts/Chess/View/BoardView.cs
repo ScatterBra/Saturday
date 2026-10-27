@@ -207,7 +207,7 @@ namespace SaturdayGame.Chess.View
                 view.Root.SetActive(true);
                 view.Root.transform.localScale = Vector3.one;
                 view.SetPosition(PiecePosition(piece.Pos));
-                view.Refresh(piece);
+                view.Refresh(piece, Stage3);
             }
         }
 
@@ -219,9 +219,12 @@ namespace SaturdayGame.Chess.View
             return view;
         }
 
+        /// <summary>棋盘已经是第三阶段：棋子换成 3D 模型。</summary>
+        bool Stage3 => board != null && board.Stage3;
+
         public void RefreshPiece(int id)
         {
-            if (pieces.TryGetValue(id, out var view)) view.Refresh(board.GetPiece(id));
+            if (pieces.TryGetValue(id, out var view)) view.Refresh(board.GetPiece(id), Stage3);
         }
 
         /// <summary>
@@ -391,7 +394,7 @@ namespace SaturdayGame.Chess.View
         {
             var piece = board.GetPiece(id);
             if (!pieces.TryGetValue(id, out var view)) view = Create(piece);
-            view.Refresh(piece);
+            view.Refresh(piece, Stage3);
             view.SetPosition(PiecePosition(piece.Pos));
             for (float t = 0; t < 1f; t += Time.deltaTime / duration)
             {
@@ -405,7 +408,7 @@ namespace SaturdayGame.Chess.View
         public IEnumerator AnimatePop(int id, float duration)
         {
             if (!pieces.TryGetValue(id, out var view)) yield break;
-            view.Refresh(board.GetPiece(id));
+            view.Refresh(board.GetPiece(id), Stage3);
             for (float t = 0; t < 1f; t += Time.deltaTime / duration)
             {
                 view.Root.transform.localScale = Vector3.one * (1f + 0.25f * Mathf.Sin(t * Mathf.PI));

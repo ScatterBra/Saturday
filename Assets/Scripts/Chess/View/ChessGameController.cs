@@ -67,6 +67,10 @@ namespace SaturdayGame.Chess.View
         [Range(0f, 90f)] public float treeCameraPitch = 65f;
         [Tooltip("风暴后（第三阶段）相机转到这个俯仰角，看得出高原和城堡的高度；0 = 不转")]
         [Range(0f, 90f)] public float stage3CameraPitch = 65f;
+        [Tooltip("第三阶段相机的视野角。越大近大远小越明显，山显得越高；Play 模式下在第三阶段改它会实时生效")]
+        [Range(10f, 100f)] public float stage3FieldOfView = 30f;
+        [Tooltip("第三阶段的缩放，1 = 刚好框住整个布局；大于 1 拉近，小于 1 拉远；Play 模式下在第三阶段改它会实时生效")]
+        [Range(0.5f, 3f)] public float stage3Zoom = 1f;
         [Tooltip("相机转过去用多久")]
         public float cameraTurnDuration = 1f;
 
@@ -76,7 +80,11 @@ namespace SaturdayGame.Chess.View
         ChessHud hud;
         DeskCameraFit cameraFit;
         float startPitch;
+        float startFieldOfView;
+        float startZoom;
+        bool cameraTurning;
         bool busy;
+        bool jumpToStage3;
         Piece selected;
         List<Move> selectedMoves = new List<Move>();
         Move? lastMove;
@@ -89,7 +97,12 @@ namespace SaturdayGame.Chess.View
             EnsureEventSystem();
             if (boardCamera == null) boardCamera = GetComponentInChildren<Camera>();
             cameraFit = boardCamera != null ? boardCamera.GetComponent<DeskCameraFit>() : null;
-            if (cameraFit != null) startPitch = cameraFit.pitch;
+            if (cameraFit != null)
+            {
+                startPitch = cameraFit.pitch;
+                startFieldOfView = cameraFit.fieldOfView;
+                startZoom = cameraFit.zoom;
+            }
             EnsureLight();
             var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows, titleFont, bodyFont);
             if (desk == null) desk = GetComponentInChildren<ChessDesk>();
@@ -103,15 +116,36 @@ namespace SaturdayGame.Chess.View
             NewGame();
         }
 
+        /// <summary>调试用：开一局新棋，一开局就掀起风暴进入第三阶段（走真实的风暴流程，相机、棋子朝向都会跟着变）。</summary>
+        [ContextMenu("Jump To Stage 3")]
+        public void JumpToStage3()
+        {
+            jumpToStage3 = true;
+            try { NewGame(); }
+            finally { jumpToStage3 = false; }
+        }
+
+        // 第三阶段时在 Inspector 里改相机参数，立刻套到相机上预览（相机还在转的时候不打断它）
+        void OnValidate()
+        {
+            if (!Application.isPlaying || cameraFit == null || game == null || !game.InStage3 || cameraTurning) return;
+            if (stage3CameraPitch > 0f) cameraFit.pitch = stage3CameraPitch;
+            cameraFit.fieldOfView = stage3FieldOfView;
+            cameraFit.zoom = stage3Zoom;
+            cameraFit.Fit();
+        }
+
         public void NewGame()
         {
             StopAllCoroutines();
             busy = false;
+            cameraTurning = false;
             var settings = new GameSettings
             {
                 StageTurns = stageTurns,
                 OpeningRules = openingRules,
-                StormTurn = stormTurn,
+                // 调试跳关：第一回合就掀起风暴
+                StormTurn = jumpToStage3 ? 1 : stormTurn,
                 SacrificesNeeded = sacrificesNeeded,
                 UndyingEvery = undyingEvery,
                 Stage3SkillEvery = stage3SkillEvery,
@@ -132,6 +166,8 @@ namespace SaturdayGame.Chess.View
             if (cameraFit != null)
             {
                 cameraFit.pitch = startPitch;
+                cameraFit.fieldOfView = startFieldOfView;
+                cameraFit.zoom = startZoom;
                 cameraFit.extraPoints.Clear();
                 cameraFit.Fit();
             }
@@ -333,10 +369,10 @@ namespace SaturdayGame.Chess.View
                         if (cameraFit != null)
                         {
                             cameraFit.extraPoints = board.TallPoints();
-                            if (stage3CameraPitch > 0f && !Mathf.Approximately(cameraFit.pitch, stage3CameraPitch))
-                                yield return cameraFit.TurnTo(stage3CameraPitch, cameraTurnDuration);
-                            else
-                                cameraFit.Fit();
+                            float pitch = stage3CameraPitch > 0f ? stage3CameraPitch : cameraFit.pitch;
+                            cameraTurning = true;
+                            yield return cameraFit.TurnTo(pitch, stage3FieldOfView, stage3Zoom, cameraTurnDuration);
+                            cameraTurning = false;
                         }
                         yield return new WaitForSeconds(0.3f);
                         for (float t = 1f; t > 0f; t -= Time.deltaTime / stormDuration)

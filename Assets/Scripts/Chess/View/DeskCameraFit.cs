@@ -73,16 +73,24 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>在 duration 秒内平滑转到新的俯仰角，转的过程中一直保持布局框在屏幕里。</summary>
-        public IEnumerator TurnTo(float targetPitch, float duration)
+        public IEnumerator TurnTo(float targetPitch, float duration) => TurnTo(targetPitch, fieldOfView, zoom, duration);
+
+        /// <summary>在 duration 秒内把俯仰角、视野角、缩放一起平滑过渡到新值，过程中一直保持布局框在屏幕里。</summary>
+        public IEnumerator TurnTo(float targetPitch, float targetFieldOfView, float targetZoom, float duration)
         {
-            float start = pitch;
+            float startPitch = pitch, startFov = fieldOfView, startZoom = zoom;
             for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.01f, duration))
             {
-                pitch = Mathf.Lerp(start, targetPitch, Mathf.SmoothStep(0f, 1f, t));
+                float k = Mathf.SmoothStep(0f, 1f, t);
+                pitch = Mathf.Lerp(startPitch, targetPitch, k);
+                fieldOfView = Mathf.Lerp(startFov, targetFieldOfView, k);
+                zoom = Mathf.Lerp(startZoom, targetZoom, k);
                 Fit();
                 yield return null;
             }
             pitch = targetPitch;
+            fieldOfView = targetFieldOfView;
+            zoom = targetZoom;
             Fit();
         }
 
