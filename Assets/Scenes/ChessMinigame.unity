@@ -317,6 +317,7 @@ MonoBehaviour:
   pitch: 90
   yaw: 0
   zoom: 1
+  fieldOfView: 30
   halfExtent: {x: 9.3, y: 4.6}
   topMargin: 0.08
   bottomMargin: 0.03
@@ -549,7 +550,9 @@ MonoBehaviour:
   dialogueDuration: 1.4
   stormDuration: 0.8
   treeCameraPitch: 65
-  stage3CameraPitch: 65
+  stage3CameraPitch: 40
+  stage3FieldOfView: 30
+  stage3Zoom: 1
   cameraTurnDuration: 1
 --- !u!4 &1185032823
 Transform:
