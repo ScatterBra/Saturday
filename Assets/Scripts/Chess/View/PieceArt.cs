@@ -47,6 +47,8 @@ namespace SaturdayGame.Chess.View
             public bool ShowsFrozen;
             /// <summary>模型是立牌（第三阶段的棋子模型）：正面朝着相机摆，不随机转。</summary>
             public bool Standee;
+            /// <summary>纸片版（被吃过的普通棋子）：一直平躺在棋盘上。</summary>
+            public bool Paper;
         }
 
         [Header("White (default) sprites")]
@@ -140,6 +142,7 @@ namespace SaturdayGame.Chess.View
                 if (paper != null)
                 {
                     result.Sprite = paper;
+                    result.Paper = true;
                     result.Tint = piece.Side == Side.Black && blackPaper == null ? blackTint : Color.white;
                     result.ShowsSkin = true;
                     return result;

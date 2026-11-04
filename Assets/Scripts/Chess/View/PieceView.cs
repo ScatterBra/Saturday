@@ -23,6 +23,7 @@ namespace SaturdayGame.Chess.View
         readonly TextMesh letter;
         readonly TextMesh caption;
         readonly SpriteRenderer sprite;
+        readonly FaceCamera spriteFacing;
         GameObject model;
         GameObject modelSource;
 
@@ -40,7 +41,11 @@ namespace SaturdayGame.Chess.View
             letter = factory.Label(Root.transform, new Vector3(0, 0.32f, 0), 0.06f, "");
             caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "", title: true);
             // 调整棋子在棋盘上的高度
-            if (factory.Art != null) sprite = factory.Billboard(Root.transform, new Vector3(0, 0.01f, -0.45f));
+            if (factory.Art != null)
+            {
+                sprite = factory.Billboard(Root.transform, new Vector3(0, 0.01f, -0.45f));
+                spriteFacing = sprite.GetComponent<FaceCamera>();
+            }
 
             Refresh(piece);
         }
@@ -66,6 +71,8 @@ namespace SaturdayGame.Chess.View
                 sprite.sprite = resolved.Sprite;
                 sprite.color = resolved.Tint;
                 sprite.transform.localScale = Vector3.one * art.pieceHeight;
+                // 纸片棋子第三阶段也和第一阶段一样平躺在棋盘上，不跟着相机立起来
+                if (spriteFacing != null) spriteFacing.alwaysFlat = resolved.Paper;
             }
             letter.gameObject.SetActive(!useSprite && !useModel);
 
