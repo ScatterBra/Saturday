@@ -137,6 +137,7 @@ namespace SaturdayGame.Chess.View
             switch (skin)
             {
                 case "hydrant": return new Color(0.9f, 0.15f, 0.15f);
+                case "frog": return new Color(0.35f, 0.8f, 0.3f);
                 case "elephant": return new Color(0.55f, 0.62f, 0.75f);
                 case "bish_hop": return new Color(0.6f, 0.3f, 0.85f);
                 case "fish_shop": return new Color(0.2f, 0.6f, 0.9f);

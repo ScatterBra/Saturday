@@ -44,6 +44,7 @@ namespace SaturdayGame.Chess
         public int DistanceTo(Coord other) => Math.Max(Math.Abs(X - other.X), Math.Abs(Y - other.Y));
 
         public static Coord operator +(Coord a, Coord b) => new Coord(a.X + b.X, a.Y + b.Y);
+        public static Coord operator -(Coord a, Coord b) => new Coord(a.X - b.X, a.Y - b.Y);
         public static bool operator ==(Coord a, Coord b) => a.X == b.X && a.Y == b.Y;
         public static bool operator !=(Coord a, Coord b) => !(a == b);
 

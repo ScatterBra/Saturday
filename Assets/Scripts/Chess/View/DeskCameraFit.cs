@@ -18,6 +18,8 @@ namespace SaturdayGame.Chess.View
         [Range(-90f, 90f)] public float yaw = 0f;
         [Tooltip("缩放，1 = 刚好框住整个布局；大于 1 拉近（边缘会被裁掉），小于 1 拉远（四周露出更多桌面）")]
         [Range(0.5f, 3f)] public float zoom = 1f;
+        [Tooltip("视野角（度）。越小越像长焦，纵深被压扁、相机离得越远；越大近大远小越明显，相机会自动靠近")]
+        [Range(10f, 100f)] public float fieldOfView = 30f;
         [Tooltip("布局左右、前后的半宽（本地坐标），默认按 ChessHud.DeskLayout 计算")]
         public Vector2 halfExtent = new Vector2(ChessHud.DeskLayout.HalfExtentX, ChessHud.DeskLayout.HalfExtentZ);
         [Tooltip("屏幕上方留给状态栏的比例")]
@@ -45,6 +47,8 @@ namespace SaturdayGame.Chess.View
         // 运行中在 Inspector 里改参数时立刻重新取景
         void OnValidate()
         {
+            var camera = cam != null ? cam : GetComponent<Camera>();
+            if (camera != null) camera.fieldOfView = fieldOfView;
             if (Application.isPlaying && cam != null) Fit();
         }
 
@@ -53,6 +57,7 @@ namespace SaturdayGame.Chess.View
         {
             if (cam == null) cam = GetComponent<Camera>();
             fittedAspect = cam.aspect;
+            cam.fieldOfView = fieldOfView;
             var rotation = Quaternion.Euler(pitch, yaw, 0f);
             transform.localRotation = rotation;
 

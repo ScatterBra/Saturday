@@ -26,14 +26,75 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void FireHydrant_ChangesAllRooksLooksOnly()
+        public void FireHydrant_ARookIsHydrantHRookIsFrog_OpponentMirrored_MovesUnchanged()
         {
             var board = Board.CreateStandard();
             Run(new FireHydrantRule(), Context(board, 1));
-            var rooks = board.AllPieces.Where(p => p.Type == PieceType.Rook).ToList();
-            Assert.AreEqual(4, rooks.Count);
-            Assert.IsTrue(rooks.All(r => r.Skin == "hydrant"));
+            Assert.AreEqual("hydrant", board.PieceAt(C("a1")).Skin);
+            Assert.AreEqual("frog", board.PieceAt(C("h1")).Skin);
+            Assert.AreEqual("frog", board.PieceAt(C("a8")).Skin);
+            Assert.AreEqual("hydrant", board.PieceAt(C("h8")).Skin);
             Assert.AreEqual(20, MoveGenerator.Generate(board, Side.White).Count);
+        }
+
+        [Test]
+        public void FireHydrant_UsesTheStartingSquare_NotWhereTheRookIsNow()
+        {
+            var board = Board.CreateStandard();
+            var rook = board.PieceAt(C("h1"));
+            board.Relocate(rook, C("c4"));
+            Run(new FireHydrantRule(), Context(board, 1));
+            Assert.AreEqual("frog", rook.Skin, "the h-rook stays a frog after wandering to the a side");
+        }
+
+        static void Tongue(Board board, string frog, int seed = 1, List<GameEvent> events = null)
+        {
+            var rook = board.PieceAt(C(frog));
+            rook.Skin = "frog";
+            new FireHydrantRule().OnPieceMoved(Context(board, seed, events), rook, rook.Pos);
+        }
+
+        [Test]
+        public void Frog_PullsTheClosestEnemyInALineOneStepCloser()
+        {
+            var board = Setup("Rd4", "pd7", "nf6");
+            var events = new List<GameEvent>();
+            Tongue(board, "d4", 1, events);
+            var knight = board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight);
+            Assert.AreEqual(C("e5"), knight.Pos, "the diagonal knight two squares away is closer than the pawn three squares up");
+            Assert.AreEqual(C("d7"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos);
+            var pull = events.Single(e => e.Type == GameEventType.Pushed);
+            Assert.AreEqual(C("f6"), pull.From);
+            Assert.AreEqual(C("e5"), pull.To);
+        }
+
+        [Test]
+        public void Frog_IgnoresFriendsAdjacentPiecesAndBlockedLines()
+        {
+            // 自己的棋子不拉；紧挨着的敌人拉不动，也挡住后面
+            var board = Setup("Rd4", "Pd6", "pe4", "pg4", "pa4");
+            Tongue(board, "d4");
+            Assert.AreEqual(C("d6"), board.PieceAt(C("d6"))?.Pos, "own pawn stays");
+            Assert.IsNotNull(board.PieceAt(C("g4")), "the pawn behind the adjacent one is blocked");
+            Assert.IsNull(board.PieceAt(C("a4")), "the open line on the left gets pulled");
+            Assert.IsNotNull(board.PieceAt(C("b4")));
+
+            // 超过 3 格够不着
+            board = Setup("Rd1", "pd5");
+            Tongue(board, "d1");
+            Assert.IsNotNull(board.PieceAt(C("d5")));
+        }
+
+        [Test]
+        public void Frog_DoesNotSpray_AndHydrantDoesNotPull()
+        {
+            var board = Setup("Rd4", "Pd5");
+            Tongue(board, "d4");
+            Assert.IsNotNull(board.PieceAt(C("d5")), "a frog never sprays its neighbour");
+
+            board = Setup("Rd4", "pd6");
+            Spray(board, "d4");
+            Assert.IsNotNull(board.PieceAt(C("d6")), "a hydrant never pulls");
         }
 
         [Test]
@@ -80,6 +141,7 @@ namespace SaturdayGame.Chess.Tests
         static void Spray(Board board, string hydrant, int seed = 1, List<GameEvent> events = null)
         {
             var rook = board.PieceAt(C(hydrant));
+            rook.Skin = "hydrant";
             new FireHydrantRule().OnPieceMoved(Context(board, seed, events), rook, rook.Pos);
         }
 

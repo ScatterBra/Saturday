@@ -21,7 +21,7 @@ namespace SaturdayGame.Chess.View
         public int seed;
         [Tooltip("在这些回合开始时进入第一、二阶段：第一阶段不弹卡，第二阶段弹固定选卡")]
         public int[] stageTurns = { 4, 10 };
-        [Tooltip("第一阶段的规则：到回合自动生效。Rule Id：bishop_variants（主教四变）、fire_hydrant（消防栓）")]
+        [Tooltip("第一阶段的规则：到回合自动生效。Rule Id：bishop_variants（主教四变）、fire_hydrant（a 列车变消防栓、h 列变青蛙，朋友的反过来）")]
         public ScheduledRule[] openingRules =
         {
             new ScheduledRule(5, "bishop_variants"),
