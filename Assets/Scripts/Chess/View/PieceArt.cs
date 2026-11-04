@@ -26,6 +26,8 @@ namespace SaturdayGame.Chess.View
             public Sprite[] black = Array.Empty<Sprite>();
             [Tooltip("3D 模型（FBX 或预制体）。配了模型就在棋盘上用模型代替贴图（贴图仍用在被吃区等 2D 界面里），多个模型按棋子编号固定选一个")]
             public GameObject[] models = Array.Empty<GameObject>();
+            [Tooltip("models 里是立牌模型（例如新的树）：正面朝着相机摆，不随机转")]
+            public bool standee;
             [Tooltip("第三阶段才换上的 3D 模型（白方）。多个模型按棋子编号固定选一个")]
             public GameObject[] stage3Models = Array.Empty<GameObject>();
             [Tooltip("第三阶段黑方的 3D 模型；留空时用白方模型乘上 variantBlackTint")]
@@ -178,12 +180,18 @@ namespace SaturdayGame.Chess.View
                 var stage3List = hasBlackStage3 ? entry.stage3BlackModels : entry.stage3Models;
                 bool hasStage3 = stage3 && stage3List != null && stage3List.Length > 0;
                 if ((list == null || list.Length == 0) && !hasModel && !hasStage3) continue;
-                if (list != null && list.Length > 0) result.Sprite = list[piece.Id % list.Length];
-                if (hasModel) result.Model = entry.models[piece.Id % entry.models.Length];
+                if (list != null && list.Length > 0) result.Sprite = list[Variant(piece, list.Length)];
                 result.Tint = piece.Side == Side.Black && !hasBlack ? variantBlackTint : Color.white;
+                if (hasModel)
+                {
+                    // 全阶段都用的模型（例如树）保持原色，不压暗
+                    result.Model = entry.models[Variant(piece, entry.models.Length)];
+                    result.Standee = entry.standee;
+                    result.Tint = Color.white;
+                }
                 if (hasStage3)
                 {
-                    result.Model = stage3List[piece.Id % stage3List.Length];
+                    result.Model = stage3List[Variant(piece, stage3List.Length)];
                     result.Standee = true;
                     result.Tint = piece.Side == Side.Black && !hasBlackStage3 ? variantBlackTint : Color.white;
                 }
@@ -191,6 +199,12 @@ namespace SaturdayGame.Chess.View
             }
             return false;
         }
+
+        /// <summary>
+        /// 同一个外观有好几张图或好几个模型时，按开局格子固定选一个：同一排相邻的棋子（例如一排兵变成的树）各不相同。
+        /// （棋子编号在一排里是隔一个排的，直接用编号取余只会轮到一半的图。）
+        /// </summary>
+        static int Variant(Piece piece, int count) => (piece.StartPos.Y * 8 + piece.StartPos.X) % count;
 
         static T Pick<T>(PieceType type, T p, T n, T b, T r, T q, T k)
         {
