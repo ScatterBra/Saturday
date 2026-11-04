@@ -32,12 +32,6 @@ namespace SaturdayGame.Chess
         /// <summary>冻结时叠加的外观，例如 tree、poop。解冻后清空。</summary>
         public string FrozenSkin;
 
-        /// <summary>
-        /// 第三阶段每献祭两个棋子，玩家选一枚棋子变成不死：被弹进岩浆不会死，只是禁止行动一回合。
-        /// （第三阶段朋友本来就不吃子，只击飞。）
-        /// </summary>
-        public bool Undying;
-
         public bool IsFrozen => FrozenTurns > 0;
 
         /// <summary>在棋盘上。</summary>

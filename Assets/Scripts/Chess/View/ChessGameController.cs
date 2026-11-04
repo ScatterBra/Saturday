@@ -31,8 +31,6 @@ namespace SaturdayGame.Chess.View
         public int stormTurn = 20;
         [Tooltip("第三阶段要往岩浆里献祭几个棋子，岩浆才能站、才能过河（马才能进城堡）")]
         public int sacrificesNeeded = 3;
-        [Tooltip("第三阶段每献祭这么多个棋子，玩家选一枚棋子变成不死；0 = 不给")]
-        public int undyingEvery = 2;
         [Tooltip("第三阶段每隔几回合弹一次技能")]
         public int stage3SkillEvery = 5;
         [Tooltip("第三阶段开始后的第几回合朋友放技能（鸟群）")]
@@ -63,13 +61,11 @@ namespace SaturdayGame.Chess.View
         public float dialogueDuration = 1.4f;
         [Tooltip("风暴沙尘卷起和散去各用多久")]
         public float stormDuration = 0.8f;
-        [Tooltip("选了树技能后相机转到这个俯仰角，才看得出立体的树；0 = 不转")]
-        [Range(0f, 90f)] public float treeCameraPitch = 65f;
-        [Tooltip("风暴后（第三阶段）相机转到这个俯仰角，看得出高原和城堡的高度；0 = 不转")]
+        [Tooltip("风暴后（第三阶段）、选了树技能后，相机都转到这个俯仰角；0 = 不转")]
         [Range(0f, 90f)] public float stage3CameraPitch = 65f;
-        [Tooltip("第三阶段相机的视野角。越大近大远小越明显，山显得越高；Play 模式下在第三阶段改它会实时生效")]
+        [Tooltip("第三阶段和树技能之后相机的视野角。越大近大远小越明显，山显得越高；Play 模式下在第三阶段改它会实时生效")]
         [Range(10f, 100f)] public float stage3FieldOfView = 30f;
-        [Tooltip("第三阶段的缩放，1 = 刚好框住整个布局；大于 1 拉近，小于 1 拉远；Play 模式下在第三阶段改它会实时生效")]
+        [Tooltip("第三阶段和树技能之后的缩放，1 = 刚好框住整个布局；大于 1 拉近，小于 1 拉远；Play 模式下在第三阶段改它会实时生效")]
         [Range(0.5f, 3f)] public float stage3Zoom = 1f;
         [Tooltip("相机转过去用多久")]
         public float cameraTurnDuration = 1f;
@@ -147,7 +143,6 @@ namespace SaturdayGame.Chess.View
                 // 调试跳关：第一回合就掀起风暴
                 StormTurn = jumpToStage3 ? 1 : stormTurn,
                 SacrificesNeeded = sacrificesNeeded,
-                UndyingEvery = undyingEvery,
                 Stage3SkillEvery = stage3SkillEvery,
                 FriendSkillTurns = friendSkillTurns,
                 Layout = stage3Layout != null ? stage3Layout.Build() : null,
@@ -277,8 +272,6 @@ namespace SaturdayGame.Chess.View
             board.Highlight(piece.Pos, selectedMoves, null, lastMove, DangerSquare());
             if (piece.IsFrozen)
                 hud.SetStatus($"That {Name(piece)} is frozen.");
-            else if (piece.Undying)
-                hud.SetStatus($"That {Name(piece)} is undying: lava only stops it for a turn.");
             else
                 UpdateStatus();
         }
@@ -398,8 +391,14 @@ namespace SaturdayGame.Chess.View
                         hud.HideOffers();
                         hud.ShowSkip(false);
                         hud.AddRule(e.Rule);
-                        if (e.Rule is TreePawnsRule && cameraFit != null && treeCameraPitch > 0f && !Mathf.Approximately(cameraFit.pitch, treeCameraPitch))
-                            yield return cameraFit.TurnTo(treeCameraPitch, cameraTurnDuration);
+                        // 选了树技能：相机转到和第三阶段一样的视角，才看得出立体的树
+                        if (e.Rule is TreePawnsRule && cameraFit != null)
+                        {
+                            float pitch = stage3CameraPitch > 0f ? stage3CameraPitch : cameraFit.pitch;
+                            cameraTurning = true;
+                            yield return cameraFit.TurnTo(pitch, stage3FieldOfView, stage3Zoom, cameraTurnDuration);
+                            cameraTurning = false;
+                        }
                         break;
                     case GameEventType.TargetRequested:
                         if (!e.Request.IsPieceRequest) board.Highlight(null, null, e.Request.Options, lastMove);

@@ -280,15 +280,7 @@ namespace SaturdayGame.Chess
                     result.KnockFrom = target.Pos;
                     result.KnockTo = landing.Value;
                     target.Pos = landing.Value;
-                    if (lava[landing.Value.Index] && target.Undying)
-                    {
-                        // 不死的棋子掉进岩浆不会死，只是被烫得动不了一回合
-                        squares[landing.Value.Index] = target;
-                        target.FrozenTurns = Math.Max(target.FrozenTurns, 1);
-                        target.FrozenSkin = "scorched";
-                        result.Scorched = true;
-                    }
-                    else if (lava[landing.Value.Index])
+                    if (lava[landing.Value.Index])
                     {
                         target.OnBoard = false;
                         target.WasLost = true;
@@ -414,8 +406,8 @@ namespace SaturdayGame.Chess
         static int Score(Board board, Piece victim, Coord c)
         {
             int score = 0;
-            // 打进岩浆最好（普通棋子会死）；不死的棋子打进去只能让它停一回合，没那么值
-            if (board.IsLava(c)) score += victim.Undying ? 200 : 1000;
+            // 打进岩浆最好（棋子会死）
+            if (board.IsLava(c)) score += 1000;
             score += 10 * DistanceToCastle(board, c);
             score -= 3 * board.Height(c);
             return score;

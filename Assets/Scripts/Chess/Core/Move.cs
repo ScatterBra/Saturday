@@ -36,8 +36,6 @@ namespace SaturdayGame.Chess
         public Coord KnockTo;
         /// <summary>被击飞到岩浆里烧掉了（可以复活）。</summary>
         public bool KnockedIntoLava;
-        /// <summary>不死的棋子被击飞到岩浆里：没死，禁止行动一回合。</summary>
-        public bool Scorched;
 
         /// <summary>走进岩浆献祭了。</summary>
         public bool Sacrificed;

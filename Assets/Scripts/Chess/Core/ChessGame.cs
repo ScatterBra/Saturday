@@ -43,8 +43,6 @@ namespace SaturdayGame.Chess
         public int StormTurn = 20;
         /// <summary>第三阶段要往岩浆里献祭几个棋子，岩浆才能站、才能过河。</summary>
         public int SacrificesNeeded = 3;
-        /// <summary>第三阶段每献祭这么多个棋子，玩家选一枚棋子变成不死。0 = 不给。</summary>
-        public int UndyingEvery = 2;
         /// <summary>第三阶段开始时弹一次技能，之后每隔这么多回合再弹一次。</summary>
         public int Stage3SkillEvery = 5;
         /// <summary>第三阶段开始后的第几回合朋友放技能（例如 2 = 风暴后第 2 回合）。</summary>
@@ -65,7 +63,7 @@ namespace SaturdayGame.Chess
     /// 第一、二阶段按正式的将军规则（不能送将，王不会被吃）：玩家被将军时可以选一个救急技能；被将死就输。
     /// 进入第三阶段（风暴）：第 20 回合，或者第 10 回合选卡之后将军了对手，或者将死了对手。
     /// 第三阶段（城堡营救）：棋盘换成预设的地形和阵型，马进城堡就赢，不会输；朋友只守城堡，并按时间表放技能。
-    /// 献祭完成前我方走进岩浆 = 献祭，每献祭 UndyingEvery 个选一枚棋子变成不死；献祭完成后岩浆可以站、可以过。
+    /// 献祭完成前我方走进岩浆 = 献祭；献祭完成后我方所有棋子都能站在岩浆上、走过岩浆。
     ///
     /// 所有操作都会往事件队列里加事件，表现层用 DrainEvents() 取出来按顺序演出。
     /// </summary>
@@ -87,7 +85,6 @@ namespace SaturdayGame.Chess
         int stage3StartTurn = -1;
         int nextStage3Offer;
         int friendSkillIndex;
-        bool undyingPickDue;
 
         public Board Board { get; }
         public Random Rng { get; }
@@ -183,7 +180,6 @@ namespace SaturdayGame.Chess
             if (result.Sacrificed)
             {
                 events.Add(GameEvent.Sacrificed(mover, move.From, move.To));
-                if (settings.UndyingEvery > 0 && Board.Sacrifices % settings.UndyingEvery == 0) undyingPickDue = true;
                 if (result.TaskCompleted) OnSacrificeTaskCompleted();
                 else events.Add(GameEvent.Dialogue(Speakers.Friend, $"The lava wants {settings.SacrificesNeeded - Board.Sacrifices} more."));
             }
@@ -195,11 +191,6 @@ namespace SaturdayGame.Chess
             {
                 events.Add(GameEvent.KnockedBack(result.KnockedBack, result.KnockFrom, result.KnockTo, mover));
                 if (result.KnockedIntoLava) events.Add(GameEvent.Captured(result.KnockedBack, result.KnockTo, "lava", mover));
-                if (result.Scorched)
-                {
-                    events.Add(GameEvent.AppearanceChanged(result.KnockedBack));
-                    events.Add(GameEvent.Dialogue(Speakers.You, "Ha! Undying. It just needs a turn to cool off."));
-                }
             }
             if (result.Captured != null) events.Add(GameEvent.Captured(result.Captured, move.To, "captured", mover));
             if (result.Promoted) events.Add(GameEvent.Promoted(mover));
@@ -223,18 +214,6 @@ namespace SaturdayGame.Chess
 
             foreach (var rule in activeRules) rule.OnTurnEnded(ctx, side);
             if (storm) StartStorm(stormLine);
-            if (undyingPickDue)
-            {
-                // 献祭奖励：马上让玩家点选一枚棋子变成不死，选完轮到对手
-                undyingPickDue = false;
-                var reward = new UndyingRule();
-                if (reward.IsAvailable(ctx))
-                {
-                    activation = reward.Activate(ctx).GetEnumerator();
-                    ContinueActivation();
-                    return result;
-                }
-            }
             BeginTurn();
             return result;
         }
@@ -425,9 +404,6 @@ namespace SaturdayGame.Chess
             events.Add(GameEvent.Dialogue(Speakers.Friend, "The princess is up in that castle. Only a knight can get her out."));
             events.Add(GameEvent.Dialogue(Speakers.Friend,
                 $"But first, the lava. Feed it {settings.SacrificesNeeded} of your pieces and it'll let you cross."));
-            if (settings.UndyingEvery > 0)
-                events.Add(GameEvent.Dialogue(Speakers.Friend,
-                    $"Every {settings.UndyingEvery} you feed it, one of your pieces becomes undying."));
         }
 
         void OnSacrificeTaskCompleted()

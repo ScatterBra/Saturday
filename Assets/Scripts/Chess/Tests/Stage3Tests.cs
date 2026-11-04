@@ -180,68 +180,6 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void UndyingPieces_KnockedIntoLava_SitOutOneTurnInsteadOfDying()
-        {
-            const string terrain = "........\n........\n........\n........\n........\n........\n...~....\n........";
-            const string pieces = "r.......\n........\n...r....\n........\n...N....\n........\n........\nK.......";
-            var board = Setup(terrain, pieces, 0, PieceType.King, PieceType.Knight);
-            var knight = board.PieceAt(C("d4"));
-            knight.Undying = true;
-
-            board.Pass();
-            var result = board.Apply(new Move(board.PieceAt(C("d6")).Id, C("d6"), C("d4")));
-            Assert.AreSame(knight, result.KnockedBack);
-            Assert.AreEqual(C("d2"), result.KnockTo, "the friend still likes knocking it into the lava");
-            Assert.IsTrue(result.Scorched);
-            Assert.IsFalse(result.KnockedIntoLava);
-            Assert.IsTrue(knight.OnBoard);
-            Assert.AreSame(knight, board.PieceAt(C("d2")));
-            Assert.AreEqual(0, MoveGenerator.MovesFor(board, knight).Count, "it can't move this turn");
-
-            board.Pass(); // 玩家这一回合动不了
-            Assert.IsFalse(knight.IsFrozen);
-            Assert.Greater(MoveGenerator.MovesFor(board, knight).Count, 0);
-        }
-
-        [Test]
-        public void EveryTwoSacrifices_ThePlayerPicksAnUndyingPiece()
-        {
-            var game = new ChessGame(new GameSettings { Seed = 5, StageTurns = new int[0], StormTurn = 1, FriendSkillTurns = new int[0] });
-            Assert.IsTrue(game.InStage3);
-            int sacrifices = 0, guard = 0;
-            while (sacrifices < 2)
-            {
-                Assert.Less(++guard, 100);
-                switch (game.Phase)
-                {
-                    case GamePhase.ChoosingRule:
-                        game.SkipOffers();
-                        break;
-                    case GamePhase.PlayerTurn:
-                        game.PlayMove(game.LegalMoves().First(m => game.Board.IsLava(m.To)));
-                        sacrifices++;
-                        if (sacrifices == 1) Assert.AreEqual(GamePhase.OpponentTurn, game.Phase, "one sacrifice is not enough yet");
-                        break;
-                    case GamePhase.OpponentTurn:
-                        game.PlayMove(game.LegalMoves().First());
-                        break;
-                    default:
-                        Assert.Fail($"unexpected phase {game.Phase}");
-                        break;
-                }
-            }
-            Assert.AreEqual(2, game.Board.Sacrifices);
-            Assert.AreEqual(GamePhase.ChoosingTarget, game.Phase);
-            var request = game.PendingTarget;
-            Assert.IsFalse(request.AllowSkip);
-            Assert.IsTrue(request.Options.All(c => game.Board.PieceAt(c).Side == Side.White && game.Board.PieceAt(c).Type != PieceType.King));
-            var chosen = game.Board.PieceAt(request.Options[0]);
-            game.ResolveTarget(request.Options[0]);
-            Assert.IsTrue(chosen.Undying);
-            Assert.AreEqual(GamePhase.OpponentTurn, game.Phase, "after picking, it's the friend's move");
-        }
-
-        [Test]
         public void FriendKnocksPiecesBack_PreferringLava_AndNeverAttacksTheKing()
         {
             const string terrain = "........\n........\n........\n........\n........\n........\n...~....\n........";
