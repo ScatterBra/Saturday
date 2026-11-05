@@ -9,9 +9,8 @@ namespace SaturdayGame.Chess
     /// - 冻结的子不能动。
     /// - 第三阶段：
     ///   * 高原的高度只是画面效果，所有棋子照常走。
-    ///   * 城堡挡住所有棋子；只有我方的马能跳进城堡，而且要先完成献祭。
-    ///   * 献祭完成前，我方棋子只能落在岩浆这一侧，或者走进岩浆献祭（王除外）；
-    ///     完成后我方棋子可以站在岩浆上、滑过岩浆。对手的棋子不上岩浆。
+    ///   * 城堡挡住所有棋子；只有我方的马能跳进城堡。
+    ///   * 岩浆格谁都不能落、也不能滑过去（马可以跳过去）。棋子只会被推、拉、击飞进岩浆。
     ///   * 对手不攻击我方的王；对手打我方棋子时要能把它击飞，否则这步不能走。
     /// </summary>
     public static class MoveGenerator
@@ -107,25 +106,18 @@ namespace SaturdayGame.Chess
         }
 
         /// <summary>落点检查结果：能不能落，以及（滑行时）要不要在这里停下。</summary>
-        enum Landing { Free, Capture, Sacrifice, Blocked }
+        enum Landing { Free, Capture, Blocked }
 
-        /// <summary>能不能落在 to：城堡、岩浆、我方活动范围、占位。</summary>
+        /// <summary>能不能落在 to：城堡、岩浆、占位。</summary>
         static Landing Check(Board board, Piece piece, Coord from, Coord to)
         {
             if (!to.IsValid) return Landing.Blocked;
             if (board.IsCastle(to))
             {
-                bool mayEnter = piece.Side == board.Rescuer && piece.Type == PieceType.Knight && board.TaskComplete;
+                bool mayEnter = piece.Side == board.Rescuer && piece.Type == PieceType.Knight;
                 return mayEnter && board.IsEmpty(to) ? Landing.Free : Landing.Blocked;
             }
-            if (board.IsLava(to))
-            {
-                // 献祭完成后我方可以站在岩浆上；对手的棋子不上岩浆
-                if (board.Stage3 && piece.Side == board.Rescuer && board.TaskComplete) return OccupantCheck(board, piece, from, to);
-                return CanSacrifice(board, piece) ? Landing.Sacrifice : Landing.Blocked;
-            }
-            if (board.Stage3 && piece.Side == board.Rescuer && !board.TaskComplete && !board.InPlayerZone(to))
-                return Landing.Blocked;
+            if (board.IsLava(to)) return Landing.Blocked;
             return OccupantCheck(board, piece, from, to);
         }
 
@@ -135,9 +127,6 @@ namespace SaturdayGame.Chess
             if (target == null) return Landing.Free;
             return CanAttack(board, piece, target, from) ? Landing.Capture : Landing.Blocked;
         }
-
-        static bool CanSacrifice(Board board, Piece piece) =>
-            board.Stage3 && piece.Side == board.Rescuer && !board.TaskComplete && piece.Type != PieceType.King;
 
         static bool CanAttack(Board board, Piece attacker, Piece target, Coord from)
         {
@@ -156,7 +145,7 @@ namespace SaturdayGame.Chess
             int dir = pawn.Side.Forward();
             var one = new Coord(from.X, from.Y + dir);
             var oneCheck = Check(board, pawn, from, one);
-            if (oneCheck == Landing.Free || oneCheck == Landing.Sacrifice)
+            if (oneCheck == Landing.Free)
             {
                 moves.Add(new Move(pawn.Id, from, one));
                 var two = new Coord(from.X, from.Y + 2 * dir);
@@ -190,7 +179,7 @@ namespace SaturdayGame.Chess
                     var landing = Check(board, piece, from, to);
                     if (landing == Landing.Blocked) break;
                     moves.Add(new Move(piece.Id, from, to));
-                    if (landing != Landing.Free) break; // 吃子、献祭后停下
+                    if (landing != Landing.Free) break; // 吃子后停下
                     to = to + dir;
                 }
             }

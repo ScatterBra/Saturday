@@ -1,7 +1,7 @@
 namespace SaturdayGame.Chess
 {
     /// <summary>
-    /// 一枚棋子。规则不会改写走法，只会修改这里的状态（冻结、不死、外观），
+    /// 一枚棋子。规则不会改写走法，只会修改这里的状态（冻结、外观），
     /// 走法生成器读取这些状态来决定能怎么走。
     /// </summary>
     public sealed class Piece
@@ -13,12 +13,8 @@ namespace SaturdayGame.Chess
         public Coord Pos;
         /// <summary>开局时的位置，复活时尽量放回这里。</summary>
         public Coord StartPos;
-        /// <summary>被吃掉（或被献祭、被风暴卷走）后为 false。</summary>
+        /// <summary>被吃掉（包括掉进岩浆）后为 false。</summary>
         public bool OnBoard = true;
-        /// <summary>被献祭进岩浆：永远不会回来，也不进被吃区。</summary>
-        public bool Sacrificed;
-        /// <summary>第三阶段风暴来临时被卷走的旧棋子（对手原来的棋子）：不进被吃区。</summary>
-        public bool Retired;
         /// <summary>
         /// 被吃过（包括被规则烧掉、被弹进岩浆）。复活后也不清除，表现层据此一直用纸片版的样子。
         /// </summary>
@@ -40,8 +36,8 @@ namespace SaturdayGame.Chess
         /// <summary>规则的随机效果（龙火、鸟群等）能不能选中它。</summary>
         public bool IsTargetable => OnBoard && Type != PieceType.King;
 
-        /// <summary>被吃掉、可以复活的棋子（献祭的和被风暴卷走的不算）。</summary>
-        public bool IsRevivable => !OnBoard && !Sacrificed && !Retired;
+        /// <summary>被吃掉、可以复活的棋子。</summary>
+        public bool IsRevivable => !OnBoard;
 
         public Piece Clone() => (Piece)MemberwiseClone();
 

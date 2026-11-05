@@ -88,7 +88,7 @@ namespace SaturdayGame.Chess
         /// <summary>
         /// 第一、二阶段：放回原来的起始格；被占了就放到离起始格最近的空格（同样近时离自己底线近的优先）。
         /// 兵不能放在底线和升变线上。
-        /// 第三阶段：放在离自己的王最近的空平地上；献祭完成前只能放在岩浆这一侧。
+        /// 第三阶段：放在离自己的王最近的空平地上。
         /// </summary>
         public static Coord? FindSquare(Board board, Piece piece)
         {
@@ -104,7 +104,6 @@ namespace SaturdayGame.Chess
                 if (board.Stage3)
                 {
                     if (board.Height(c) > 0) continue;
-                    if (piece.Side == board.Rescuer && !board.TaskComplete && !board.InPlayerZone(c)) continue;
                 }
                 int distance = c.DistanceTo(anchor);
                 int tie = System.Math.Abs(c.Y - piece.Side.HomeRank()) * 8 + c.X;

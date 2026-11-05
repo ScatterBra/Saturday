@@ -8,7 +8,7 @@ namespace SaturdayGame.Chess
     /// 对方最贪心的回应会吃掉什么，选子力最划算的走法，再加一点随机噪声。
     /// 走法都是走法生成器给的合法走法，所以它不会送将，也不会吃王。
     /// AI 不知道有哪些规则，它只调用走法生成器，所以自然会遵守冻结、城堡、岩浆等状态。
-    /// 不过第三阶段的打分知道“马要进城堡、要先献祭”这个目标。
+    /// 不过第三阶段的打分知道“马要进城堡”这个目标。
     /// </summary>
     public sealed class ChessAI
     {
@@ -60,7 +60,7 @@ namespace SaturdayGame.Chess
 
         /// <summary>
         /// 第三阶段：朋友（守城方）只守城堡——尽量让玩家的马离城堡远、把它打进岩浆，绝不放玩家下一步进城堡。
-        /// 玩家一方（测试里也由 AI 代下）：先凑够献祭，再让马往城堡靠近，能进城堡就进。
+        /// 玩家一方（测试里也由 AI 代下）：让马往城堡靠近，能进城堡就进。
         /// </summary>
         Move? ChooseStage3Move(Board board, Side side, List<Move> moves)
         {
@@ -99,18 +99,8 @@ namespace SaturdayGame.Chess
 
         static double RescuerScore(Board board, Side me, MoveResult result)
         {
-            // 分数要连续：完成献祭（+20）永远比停在差一个的时候好，之后再看马离城堡多近
-            double score = 0.3 * Material(board, me) + 6 * Math.Min(board.Sacrifices, board.SacrificesNeeded);
-            if (result.Sacrificed && result.Mover.Type == PieceType.Knight) score -= 20;
-            if (board.TaskComplete) score += 20 - 1.5 * KnightDistance(board);
-            return score;
+            return 0.3 * Material(board, me) - 1.5 * KnightDistance(board);
         }
-
-        static readonly Coord[] KnightJumps =
-        {
-            new Coord(1, 2), new Coord(2, 1), new Coord(2, -1), new Coord(1, -2),
-            new Coord(-1, -2), new Coord(-2, -1), new Coord(-2, 1), new Coord(-1, 2),
-        };
 
         /// <summary>
         /// 玩家最靠近城堡的那匹马还要跳几步才能进城堡（马无视高度，只按 L 形跳数算，不管路上有没有子）；
@@ -118,26 +108,7 @@ namespace SaturdayGame.Chess
         /// </summary>
         static double KnightDistance(Board board)
         {
-            var steps = new int[64];
-            for (int i = 0; i < 64; i++) steps[i] = -1;
-            var queue = new Queue<Coord>();
-            for (int i = 0; i < 64; i++)
-            {
-                if (!board.IsCastle(Coord.FromIndex(i))) continue;
-                steps[i] = 0;
-                queue.Enqueue(Coord.FromIndex(i));
-            }
-            while (queue.Count > 0)
-            {
-                var c = queue.Dequeue();
-                foreach (var jump in KnightJumps)
-                {
-                    var next = c + jump;
-                    if (!next.IsValid || steps[next.Index] >= 0) continue;
-                    steps[next.Index] = steps[c.Index] + 1;
-                    queue.Enqueue(next);
-                }
-            }
+            var steps = board.KnightStepsToCastle();
 
             double best = 12;
             foreach (var p in board.PiecesOf(board.Rescuer))

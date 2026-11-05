@@ -29,8 +29,8 @@ namespace SaturdayGame.Chess.View
         };
         [Tooltip("到这个回合朋友掀起风暴，进入第三阶段")]
         public int stormTurn = 20;
-        [Tooltip("第三阶段要往岩浆里献祭几个棋子，岩浆才能站、才能过河（马才能进城堡）")]
-        public int sacrificesNeeded = 3;
+        [Tooltip("风暴后随机撒多少格岩浆")]
+        public int lavaSquares = 5;
         [Tooltip("第三阶段每隔几回合弹一次技能")]
         public int stage3SkillEvery = 5;
         [Tooltip("第三阶段开始后的第几回合朋友放技能（鸟群）")]
@@ -85,6 +85,9 @@ namespace SaturdayGame.Chess.View
         bool jumpToStage3;
         Piece selected;
         List<Move> selectedMoves = new List<Move>();
+        /// <summary>选中消防栓或青蛙时，鼠标停在哪个落点上，以及落下去会喷谁、拉谁（玩家走这一步就照这个来）。</summary>
+        Coord? previewSquare;
+        HydrantSpray.Result? preview;
         Move? lastMove;
 
         public ChessGame Game => game;
@@ -145,7 +148,7 @@ namespace SaturdayGame.Chess.View
                 OpeningRules = openingRules,
                 // 调试跳关：第一回合就掀起风暴
                 StormTurn = jumpToStage3 ? 1 : stormTurn,
-                SacrificesNeeded = sacrificesNeeded,
+                LavaSquares = lavaSquares,
                 Stage3SkillEvery = stage3SkillEvery,
                 FriendSkillTurns = friendSkillTurns,
                 Layout = stage3Layout != null ? stage3Layout.Build() : null,
@@ -155,6 +158,8 @@ namespace SaturdayGame.Chess.View
             ai = new ChessAI(new System.Random(settings.Seed + 1)) { BlunderChance = aiBlunderChance };
             selected = null;
             selectedMoves.Clear();
+            previewSquare = null;
+            preview = null;
             lastMove = null;
             board.Bind(game.Board);
             hud.ResetForNewGame();
@@ -183,6 +188,7 @@ namespace SaturdayGame.Chess.View
 
             var mouse = Mouse.current;
             if (mouse == null) return;
+            UpdatePreview(mouse.position.ReadValue());
             if (mouse.rightButton.wasPressedThisFrame) Deselect();
             if (!mouse.leftButton.wasPressedThisFrame) return;
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
@@ -207,7 +213,9 @@ namespace SaturdayGame.Chess.View
                 foreach (var move in selectedMoves)
                 {
                     if (move.To != coord) continue;
-                    PlayMove(move);
+                    // 预览过这个落点就照预览来；没预览过（例如用代码点）就让规则自己随机挑
+                    int? effectTarget = previewSquare == coord && preview.HasValue ? preview.Value.Piece.Id : (int?)null;
+                    PlayMove(move, effectTarget);
                     return;
                 }
             }
@@ -260,11 +268,11 @@ namespace SaturdayGame.Chess.View
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
-        void PlayMove(Move move)
+        void PlayMove(Move move, int? effectTarget = null)
         {
             Deselect();
             lastMove = move;
-            game.PlayMove(move);
+            game.PlayMove(move, effectTarget);
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
@@ -272,6 +280,8 @@ namespace SaturdayGame.Chess.View
         {
             selected = piece;
             selectedMoves = game.MovesFor(piece);
+            previewSquare = null;
+            preview = null;
             board.Highlight(piece.Pos, selectedMoves, null, lastMove, DangerSquare());
             if (piece.IsFrozen)
                 hud.SetStatus($"That {Name(piece)} is frozen.");
@@ -285,6 +295,32 @@ namespace SaturdayGame.Chess.View
             selectedMoves.Clear();
             if (game.Phase != GamePhase.ChoosingTarget) board.Highlight(null, null, null, lastMove, DangerSquare());
             UpdateStatus();
+        }
+
+        /// <summary>
+        /// 选中的是消防栓或青蛙时，鼠标移到哪个落点，就在一份棋盘拷贝上走一遍，标出落地后会喷谁、拉谁、落到哪。
+        /// 同样近的目标有好几个时随机挑一个显示，玩家走这一步时就用这一个。
+        /// </summary>
+        void UpdatePreview(Vector2 mousePosition)
+        {
+            Coord? hovered = null;
+            if (selected != null && game.Phase == GamePhase.PlayerTurn &&
+                board.TryGetCoord(boardCamera.ScreenPointToRay(mousePosition), out var c) && selectedMoves.Any(m => m.To == c))
+                hovered = c;
+            if (hovered == previewSquare) return;
+
+            previewSquare = hovered;
+            preview = null;
+            if (hovered.HasValue)
+            {
+                var move = selectedMoves.First(m => m.To == hovered.Value);
+                var next = game.Board.Clone();
+                var result = next.Apply(move);
+                var options = result.Rescued ? new List<HydrantSpray.Result>() : FireHydrantRule.EffectCandidates(next, next.GetPiece(move.PieceId));
+                if (options.Count > 0) preview = options[Random.Range(0, options.Count)];
+            }
+            board.Highlight(selected.Pos, selectedMoves, null, lastMove, DangerSquare(),
+                preview.HasValue ? (preview.Value.Piece.Pos, preview.Value.To, preview.Value.Burns) : ((Coord, Coord, bool)?)null);
         }
 
         /// <summary>玩家被将军时王所在的格子（标红）。</summary>
@@ -326,9 +362,6 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.Moved:
                         yield return board.AnimateMove(e.PieceId, e.From, e.To, moveDuration);
                         PlaySound(s => s.pieceFall);
-                        break;
-                    case GameEventType.Sacrificed:
-                        yield return board.AnimateSacrifice(e.PieceId, e.To, moveDuration);
                         break;
                     case GameEventType.Pushed:
                         // 推子的是消防栓就是喷水，是青蛙就是舌头
@@ -452,9 +485,7 @@ namespace SaturdayGame.Chess.View
             switch (game.Phase)
             {
                 case GamePhase.PlayerTurn:
-                    if (game.InStage3 && !b.TaskComplete)
-                        hud.SetStatus($"Turn {turn} - feed the lava ({b.Sacrifices}/{b.SacrificesNeeded}) or move");
-                    else if (game.InStage3)
+                    if (game.InStage3)
                         hud.SetStatus($"Turn {turn} - get a knight into the castle!");
                     else if (game.InCheck(game.PlayerSide))
                         hud.SetStatus($"Turn {turn} - Check! Your move");

@@ -41,8 +41,8 @@ namespace SaturdayGame.Chess
         };
         /// <summary>到这个回合（玩家走之前）朋友掀起风暴，进入第三阶段。</summary>
         public int StormTurn = 20;
-        /// <summary>第三阶段要往岩浆里献祭几个棋子，岩浆才能站、才能过河。</summary>
-        public int SacrificesNeeded = 3;
+        /// <summary>风暴后随机撒多少格岩浆。</summary>
+        public int LavaSquares = 5;
         /// <summary>第三阶段开始时弹一次技能，之后每隔这么多回合再弹一次。</summary>
         public int Stage3SkillEvery = 5;
         /// <summary>第三阶段开始后的第几回合朋友放技能（例如 2 = 风暴后第 2 回合）。</summary>
@@ -63,7 +63,7 @@ namespace SaturdayGame.Chess
     /// 第一、二阶段按正式的将军规则（不能送将，王不会被吃）：玩家被将军时可以选一个救急技能；被将死就输。
     /// 进入第三阶段（风暴）：第 20 回合，或者第 10 回合选卡之后将军了对手，或者将死了对手。
     /// 第三阶段（城堡营救）：棋盘换成预设的地形和阵型，马进城堡就赢，不会输；朋友只守城堡，并按时间表放技能。
-    /// 献祭完成前我方走进岩浆 = 献祭；献祭完成后我方所有棋子都能站在岩浆上、走过岩浆。
+    /// 风暴把双方的棋子吹散到随机位置，再随机撒几格岩浆；棋子只会被推、拉、击飞进岩浆烧掉。
     ///
     /// 所有操作都会往事件队列里加事件，表现层用 DrainEvents() 取出来按顺序演出。
     /// </summary>
@@ -166,7 +166,11 @@ namespace SaturdayGame.Chess
 
         bool IsMovePhase => Phase == GamePhase.PlayerTurn || Phase == GamePhase.OpponentTurn;
 
-        public MoveResult PlayMove(Move move)
+        /// <param name="effectTargetId">
+        /// 走的是消防栓或青蛙时，落地后喷谁、拉谁（玩家在预览里看到的那枚棋子的 Id）；
+        /// 为 null 或者已经不是可选目标时，在同样近的目标里随机挑。
+        /// </param>
+        public MoveResult PlayMove(Move move, int? effectTargetId = null)
         {
             if (!IsMovePhase) throw new InvalidOperationException($"Cannot move during {Phase}");
             if (!MoveGenerator.Generate(Board, Board.SideToMove).Contains(move))
@@ -177,16 +181,7 @@ namespace SaturdayGame.Chess
             var result = Board.Apply(move);
             passesInARow = 0;
 
-            if (result.Sacrificed)
-            {
-                events.Add(GameEvent.Sacrificed(mover, move.From, move.To));
-                if (result.TaskCompleted) OnSacrificeTaskCompleted();
-                else events.Add(GameEvent.Dialogue(Speakers.Friend, $"The lava wants {settings.SacrificesNeeded - Board.Sacrifices} more."));
-            }
-            else
-            {
-                events.Add(GameEvent.Moved(mover, move.From, move.To));
-            }
+            events.Add(GameEvent.Moved(mover, move.From, move.To));
             if (result.KnockedBack != null)
             {
                 events.Add(GameEvent.KnockedBack(result.KnockedBack, result.KnockFrom, result.KnockTo, mover));
@@ -194,8 +189,9 @@ namespace SaturdayGame.Chess
             }
             if (result.Captured != null) events.Add(GameEvent.Captured(result.Captured, move.To, "captured", mover));
             if (result.Promoted) events.Add(GameEvent.Promoted(mover));
-            if (!result.Sacrificed)
-                foreach (var rule in activeRules) rule.OnPieceMoved(ctx, mover, move.From);
+            ctx.PreferredTargetId = effectTargetId;
+            foreach (var rule in activeRules) rule.OnPieceMoved(ctx, mover, move.From);
+            ctx.PreferredTargetId = null;
 
             if (result.Rescued)
             {
@@ -388,12 +384,13 @@ namespace SaturdayGame.Chess
             return true;
         }
 
-        /// <summary>朋友掀起风暴：棋盘换成第三阶段的地形和阵型，轮到玩家。</summary>
+        /// <summary>朋友掀起风暴：铺上第三阶段的地形，双方棋子被吹散到随机位置，撒上岩浆，轮到玩家。</summary>
         void StartStorm(string line)
         {
             events.Add(GameEvent.Dialogue(Speakers.Friend, line));
             events.Add(GameEvent.Storm());
-            Board.ApplyLayout(settings.Layout ?? Stage3Layout.Default, PlayerSide, settings.SacrificesNeeded);
+            Board.BeginStage3(settings.Layout ?? Stage3Layout.Default, PlayerSide);
+            Board.Scatter(Rng, settings.LavaSquares);
             nextStage = CardStages;
             stage3StartTurn = Board.FullMove;
             nextStage3Offer = Board.FullMove;
@@ -402,13 +399,7 @@ namespace SaturdayGame.Chess
             events.Add(GameEvent.StageStarted(2));
             events.Add(GameEvent.BoardRebuilt());
             events.Add(GameEvent.Dialogue(Speakers.Friend, "The princess is up in that castle. Only a knight can get her out."));
-            events.Add(GameEvent.Dialogue(Speakers.Friend,
-                $"But first, the lava. Feed it {settings.SacrificesNeeded} of your pieces and it'll let you cross."));
-        }
-
-        void OnSacrificeTaskCompleted()
-        {
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "The lava's had enough. You can walk on it now. Just don't get knocked in."));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "Mind the lava. Whatever falls in is gone."));
         }
 
         void CastFriendSkill()

@@ -97,6 +97,12 @@ namespace SaturdayGame.Chess
             this.emit = emit;
         }
 
+        /// <summary>
+        /// 这一步走完后，消防栓、青蛙优先喷或拉这枚棋子（玩家在预览里看到的目标，见 ChessGame.PlayMove）。
+        /// 只在 OnPieceMoved 期间有值。
+        /// </summary>
+        public int? PreferredTargetId;
+
         public void Emit(GameEvent e) => emit(e);
 
         public void Say(string speaker, string text) => emit(GameEvent.Dialogue(speaker, text));
@@ -142,10 +148,17 @@ namespace SaturdayGame.Chess
             emit(GameEvent.Revived(piece));
         }
 
-        /// <summary>把棋子推到另一个空格。兵被推到对方底线时照常升变成后。</summary>
+        /// <summary>把棋子推到另一个空格；推到岩浆格就烧掉（可以复活）。兵被推到对方底线时照常升变成后。</summary>
         public void Push(Piece piece, Coord to, Piece source)
         {
             var from = piece.Pos;
+            if (Board.IsLava(to))
+            {
+                Board.BurnInLava(piece, to);
+                emit(GameEvent.Pushed(piece, from, to, source));
+                emit(GameEvent.Captured(piece, to, "lava", source));
+                return;
+            }
             Board.Relocate(piece, to);
             emit(GameEvent.Pushed(piece, from, to, source));
             if (piece.Type == PieceType.Pawn && to.Y == piece.Side.PromotionRank())

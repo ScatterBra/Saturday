@@ -302,7 +302,7 @@ namespace SaturdayGame.Chess.Tests
         {
             var pools = Enumerable.Range(0, RuleCatalog.StageCount).Select(s => RuleCatalog.CreatePool(s).Select(r => r.Id).ToArray()).ToArray();
             var activated = new Dictionary<string, int>();
-            int games = 0, stage3 = 0, sacrificeTasks = 0, knockbacks = 0, rescues = 0, emergencies = 0, friendSkills = 0, pushes = 0;
+            int games = 0, stage3 = 0, burned = 0, knockbacks = 0, rescues = 0, emergencies = 0, friendSkills = 0, pushes = 0;
             const string a = "auto";
 
             foreach (var b in pools[1])
@@ -327,24 +327,24 @@ namespace SaturdayGame.Chess.Tests
                             CollectionAssert.Contains(Revivable, auto.Game.Board.GetPiece(e.PieceId).Type);
                         if (e.Type == GameEventType.KnockedBack) knockbacks++;
                         if (e.Type == GameEventType.Pushed) pushes++;
+                        if (e.Type == GameEventType.Captured && e.Text == "lava") burned++;
                         if (e.Type == GameEventType.OpponentSkill) friendSkills++;
                         if (e.Type == GameEventType.RulesOffered && e.OfferKind == OfferKind.Emergency) emergencies++;
                     }
                     if (auto.Game.InStage3) stage3++;
-                    if (auto.Game.Board.TaskComplete) sacrificeTasks++;
                     if (auto.Game.Winner == Side.White) rescues++;
                     games++;
                 }
             }
 
-            TestContext.WriteLine($"{games} games, {stage3} reached stage 3, {sacrificeTasks} finished the lava task, " +
+            TestContext.WriteLine($"{games} games, {stage3} reached stage 3, {burned} pieces burned in lava, " +
                                   $"{rescues} rescued the princess, {knockbacks} knockbacks, {pushes} hydrant pushes, {emergencies} emergency offers, {friendSkills} friend skills");
             foreach (var kv in activated.OrderBy(kv => kv.Key)) TestContext.WriteLine($"  {kv.Key}: {kv.Value}");
             foreach (var id in pools.SelectMany(p => p).Concat(new GameSettings().OpeningRules.Select(r => r.RuleId)))
                 Assert.IsTrue(activated.ContainsKey(id), $"rule {id} was never activated");
             Assert.Greater(pushes, 0, "hydrants should push pieces around");
             Assert.Greater(stage3, games / 2, "most games should reach stage 3");
-            Assert.Greater(sacrificeTasks, 0, "someone should finish the lava task");
+            Assert.Greater(burned, 0, "pieces should end up in the lava now and then");
             Assert.Greater(rescues, games / 2, "most games should end with a rescue");
             Assert.Greater(knockbacks, 0, "the friend should knock pieces back");
             Assert.Greater(emergencies, 0, "being in check should offer emergency skills");
@@ -368,9 +368,7 @@ namespace SaturdayGame.Chess.Tests
                 if (p == null) continue;
                 Assert.IsTrue(p.OnBoard, $"{p} on {c} should be on the board");
                 Assert.AreEqual(c, p.Pos, $"{p} square mismatch");
-                if (board.IsLava(c))
-                    Assert.IsTrue(p.Side == game.PlayerSide && board.TaskComplete,
-                        $"{p} is standing on lava before the lava task is done");
+                Assert.IsFalse(board.IsLava(c), $"{p} is standing on lava");
                 if (board.IsCastle(c)) Assert.AreEqual(GamePhase.GameOver, game.Phase, $"{p} is in the castle but the game goes on");
             }
 
@@ -378,7 +376,6 @@ namespace SaturdayGame.Chess.Tests
             {
                 Assert.That(p.FrozenTurns, Is.InRange(0, 4), $"{p} frozen turns");
                 if (p.Type == PieceType.King) Assert.IsFalse(p.IsFrozen, "kings are never frozen");
-                if (p.Sacrificed || p.Retired) Assert.IsFalse(p.OnBoard, $"{p} came back after leaving for good");
                 if (p.OnBoard) Assert.AreSame(p, board.PieceAt(p.Pos), $"{p} missing from its square");
             }
 

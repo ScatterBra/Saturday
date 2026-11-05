@@ -503,6 +503,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1185032823}
   - component: {fileID: 1185032822}
+  - component: {fileID: 1185032824}
   m_Layer: 0
   m_Name: Chess
   m_TagString: Untagged
@@ -530,8 +531,7 @@ MonoBehaviour:
   - Turn: 7
     RuleId: fire_hydrant
   stormTurn: 20
-  sacrificesNeeded: 3
-  undyingEvery: 2
+  lavaSquares: 5
   stage3SkillEvery: 5
   friendSkillTurns: 0200000007000000
   stage3Layout: {fileID: 11400000, guid: 52917deb2eda9e04983c39bf07bcb37c, type: 2}
@@ -540,6 +540,7 @@ MonoBehaviour:
   placeholderMaterial: {fileID: 2100000, guid: e5dcdf854c0d80046868a3a87992b13f, type: 2}
   pieceArt: {fileID: 11400000, guid: 5f60d6a5c08f1ce468d67b70804a8337, type: 2}
   desk: {fileID: 330428967}
+  sounds: {fileID: 1185032824}
   titleFont: {fileID: 12800000, guid: dbdceb70e70cc44469ff42d0a40b6b94, type: 3}
   bodyFont: {fileID: 12800000, guid: cc5590936355ff94cbea6f84aa00de15, type: 3}
   shadows: 1
@@ -549,7 +550,6 @@ MonoBehaviour:
   effectDuration: 0.35
   dialogueDuration: 1.4
   stormDuration: 0.8
-  treeCameraPitch: 65
   stage3CameraPitch: 40
   stage3FieldOfView: 30
   stage3Zoom: 1
@@ -572,6 +572,52 @@ Transform:
   - {fileID: 330428968}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1185032824
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1185032821}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: baa6f46aa6b225046ad2dce9ff12b56a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: SaturdayGame.Chess.View::SaturdayGame.Chess.View.ChessSounds
+  masterVolume: 1
+  pieceFall:
+    clips:
+    - {fileID: 8300000, guid: dbab46638c32378478f172ab87c5e35a, type: 3}
+    - {fileID: 8300000, guid: 194d9e5aa37a84542889d1a39d47d649, type: 3}
+    - {fileID: 8300000, guid: 2bdd344c81a6f524d82afa61876a2c1b, type: 3}
+    - {fileID: 8300000, guid: 33c4e0739ed551a449f0a4d0b00c5f84, type: 3}
+    volume: 1
+    pitchJitter: 0.05
+  pieceChange:
+    clips:
+    - {fileID: 8300000, guid: 6a8674e8e23c9e6439d4f130796e8680, type: 3}
+    volume: 1
+    pitchJitter: 0
+  tree:
+    clips:
+    - {fileID: 8300000, guid: 43ed12d2ec92da141a45f51a8b7a542c, type: 3}
+    volume: 1
+    pitchJitter: 0
+  paperPopup:
+    clips:
+    - {fileID: 8300000, guid: 4733b93fdc03a024481313be20ddf7bf, type: 3}
+    volume: 1
+    pitchJitter: 0
+  hydrant:
+    clips:
+    - {fileID: 8300000, guid: d5cf4673b86e6d449997fad3114a8dcd, type: 3}
+    volume: 1
+    pitchJitter: 0
+  frog:
+    clips:
+    - {fileID: 8300000, guid: 579c5f0a82949ae4db2d6506f3541058, type: 3}
+    volume: 1
+    pitchJitter: 0
 --- !u!1 &1298310296
 GameObject:
   m_ObjectHideFlags: 0

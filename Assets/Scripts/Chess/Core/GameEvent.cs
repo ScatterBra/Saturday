@@ -28,7 +28,6 @@ namespace SaturdayGame.Chess
         /// <summary>第三阶段：风暴过后棋盘换成新的地形和阵型，表现层整体重建。</summary>
         BoardRebuilt,
         /// <summary>第三阶段：棋子走进岩浆献祭。</summary>
-        Sacrificed,
         /// <summary>第三阶段：我方棋子被击飞（From → To）。</summary>
         KnockedBack,
         /// <summary>对手放了一个技能（Rule）。</summary>
@@ -125,8 +124,6 @@ namespace SaturdayGame.Chess
 
         public static GameEvent BoardRebuilt() => new GameEvent { Type = GameEventType.BoardRebuilt };
 
-        public static GameEvent Sacrificed(Piece piece, Coord from, Coord at) =>
-            new GameEvent { Type = GameEventType.Sacrificed, PieceId = piece.Id, From = from, To = at, Side = piece.Side };
 
         public static GameEvent KnockedBack(Piece piece, Coord from, Coord to, Piece attacker) =>
             new GameEvent

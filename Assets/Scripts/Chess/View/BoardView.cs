@@ -26,6 +26,7 @@ namespace SaturdayGame.Chess.View
         static readonly Color PickTarget = new Color(0.35f, 0.8f, 0.95f);
         static readonly Color LastMove = new Color(0.95f, 0.8f, 0.5f);
         static readonly Color Danger = new Color(0.9f, 0.1f, 0.1f);
+        static readonly Color EffectTarget = new Color(0.75f, 0.45f, 1f);
 
         readonly Transform root;
         readonly ChessViewFactory factory;
@@ -232,7 +233,11 @@ namespace SaturdayGame.Chess.View
         /// 第三阶段献祭完成前，我方还去不了的对面格子会暗一些；高原是岩石色。
         /// 有棋盘图时平地格子藏在图下面，这些颜色改成盖在图上的半透明色块（岩浆不透明）。
         /// </summary>
-        public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null)
+        /// <param name="effect">
+        /// 消防栓、青蛙的预览：会被喷开、拉过来的棋子在 From，落到 To；Burns = 落进岩浆（To 标红）。
+        /// </param>
+        public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null,
+            (Coord From, Coord To, bool Burns)? effect = null)
         {
             var colors = new Color[64];
             var marks = new Color[64]; // 有棋盘图时的色块，alpha = 0 表示不显示
@@ -244,7 +249,6 @@ namespace SaturdayGame.Chess.View
                 if (board != null && board.Stage3)
                 {
                     if (board.Height(c) > 0) colors[i] = hasBoardArt ? Color.Lerp(Rock, Color.black, dark ? 0.12f : 0f) : Color.Lerp(colors[i], Rock, 0.6f);
-                    if (!board.TaskComplete && !board.InPlayerZone(c)) Mark(colors, marks, i, Color.black, 0.2f, 0.25f);
                 }
             }
             if (lastMove.HasValue)
@@ -270,11 +274,13 @@ namespace SaturdayGame.Chess.View
                 }
                 if (board != null && board.IsLava(c))
                 {
-                    // 岩浆格上能走（献祭）时用红色描出来，否则就是岩浆色
-                    bool target = false;
-                    if (moves != null) foreach (var m in moves) target |= m.To == c;
-                    colors[i] = target ? Color.Lerp(Lava, CaptureTarget, 0.6f) : Lava;
+                    colors[i] = Lava;
                     marks[i] = colors[i];
+                }
+                if (effect.HasValue)
+                {
+                    if (i == effect.Value.From.Index) Mark(colors, marks, i, EffectTarget, 1f, 0.6f);
+                    if (i == effect.Value.To.Index) Mark(colors, marks, i, effect.Value.Burns ? Danger : EffectTarget, 1f, effect.Value.Burns ? 0.85f : 0.4f);
                 }
                 factory.SetColor(squares[i], colors[i]);
                 if (overlays != null)
@@ -340,24 +346,6 @@ namespace SaturdayGame.Chess.View
             }
             view.Root.transform.localRotation = Quaternion.identity;
             view.SetPosition(end);
-        }
-
-        /// <summary>献祭：走进岩浆，慢慢沉下去。</summary>
-        public IEnumerator AnimateSacrifice(int id, Coord at, float duration)
-        {
-            if (!pieces.TryGetValue(id, out var view)) yield break;
-            pieces.Remove(id);
-            yield return MoveView(view, PiecePosition(at), duration);
-            var flame = factory.Primitive(PrimitiveType.Sphere, view.Root.transform, new Vector3(0, 0.3f, 0), Vector3.one * 0.8f);
-            factory.SetColor(flame, new Color(1f, 0.3f, 0.05f));
-            var start = view.Root.transform.localPosition;
-            for (float t = 0; t < 1f; t += Time.deltaTime / (duration * 2))
-            {
-                view.SetPosition(start + Vector3.down * 0.6f * t);
-                view.Root.transform.localScale = Vector3.one * (1f - t);
-                yield return null;
-            }
-            view.Destroy();
         }
 
         IEnumerator MoveView(PieceView view, Vector3 end, float duration)

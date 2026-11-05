@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 
@@ -11,14 +12,31 @@ namespace SaturdayGame.Chess.Tests
         const string Flat =
             "........\n........\n........\n........\n........\n........\n........\n........";
 
-        /// <summary>造一个只有指定我方棋子的棋盘，再铺上第三阶段的地形和阵型。</summary>
-        static Board Setup(string terrain, string pieces, int sacrificesNeeded, params PieceType[] mine)
+        /// <summary>
+        /// 摆好指定的棋子（"Ke1" 大写是玩家/白方，"rd6" 小写是朋友/黑方），再铺上第三阶段的地形，轮到玩家。
+        /// lava 是额外的岩浆格。
+        /// </summary>
+        static Board Setup(string terrain, string[] pieces, params string[] lava)
         {
             var board = new Board();
-            for (int i = 0; i < mine.Length; i++) board.AddPiece(mine[i], Side.White, Coord.FromIndex(i));
-            board.ApplyLayout(Stage3Layout.Parse(terrain, pieces), Side.White, sacrificesNeeded);
+            foreach (var s in pieces)
+            {
+                char letter = s[0];
+                var side = char.IsUpper(letter) ? Side.White : Side.Black;
+                var type = "PNBRQK".IndexOf(char.ToUpper(letter)) switch
+                {
+                    0 => PieceType.Pawn, 1 => PieceType.Knight, 2 => PieceType.Bishop,
+                    3 => PieceType.Rook, 4 => PieceType.Queen, _ => PieceType.King,
+                };
+                board.AddPiece(type, side, C(s.Substring(1)));
+            }
+            board.BeginStage3(Stage3Layout.Parse(terrain), Side.White);
+            foreach (var l in lava) board.SetLava(C(l));
             return board;
         }
+
+        static RuleContext Context(Board board, int seed, List<GameEvent> events = null) =>
+            new RuleContext(board, new Random(seed), Side.White, e => events?.Add(e));
 
         static Coord[] Targets(Board board, string square) =>
             MoveGenerator.MovesFor(board, board.PieceAt(C(square))).Select(m => m.To).ToArray();
@@ -38,171 +56,113 @@ namespace SaturdayGame.Chess.Tests
             Assert.AreEqual(3, layout.Castle.Count(c => c));
             Assert.AreEqual(Stage3Layout.CastleHeight, layout.Heights[C("a8").Index]);
             Assert.AreEqual(4, layout.Heights[C("b7").Index]);
-            var lava = new[] { "h4", "g4", "g3", "f3", "e3", "d3", "c3", "c2", "b2", "b1", "a1" };
-            CollectionAssert.AreEquivalent(lava.Select(C), Enumerable.Range(0, 64).Where(i => layout.Lava[i]).Select(Coord.FromIndex));
-            Assert.IsTrue(layout.PlayerZone[C("h3").Index], "gap in the river");
-            Assert.AreEqual(12, layout.PlayerZone.Count(z => z));
-            Assert.AreEqual(12, layout.FriendPieces.Count);
-            Assert.AreEqual(C("f1"), layout.PlayerKing);
-            CollectionAssert.AreEqual(new[] { C("e2"), C("h2") }, layout.KnightSlots);
-            Assert.IsTrue(layout.OtherSlots.All(c => layout.PlayerZone[c.Index]), "every slot is on the player's side");
+            Assert.AreEqual(0, layout.Lava.Count(l => l), "lava is scattered at random, not part of the terrain");
+
+            Assert.DoesNotThrow(() => Stage3Layout.Parse(Flat.Replace('.', '_')), "the old '_' still reads as flat ground");
+            Assert.Throws<FormatException>(() => Stage3Layout.Parse("........"));
+            Assert.Throws<FormatException>(() => Stage3Layout.Parse("....x...\n" + Flat.Substring(9)));
         }
 
         [Test]
-        public void Parse_RejectsBadGrids()
+        public void TheStorm_ScattersBothArmies_KeepsTheirLooks_AndScattersFiveLavaSquares()
         {
-            Assert.Throws<FormatException>(() => Stage3Layout.Parse("........", Flat));
-            Assert.Throws<FormatException>(() => Stage3Layout.Parse(Flat.Replace("........\n........\n", "....x...\n........\n"), Flat));
-            Assert.Throws<FormatException>(() => Stage3Layout.Parse("C.......\n" + Flat.Substring(9), "p.......\n" + Flat.Substring(9)));
-        }
-
-        [Test]
-        public void ApplyLayout_KeepsPlayerPiecesAndEffects_RetiresFriendPieces()
-        {
-            var board = Board.CreateStandard();
-            var lostKnight = board.PieceAt(C("b1"));
-            board.RemovePiece(lostKnight);
-            var rook = board.PieceAt(C("h1"));
-            rook.Skin = "hydrant";
-            var pawn = board.PieceAt(C("a2"));
-            pawn.FrozenTurns = 2;
-            pawn.FrozenSkin = "tree";
-
-            board.ApplyLayout(Stage3Layout.Default, Side.White, 3);
-
-            Assert.IsTrue(board.Stage3);
-            Assert.AreEqual(Side.White, board.SideToMove);
-            Assert.AreEqual(C("f1"), board.King(Side.White).Pos);
-            Assert.AreEqual(PieceType.Knight, board.PieceAt(C("e2")).Type, "the remaining knight goes to the first knight slot");
-            foreach (var p in board.PiecesOf(Side.White))
+            for (int seed = 0; seed < 30; seed++)
             {
-                Assert.IsFalse(board.IsLava(p.Pos), $"{p} placed on lava");
-                Assert.AreEqual(0, board.Height(p.Pos), $"{p} placed on the plateau");
+                var board = Board.CreateStandard();
+                var lostKnight = board.PieceAt(C("b1"));
+                board.RemovePiece(lostKnight);
+                var rook = board.PieceAt(C("h1"));
+                rook.Skin = "frog";
+                var pawn = board.PieceAt(C("a7"));
+                pawn.FrozenTurns = 2;
+                pawn.FrozenSkin = "tree";
+
+                board.BeginStage3(Stage3Layout.Default, Side.White);
+                board.Scatter(new Random(seed), 5);
+
+                Assert.IsTrue(board.Stage3);
+                Assert.AreEqual(Side.White, board.SideToMove);
+                Assert.AreEqual(15, board.PiecesOf(Side.White).Count(), "nobody is left out");
+                Assert.AreEqual(16, board.PiecesOf(Side.Black).Count(), "the friend keeps its whole army");
+                Assert.IsFalse(lostKnight.OnBoard, "captured pieces stay captured");
+                Assert.AreEqual("frog", rook.Skin);
+                Assert.AreEqual(2, pawn.FrozenTurns, "effects carry over");
+
+                var lava = Enumerable.Range(0, 64).Select(Coord.FromIndex).Where(board.IsLava).ToList();
+                Assert.AreEqual(5, lava.Count);
+                var steps = board.KnightStepsToCastle();
+                var whiteKing = board.King(Side.White);
+                foreach (var p in board.AllPieces.Where(p => p.OnBoard))
+                {
+                    Assert.IsFalse(board.IsLava(p.Pos) || board.IsCastle(p.Pos), $"{p} landed on lava or the castle");
+                    Assert.AreSame(p, board.PieceAt(p.Pos));
+                    if (p.Type == PieceType.Pawn) Assert.That(p.Pos.Y, Is.InRange(1, 6), $"{p} on the first or last rank");
+                    if (p.Side == Side.Black) Assert.GreaterOrEqual(p.Pos.Y, 4, $"{p} should guard the castle half");
+                    if (p.Side == Side.White && p.Type == PieceType.Knight)
+                        Assert.GreaterOrEqual(steps[p.Pos.Index], Board.MinKnightStepsToCastle, $"{p} is too close to the castle");
+                    if (p.Type == PieceType.King)
+                        Assert.IsFalse(board.AllPieces.Any(o => o.OnBoard && o.Side != p.Side && o.Pos.DistanceTo(p.Pos) <= 1),
+                            $"{p} starts right next to an enemy");
+                }
+                Assert.IsFalse(MoveGenerator.InCheck(board, Side.Black), "the friend's king doesn't start in check");
+                foreach (var c in lava)
+                {
+                    Assert.Greater(c.DistanceTo(whiteKing.Pos), 1, "no lava right next to the player's king");
+                    Assert.IsFalse(Enumerable.Range(0, 64).Select(Coord.FromIndex).Any(x => board.IsCastle(x) && x.DistanceTo(c) <= 1),
+                        "no lava right next to the castle");
+                }
+                Assert.GreaterOrEqual(lava.Count(c => board.PiecesOf(Side.Black).Any(p => p.Pos.DistanceTo(c) <= 1)), 2,
+                    "some lava lies next to the friend's pieces");
             }
-            Assert.IsTrue(board.PiecesOf(Side.White).All(p => board.InPlayerZone(p.Pos)), "nobody is placed across the lava");
-            Assert.AreEqual("hydrant", rook.Skin);
-            Assert.IsTrue(rook.OnBoard);
-            Assert.IsTrue(pawn.OnBoard, "pawns that come first in the line-up still get a square");
-            Assert.AreEqual(2, pawn.FrozenTurns, "effects carry over");
-            Assert.AreEqual(12, board.PiecesOf(Side.White).Count(), "15 pieces, 12 squares on the player's side");
-            CollectionAssert.AreEquivalent(new[] { lostKnight }, board.CapturedOf(Side.White).ToList(),
-                "the 3 pawns that don't fit are gone for good, only the captured knight can come back");
-            Assert.AreEqual(12, board.PiecesOf(Side.Black).Count());
-            Assert.AreEqual(0, board.CapturedOf(Side.Black).Count(), "pieces swept away by the storm are not 'captured'");
-            Assert.AreEqual(C("d8"), board.King(Side.Black).Pos);
-        }
-
-        const string RiverTerrain =
-            "........\n........\n........\n........\n........\n~~~~~~~_\n________\n________";
-
-        [Test]
-        public void BeforeTheTask_PlayerStaysOnItsSide_AndCanSacrificeIntoLava()
-        {
-            const string pieces = "........\n........\n........\n........\n........\n........\n*...K...\n.......*";
-            var board = Setup(RiverTerrain, pieces, 3, PieceType.King, PieceType.Rook, PieceType.Pawn);
-            // 我方位置顺序：h1、a2 → 车在 h1，兵在 a2，王在 e2
-            CollectionAssert.AreEquivalent(new[] { C("h2"), C("h3"), C("g1"), C("f1"), C("e1"), C("d1"), C("c1"), C("b1"), C("a1") }, Targets(board, "h1"),
-                "h4 is across the river, so the rook stops at the gap");
-            CollectionAssert.AreEquivalent(new[] { C("a3") }, Targets(board, "a2"), "the pawn may walk into the lava (sacrifice)");
-            CollectionAssert.DoesNotContain(Targets(board, "e2"), C("e3"), "the king can never be sacrificed");
-
-            var result = Play(board, "a2", "a3");
-            Assert.IsTrue(result.Sacrificed);
-            Assert.AreEqual(1, board.Sacrifices);
-            Assert.IsFalse(board.TaskComplete);
-            Assert.IsNull(board.PieceAt(C("a3")));
-            Assert.AreEqual(0, board.CapturedOf(Side.White).Count(), "sacrificed pieces never come back");
         }
 
         [Test]
-        public void KnightsJumpNormally_AndAfterTheTaskEveryoneCanStandOnAndCrossLava()
+        public void TheStorm_InAGame_MovesEveryoneAndTalksAboutTheLava()
         {
-            const string pieces = "........\n........\n........\n........\n........\n........\n*N**....\n....K..*";
-            var board = Setup(RiverTerrain, pieces, 3,
-                PieceType.King, PieceType.Knight, PieceType.Rook, PieceType.Pawn, PieceType.Pawn, PieceType.Pawn);
-            // 我方位置顺序：h1、a2、c2、d2 → 车在 h1，兵在 a2、c2、d2，马在 b2，王在 e1
-            var before = Targets(board, "b2");
-            CollectionAssert.Contains(before, C("d3"), "a knight may jump into the lava to sacrifice itself");
-            CollectionAssert.Contains(before, C("d1"));
-            CollectionAssert.DoesNotContain(before, C("a4"), "before the task the far side is closed");
-            CollectionAssert.DoesNotContain(before, C("c4"));
+            var game = new ChessGame(new GameSettings { Seed = 5, StageTurns = new int[0], StormTurn = 1, FriendSkillTurns = new int[0] });
+            Assert.IsTrue(game.InStage3);
+            Assert.AreEqual(16, game.Board.PiecesOf(Side.White).Count());
+            Assert.AreEqual(16, game.Board.PiecesOf(Side.Black).Count());
+            Assert.AreEqual(new GameSettings().LavaSquares, Enumerable.Range(0, 64).Count(i => game.Board.IsLava(Coord.FromIndex(i))));
+            Assert.IsTrue(game.DrainEvents().Any(e => e.Type == GameEventType.Dialogue && e.Text.Contains("lava")));
+        }
 
-            Play(board, "a2", "a3");
-            Play(board, "c2", "c3");
-            var last = Play(board, "d2", "d3");
-            Assert.IsTrue(last.TaskCompleted);
-            Assert.IsTrue(board.TaskComplete);
-
-            CollectionAssert.AreEquivalent(new[] { C("a4"), C("c4"), C("d3"), C("d1") }, Targets(board, "b2"),
-                "an ordinary knight jump, lava and the far side included");
-
-            Play(board, "h1", "h3");
-            CollectionAssert.IsSubsetOf(new[] { C("g3"), C("d3"), C("a3"), C("h8") }, Targets(board, "h3"),
-                "the rook slides over the lava and across the river");
-            var result = Play(board, "h3", "e3");
-            Assert.IsFalse(result.Sacrificed, "after the task lava is just ground");
-            Assert.AreEqual(PieceType.Rook, board.PieceAt(C("e3")).Type);
+        [Test]
+        public void LavaBlocksEveryone_KnightsJumpOverIt()
+        {
+            var board = Setup(Flat, new[] { "Ke1", "Ra1", "Nb1", "kh8" }, "a3", "c3");
+            CollectionAssert.AreEquivalent(new[] { C("a2") }, Targets(board, "a1").Where(c => c.X == 0), "the rook stops before the lava");
+            var knight = Targets(board, "b1");
+            CollectionAssert.DoesNotContain(knight, C("a3"));
+            CollectionAssert.DoesNotContain(knight, C("c3"));
+            CollectionAssert.Contains(knight, C("d2"));
         }
 
         const string PlateauTerrain =
             "C2......\n21......\n1.1.....\n........\n........\n........\n........\n........";
 
         [Test]
-        public void Plateau_IsOnlyForLooks_EveryoneMovesNormally_OnlyKnightsEnterTheCastle()
+        public void Plateau_IsOnlyForLooks_AndKnightsGoStraightIntoTheCastle()
         {
-            const string pieces = ".*......\n........\n........\nN.......\n........\n........\n........\n..*.K...";
-            var board = Setup(PlateauTerrain, pieces, 0, PieceType.King, PieceType.Knight, PieceType.Rook, PieceType.Rook);
-            // 我方位置顺序：c1、b8 → 两个车在 c1 和 b8，马在 a5
-
+            var board = Setup(PlateauTerrain, new[] { "Ke1", "Na5", "Rb8", "Rc1", "kh8" });
             CollectionAssert.AreEquivalent(new[] { C("b7"), C("c6"), C("c4"), C("b3") }, Targets(board, "a5"));
 
             var rookTargets = Targets(board, "b8");
             CollectionAssert.DoesNotContain(rookTargets, C("a8"), "only knights may enter the castle");
-            CollectionAssert.IsSubsetOf(new[] { C("c8"), C("h8"), C("b7"), C("b1") }, rookTargets,
+            CollectionAssert.IsSubsetOf(new[] { C("c8"), C("g8"), C("b7"), C("b1") }, rookTargets,
                 "a rook on the plateau slides as usual, up and down any height");
-
             CollectionAssert.IsSubsetOf(new[] { C("c6"), C("c8") }, Targets(board, "c1"), "the plateau doesn't block sliding");
 
             Play(board, "a5", "c4");
             Play(board, "c4", "b6");
-            CollectionAssert.Contains(Targets(board, "b6"), C("a8"));
-            var result = Play(board, "b6", "a8");
-            Assert.IsTrue(result.Rescued);
-        }
-
-        [Test]
-        public void TheCastleStaysShut_UntilTheLavaTaskIsDone()
-        {
-            const string pieces = "........\n........\n.N......\n........\n........\n........\n........\n....K...";
-            var board = Setup(PlateauTerrain.Replace('.', '_'), pieces, 1, PieceType.King, PieceType.Knight);
-            var targets = Targets(board, "b6");
-            CollectionAssert.DoesNotContain(targets, C("a8"));
-            CollectionAssert.Contains(targets, C("d5"), "the knight can still jump elsewhere");
-        }
-
-        [Test]
-        public void PiecesThatDoNotFitTheLayout_AreRemoved_NotPlacedAcrossTheLava()
-        {
-            // 一个子都没丢就进第三阶段：16 个棋子，默认阵型只有 12 个位置
-            var game = new ChessGame(new GameSettings { Seed = 5, StageTurns = new int[0], StormTurn = 1, FriendSkillTurns = new int[0] });
-            var board = game.Board;
-            Assert.IsTrue(game.InStage3);
-            var mine = board.AllPieces.Where(p => p.Side == Side.White).ToList();
-            var onBoard = mine.Where(p => p.OnBoard).ToList();
-            Assert.AreEqual(12, onBoard.Count);
-            Assert.IsTrue(onBoard.All(p => board.InPlayerZone(p.Pos)), "every placed piece is on the player's side of the lava");
-            Assert.AreEqual(0, board.CapturedOf(Side.White).Count(), "the extra pieces don't show up in the lost pile");
-            var removed = mine.Where(p => p.Retired).ToList();
-            Assert.AreEqual(4, removed.Count);
-            Assert.IsTrue(removed.All(p => p.Type == PieceType.Pawn), "pawns are the first to go");
+            CollectionAssert.Contains(Targets(board, "b6"), C("a8"), "no task to finish first");
+            Assert.IsTrue(Play(board, "b6", "a8").Rescued);
         }
 
         [Test]
         public void FriendKnocksPiecesBack_PreferringLava_AndNeverAttacksTheKing()
         {
-            const string terrain = "........\n........\n........\n........\n........\n........\n...~....\n........";
-            const string pieces = "r.......\n........\n...r....\n........\n...N....\n........\n........\nK.......";
-            var board = Setup(terrain, pieces, 0, PieceType.King, PieceType.Knight);
+            var board = Setup(Flat, new[] { "Ka1", "Nd4", "ra8", "rd6", "kh8" }, "d2");
             var knight = board.PieceAt(C("d4"));
 
             CollectionAssert.DoesNotContain(MoveGenerator.Generate(board, Side.Black).Select(m => m.To).ToList(), C("a1"),
@@ -222,9 +182,7 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void Knockback_IsImpossibleWhenBoxedIn_SoTheAttackIsNotAllowed()
         {
-            const string pieces = "........\n........\n........\n........\n........\n......n.\n......**\n....K.**";
-            // 我方位置顺序：g1、h1、g2、h2 → 车在 g1，兵在 h1、g2、h2
-            var board = Setup(Flat, pieces, 0, PieceType.King, PieceType.Pawn, PieceType.Pawn, PieceType.Pawn, PieceType.Rook);
+            var board = Setup(Flat, new[] { "Ke1", "Rg1", "Ph1", "Pg2", "Ph2", "ng3", "ka8" });
             var friendMoves = MoveGenerator.Generate(board, Side.Black).Select(m => m.To).ToList();
             CollectionAssert.DoesNotContain(friendMoves, C("h1"), "h1 is boxed in, so it can't be knocked back");
             CollectionAssert.Contains(friendMoves, C("h5"), "the knight still has other moves");
@@ -233,18 +191,71 @@ namespace SaturdayGame.Chess.Tests
             Assert.Throws<InvalidOperationException>(() => board.Apply(new Move(board.PieceAt(C("g3")).Id, C("g3"), C("h1"))));
         }
 
-        [Test]
-        public void RevivingInStage3_PlacesNearTheKingOnThePlayersSide()
+        static void Effect(Board board, string rook, string skin, int seed, List<GameEvent> events = null, int? preferred = null)
         {
-            var board = Board.CreateStandard();
+            var piece = board.PieceAt(C(rook));
+            piece.Skin = skin;
+            var ctx = Context(board, seed, events);
+            ctx.PreferredTargetId = preferred;
+            new FireHydrantRule().OnPieceMoved(ctx, piece, piece.Pos);
+        }
+
+        [Test]
+        public void InStage3_HydrantsSprayPiecesIntoTheLava_ButNeverTheKing()
+        {
+            var board = Setup(Flat, new[] { "Ke1", "Rd4", "pd5", "kh8" }, "d6");
+            var pawn = board.PieceAt(C("d5"));
+            var events = new List<GameEvent>();
+            Effect(board, "d4", "hydrant", 1, events);
+            Assert.IsFalse(pawn.OnBoard, "sprayed one square into the lava and burned");
+            Assert.IsTrue(events.Any(e => e.Type == GameEventType.Pushed && e.To == C("d6")));
+            Assert.IsTrue(events.Any(e => e.Type == GameEventType.Captured && e.Text == "lava" && e.PieceId == pawn.Id));
+
+            board = Setup(Flat, new[] { "Kd5", "Rd4", "kh8" }, "d6");
+            Effect(board, "d4", "hydrant", 1);
+            Assert.AreEqual(C("d5"), board.King(Side.White).Pos, "the king can't be sprayed into the lava, so it stays put");
+        }
+
+        [Test]
+        public void InStage3_FrogsPullEnemiesIntoTheLava()
+        {
+            var board = Setup(Flat, new[] { "Ke1", "Rd4", "nd6", "kh8" }, "d5");
+            var knight = board.PieceAt(C("d6"));
+            var options = FireHydrantRule.EffectCandidates(board, Skinned(board, "d4", "frog"));
+            Assert.AreEqual(1, options.Count);
+            Assert.IsTrue(options[0].Burns, "the preview knows it lands in the lava");
+            Effect(board, "d4", "frog", 1);
+            Assert.IsFalse(knight.OnBoard);
+        }
+
+        static Piece Skinned(Board board, string square, string skin)
+        {
+            var piece = board.PieceAt(C(square));
+            piece.Skin = skin;
+            return piece;
+        }
+
+        [Test]
+        public void ThePreviewedTarget_IsTheOneThatGetsSprayed()
+        {
+            for (int seed = 0; seed < 20; seed++)
+            {
+                var board = Setup(Flat, new[] { "Ke1", "Rd4", "pd5", "pc4", "ka8" }, "d6", "b4");
+                var left = board.PieceAt(C("c4"));
+                Effect(board, "d4", "hydrant", seed, preferred: left.Id);
+                Assert.IsFalse(left.OnBoard, $"seed {seed}: the previewed pawn on c4 goes into the lava at b4");
+                Assert.IsNotNull(board.PieceAt(C("d5")), "the other pawn is left alone");
+            }
+        }
+
+        [Test]
+        public void RevivingInStage3_PlacesNearTheKing()
+        {
+            var board = Setup(Flat, new[] { "Ke4", "Nb1", "ka8" });
             var knight = board.PieceAt(C("b1"));
             board.RemovePiece(knight);
-            board.ApplyLayout(Stage3Layout.Default, Side.White, 3);
-            board.RemovePiece(board.PieceAt(C("e1"))); // 腾出王旁边的位置
             var square = RevivalPlacement.FindSquare(board, knight).Value;
-            Assert.IsTrue(board.InPlayerZone(square));
-            Assert.AreEqual(0, board.Height(square));
-            Assert.LessOrEqual(square.DistanceTo(board.King(Side.White).Pos), 1);
+            Assert.AreEqual(1, square.DistanceTo(C("e4")));
         }
 
         [Test]
