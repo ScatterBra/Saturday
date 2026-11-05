@@ -172,17 +172,27 @@ namespace SaturdayGame.Chess
 
             foreach (var (type, at) in layout.FriendPieces) AddPiece(type, rescuer.Opponent(), at);
 
-            // 我方：王放 K，马优先放 N，其余放 *，位置不够再放进我方一侧的任意空格
+            // 我方：王放 K，马优先放 N，其余放 *，位置不够再放进我方一侧的任意空格；
+            // 还放不下的（排在最后的，通常是兵）直接去掉：和被风暴卷走的朋友棋子一样，不进被吃区，也不能复活
             var knightSlots = new Queue<Coord>(layout.KnightSlots);
             var otherSlots = new Queue<Coord>(layout.OtherSlots);
-            mine.Sort((a, b) => Order(a.Type).CompareTo(Order(b.Type)));
+            // 同类棋子按编号排（List.Sort 不稳定），哪几个兵放不下每次都一样
+            mine.Sort((a, b) => a.Type != b.Type ? Order(a.Type).CompareTo(Order(b.Type)) : a.Id.CompareTo(b.Id));
             foreach (var p in mine)
             {
                 Coord? at = null;
                 if (p.Type == PieceType.King && layout.PlayerKing.HasValue && IsEmpty(layout.PlayerKing.Value)) at = layout.PlayerKing;
                 if (at == null && p.Type == PieceType.Knight) at = Take(knightSlots);
-                if (at == null) at = Take(otherSlots) ?? Take(knightSlots) ?? FreeZoneSquare() ?? NearestFreeGround(layout.PlayerKing);
-                if (at == null) throw new InvalidOperationException("Stage 3 layout has no room for all of the player's pieces");
+                if (at == null) at = Take(otherSlots) ?? Take(knightSlots) ?? FreeZoneSquare();
+                if (at == null)
+                {
+                    if (p.Type == PieceType.King) throw new InvalidOperationException("Stage 3 layout has no room for the player's king");
+                    p.OnBoard = false;
+                    p.Retired = true;
+                    p.FrozenTurns = 0;
+                    p.FrozenSkin = null;
+                    continue;
+                }
                 p.Pos = at.Value;
                 squares[at.Value.Index] = p;
             }
@@ -220,26 +230,6 @@ namespace SaturdayGame.Chess
                 if (playerZone[i] && IsEmpty(c) && !lava[i] && !castle[i]) return c;
             }
             return null;
-        }
-
-        /// <summary>我方一侧摆不下时：离我方王的位置最近的空平地（可能在岩浆对面）。</summary>
-        Coord? NearestFreeGround(Coord? anchor)
-        {
-            Coord? best = null;
-            int bestDistance = int.MaxValue;
-            var center = anchor ?? new Coord(4, 0);
-            for (int i = 0; i < 64; i++)
-            {
-                var c = Coord.FromIndex(i);
-                if (!IsEmpty(c) || lava[i] || castle[i] || height[i] > 0) continue;
-                int d = c.DistanceTo(center);
-                if (d < bestDistance)
-                {
-                    bestDistance = d;
-                    best = c;
-                }
-            }
-            return best;
         }
 
         /// <summary>

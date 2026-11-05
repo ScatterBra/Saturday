@@ -79,13 +79,14 @@ namespace SaturdayGame.Chess.Tests
                 Assert.IsFalse(board.IsLava(p.Pos), $"{p} placed on lava");
                 Assert.AreEqual(0, board.Height(p.Pos), $"{p} placed on the plateau");
             }
-            Assert.AreEqual(3, board.PiecesOf(Side.White).Count(p => !board.InPlayerZone(p.Pos)),
-                "15 pieces, 12 squares on the player's side: the rest go to the nearest free ground");
+            Assert.IsTrue(board.PiecesOf(Side.White).All(p => board.InPlayerZone(p.Pos)), "nobody is placed across the lava");
             Assert.AreEqual("hydrant", rook.Skin);
             Assert.IsTrue(rook.OnBoard);
+            Assert.IsTrue(pawn.OnBoard, "pawns that come first in the line-up still get a square");
             Assert.AreEqual(2, pawn.FrozenTurns, "effects carry over");
-            Assert.AreEqual(15, board.PiecesOf(Side.White).Count());
-            CollectionAssert.Contains(board.CapturedOf(Side.White).ToList(), lostKnight);
+            Assert.AreEqual(12, board.PiecesOf(Side.White).Count(), "15 pieces, 12 squares on the player's side");
+            CollectionAssert.AreEquivalent(new[] { lostKnight }, board.CapturedOf(Side.White).ToList(),
+                "the 3 pawns that don't fit are gone for good, only the captured knight can come back");
             Assert.AreEqual(12, board.PiecesOf(Side.Black).Count());
             Assert.AreEqual(0, board.CapturedOf(Side.Black).Count(), "pieces swept away by the storm are not 'captured'");
             Assert.AreEqual(C("d8"), board.King(Side.Black).Pos);
@@ -177,6 +178,23 @@ namespace SaturdayGame.Chess.Tests
             var targets = Targets(board, "b6");
             CollectionAssert.DoesNotContain(targets, C("a8"));
             CollectionAssert.Contains(targets, C("d5"), "the knight can still jump elsewhere");
+        }
+
+        [Test]
+        public void PiecesThatDoNotFitTheLayout_AreRemoved_NotPlacedAcrossTheLava()
+        {
+            // 一个子都没丢就进第三阶段：16 个棋子，默认阵型只有 12 个位置
+            var game = new ChessGame(new GameSettings { Seed = 5, StageTurns = new int[0], StormTurn = 1, FriendSkillTurns = new int[0] });
+            var board = game.Board;
+            Assert.IsTrue(game.InStage3);
+            var mine = board.AllPieces.Where(p => p.Side == Side.White).ToList();
+            var onBoard = mine.Where(p => p.OnBoard).ToList();
+            Assert.AreEqual(12, onBoard.Count);
+            Assert.IsTrue(onBoard.All(p => board.InPlayerZone(p.Pos)), "every placed piece is on the player's side of the lava");
+            Assert.AreEqual(0, board.CapturedOf(Side.White).Count(), "the extra pieces don't show up in the lost pile");
+            var removed = mine.Where(p => p.Retired).ToList();
+            Assert.AreEqual(4, removed.Count);
+            Assert.IsTrue(removed.All(p => p.Type == PieceType.Pawn), "pawns are the first to go");
         }
 
         [Test]
