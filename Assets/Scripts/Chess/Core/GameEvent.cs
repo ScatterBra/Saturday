@@ -70,6 +70,8 @@ namespace SaturdayGame.Chess
         public IReadOnlyList<RuleBase> Rules;
         public IReadOnlyList<Coord> Squares;
         public TargetRequest Request;
+        /// <summary>AppearanceChanged：这次变的是冻结外观（例如树、鸟屎），Text 是外观 ID。</summary>
+        public bool Frozen;
 
         public static GameEvent Moved(Piece piece, Coord from, Coord to) =>
             new GameEvent { Type = GameEventType.Moved, PieceId = piece.Id, From = from, To = to, Side = piece.Side };
@@ -87,8 +89,10 @@ namespace SaturdayGame.Chess
         public static GameEvent Revived(Piece piece) =>
             new GameEvent { Type = GameEventType.Revived, PieceId = piece.Id, To = piece.Pos, Side = piece.Side };
 
-        public static GameEvent AppearanceChanged(Piece piece) =>
-            new GameEvent { Type = GameEventType.AppearanceChanged, PieceId = piece.Id, To = piece.Pos, Side = piece.Side };
+        /// <param name="look">变成的外观 ID（表现层据此选音效）。</param>
+        /// <param name="frozen">变的是冻结外观。</param>
+        public static GameEvent AppearanceChanged(Piece piece, string look = null, bool frozen = false) =>
+            new GameEvent { Type = GameEventType.AppearanceChanged, PieceId = piece.Id, To = piece.Pos, Side = piece.Side, Text = look, Frozen = frozen };
 
         public static GameEvent LavaAdded(IReadOnlyList<Coord> squares) =>
             new GameEvent { Type = GameEventType.LavaAdded, Squares = squares };

@@ -47,6 +47,8 @@ namespace SaturdayGame.Chess.View
         public PieceArt pieceArt;
         [Tooltip("场景里摆好的桌面（Chess/Desk：背景、棋盘图、NEW 区、规则书、规则卡底图），留空时自动在子物体里找；找不到就用占位图形")]
         public ChessDesk desk;
+        [Tooltip("音效（Chess 物体上的 ChessSounds），留空时自动在本物体上找；找不到就没有声音")]
+        public ChessSounds sounds;
         [Tooltip("标题字体（NEW、Rule Book、卡片标题、状态栏、说话人、结束文字、按钮、棋子上的小字），留空用 Unity 默认字体加粗")]
         public Font titleFont;
         [Tooltip("正文字体（规则描述、规则书、提示、对白），留空用 Unity 默认字体")]
@@ -91,6 +93,7 @@ namespace SaturdayGame.Chess.View
         void Start()
         {
             EnsureEventSystem();
+            if (sounds == null) sounds = GetComponent<ChessSounds>();
             if (boardCamera == null) boardCamera = GetComponentInChildren<Camera>();
             cameraFit = boardCamera != null ? boardCamera.GetComponent<DeskCameraFit>() : null;
             if (cameraFit != null)
@@ -307,6 +310,11 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 演出 ----------
 
+        void PlaySound(System.Func<ChessSounds, ChessSounds.Sfx> pick)
+        {
+            if (sounds != null) sounds.Play(pick(sounds));
+        }
+
         IEnumerator PlayEvents(List<GameEvent> events)
         {
             busy = true;
@@ -317,11 +325,16 @@ namespace SaturdayGame.Chess.View
                 {
                     case GameEventType.Moved:
                         yield return board.AnimateMove(e.PieceId, e.From, e.To, moveDuration);
+                        PlaySound(s => s.pieceFall);
                         break;
                     case GameEventType.Sacrificed:
                         yield return board.AnimateSacrifice(e.PieceId, e.To, moveDuration);
                         break;
                     case GameEventType.Pushed:
+                        // 推子的是消防栓就是喷水，是青蛙就是舌头
+                        var pusher = e.SourcePieceId >= 0 ? game.Board.GetPiece(e.SourcePieceId) : null;
+                        if (pusher?.Skin == FireHydrantRule.Hydrant) PlaySound(s => s.hydrant);
+                        else if (pusher?.Skin == FireHydrantRule.Frog) PlaySound(s => s.frog);
                         yield return board.AnimatePush(e.PieceId, e.To, effectDuration * 1.5f);
                         break;
                     case GameEventType.KnockedBack:
@@ -331,11 +344,16 @@ namespace SaturdayGame.Chess.View
                         yield return board.AnimateCapture(e.PieceId, e.Text == "burned" || e.Text == "lava", effectDuration);
                         break;
                     case GameEventType.Promoted:
+                        yield return board.AnimatePop(e.PieceId, effectDuration);
+                        break;
                     case GameEventType.AppearanceChanged:
+                        if (e.Frozen && e.Text == "tree") PlaySound(s => s.tree);
+                        else if (!e.Frozen && e.Text != null) PlaySound(s => s.pieceChange);
                         yield return board.AnimatePop(e.PieceId, effectDuration);
                         break;
                     case GameEventType.Revived:
                         yield return board.AnimateSpawn(e.PieceId, effectDuration * 2);
+                        PlaySound(s => s.pieceFall);
                         break;
                     case GameEventType.LavaAdded:
                         board.Highlight(null, null, null, lastMove);
@@ -384,6 +402,7 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.RulesOffered:
+                        PlaySound(s => s.paperPopup);
                         hud.ShowOffers(e.Rules, e.OfferKind);
                         hud.ShowSkip(e.OfferKind != OfferKind.StageCard);
                         break;

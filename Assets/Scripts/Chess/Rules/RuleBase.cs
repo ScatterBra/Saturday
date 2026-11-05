@@ -113,7 +113,7 @@ namespace SaturdayGame.Chess
         public void SetSkin(Piece piece, string skin)
         {
             piece.Skin = skin;
-            emit(GameEvent.AppearanceChanged(piece));
+            emit(GameEvent.AppearanceChanged(piece, skin));
         }
 
         /// <summary>冻结棋子若干个（它自己一方的）回合。王永远不会被冻结。</summary>
@@ -122,7 +122,7 @@ namespace SaturdayGame.Chess
             if (piece.Type == PieceType.King || !piece.OnBoard) return;
             piece.FrozenTurns = Math.Max(piece.FrozenTurns, turns);
             piece.FrozenSkin = frozenSkin;
-            emit(GameEvent.AppearanceChanged(piece));
+            emit(GameEvent.AppearanceChanged(piece, frozenSkin, frozen: true));
         }
 
         /// <summary>用规则效果直接消灭一枚棋子（不能是王）。</summary>
