@@ -80,6 +80,12 @@ namespace SaturdayGame.Chess.View
         [Range(0.5f, 3f)] public float stage3Zoom = 1f;
         [Tooltip("相机转过去用多久")]
         public float cameraTurnDuration = 1f;
+        [Tooltip("右键拖动转视角的灵敏度（每个像素转多少度）")]
+        public float orbitSensitivity = 0.25f;
+        [Tooltip("滚轮每一格拉近、拉远多少")]
+        public float orbitZoomStep = 0.1f;
+        [Tooltip("要看规则卡、点阵亡区时，相机自动转回正面用多久")]
+        public float returnToFrontDuration = 0.4f;
 
         ChessGame game;
         ChessAI ai;
@@ -92,6 +98,12 @@ namespace SaturdayGame.Chess.View
         bool cameraTurning;
         /// <summary>这一局相机已经转到中间视角了（只转一次）。</summary>
         bool midViewShown;
+        /// <summary>可以右键拖动转视角了（中间视角出现后、第三阶段）。</summary>
+        bool orbitUnlocked;
+        Vector2 rightPressPosition;
+        bool rightDragging;
+        float lastRightClickTime = -10f;
+        const float DragThreshold = 6f;
         bool busy;
         bool jumpToStage3;
         Piece selected;
@@ -117,7 +129,8 @@ namespace SaturdayGame.Chess.View
                 startZoom = cameraFit.zoom;
             }
             EnsureLight();
-            var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows, titleFont, bodyFont);
+            var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows, titleFont, bodyFont,
+                cameraFit != null ? cameraFit.ViewReference : null);
             if (desk == null) desk = GetComponentInChildren<ChessDesk>();
             board = new BoardView(transform, factory, desk);
             hud = ChessHud.Create(transform, boardCamera, pieceArt, desk, titleFont, bodyFont);
@@ -168,6 +181,7 @@ namespace SaturdayGame.Chess.View
             PlaySound(s => s.cameraChange);
             yield return cameraFit.TurnTo(pitch, midFieldOfView, midZoom, cameraTurnDuration);
             cameraTurning = false;
+            orbitUnlocked = true;
         }
 
         public void NewGame()
@@ -176,6 +190,9 @@ namespace SaturdayGame.Chess.View
             busy = false;
             cameraTurning = false;
             midViewShown = false;
+            orbitUnlocked = false;
+            rightDragging = false;
+            if (cameraFit != null) cameraFit.SetOrbit(0f, 0f, 1f);
             var settings = new GameSettings
             {
                 StageTurns = stageTurns,
@@ -213,7 +230,9 @@ namespace SaturdayGame.Chess.View
 
         void Update()
         {
-            if (busy || game == null) return;
+            if (game == null) return;
+            UpdateOrbit();
+            if (busy) return;
             if (game.Phase == GamePhase.OpponentTurn)
             {
                 StartCoroutine(OpponentTurn());
@@ -224,10 +243,60 @@ namespace SaturdayGame.Chess.View
             if (mouse == null) return;
             UpdatePreview(mouse.position.ReadValue());
             UpdateRevivePreview(mouse.position.ReadValue());
-            if (mouse.rightButton.wasPressedThisFrame) Deselect();
+            // 右键原地单击 = 取消选中（拖动转视角在 UpdateOrbit 里）
+            if (mouse.rightButton.wasReleasedThisFrame && !rightDragging) Deselect();
             if (!mouse.leftButton.wasPressedThisFrame) return;
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
             if (board.TryGetCoord(boardCamera.ScreenPointToRay(mouse.position.ReadValue()), out var coord)) ClickSquare(coord);
+        }
+
+        /// <summary>
+        /// 右键拖动转视角（水平、俯仰），滚轮拉近拉远，双击右键转回正面。
+        /// 中间视角出现后、第三阶段才能用；程序自己转相机的时候不响应。忙着演出时也能转。
+        /// </summary>
+        void UpdateOrbit()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null || cameraFit == null) return;
+            var position = mouse.position.ReadValue();
+            if (mouse.rightButton.wasPressedThisFrame)
+            {
+                rightPressPosition = position;
+                rightDragging = false;
+            }
+            bool canOrbit = orbitUnlocked && !cameraTurning;
+            if (mouse.rightButton.isPressed && canOrbit)
+            {
+                if (!rightDragging && (position - rightPressPosition).magnitude > DragThreshold) rightDragging = true;
+                if (rightDragging)
+                {
+                    var delta = mouse.delta.ReadValue();
+                    cameraFit.Drag(delta.x * orbitSensitivity, -delta.y * orbitSensitivity);
+                }
+            }
+            if (mouse.rightButton.wasReleasedThisFrame)
+            {
+                cameraFit.EndDrag();
+                if (!rightDragging && canOrbit)
+                {
+                    // 双击右键：转回正面
+                    if (Time.unscaledTime - lastRightClickTime < 0.35f) StartCoroutine(ReturnToFront());
+                    lastRightClickTime = Time.unscaledTime;
+                }
+                // rightDragging 留到下一次按下再清，这一帧的 Update 还要靠它判断“不是单击”
+            }
+            float scroll = mouse.scroll.ReadValue().y;
+            if (canOrbit && Mathf.Abs(scroll) > 0.01f)
+                cameraFit.Zoom(scroll > 0 ? 1f + orbitZoomStep : 1f / (1f + orbitZoomStep));
+        }
+
+        /// <summary>转回正面视角（要看规则卡、点阵亡区时用）。</summary>
+        IEnumerator ReturnToFront()
+        {
+            if (cameraFit == null || cameraFit.IsFront) yield break;
+            cameraTurning = true;
+            yield return cameraFit.ReturnToFront(returnToFrontDuration);
+            cameraTurning = false;
         }
 
         // ---------- 玩家操作（也方便在编辑器里用代码驱动测试） ----------
@@ -488,9 +557,12 @@ namespace SaturdayGame.Chess.View
                             cameraFit.extraPoints = board.TallPoints();
                             float pitch = stage3CameraPitch > 0f ? stage3CameraPitch : cameraFit.pitch;
                             cameraTurning = true;
+                            // 沙尘盖着画面：玩家之前转过的视角直接回到正面，第三阶段从正面开始看
+                            cameraFit.SetOrbit(0f, 0f, 1f);
                             PlaySound(s => s.cameraChange);
                             yield return cameraFit.TurnTo(pitch, stage3FieldOfView, stage3Zoom, cameraTurnDuration);
                             cameraTurning = false;
+                            orbitUnlocked = true;
                         }
                         yield return new WaitForSeconds(0.3f);
                         for (float t = 1f; t > 0f; t -= Time.deltaTime / stormDuration)
@@ -509,6 +581,7 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.RulesOffered:
+                        yield return ReturnToFront();
                         hud.ShowOffers(e.Rules, e.OfferKind);
                         // 从上到下一张一张飞进来，每张一声
                         yield return hud.FlyInCards(cardFlyDuration, () => PlaySound(s => s.paperPopup));
@@ -520,6 +593,7 @@ namespace SaturdayGame.Chess.View
                         hud.AddRule(e.Rule);
                         break;
                     case GameEventType.TargetRequested:
+                        if (e.Request.IsPieceRequest) yield return ReturnToFront(); // 要在规则书的阵亡区里点
                         if (!e.Request.IsPieceRequest) board.Highlight(null, null, e.Request.Options, lastMove);
                         hud.ShowSkip(e.Request.AllowSkip);
                         break;

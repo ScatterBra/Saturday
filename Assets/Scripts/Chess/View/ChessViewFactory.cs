@@ -30,8 +30,9 @@ namespace SaturdayGame.Chess.View
         /// <summary>3D 模型是否投影子。</summary>
         public readonly bool Shadows;
 
+        /// <param name="faceReference">棋子、文字朝着它摆（正面视角，不含玩家转视角）；为 null 时跟着相机。</param>
         public ChessViewFactory(Material material, Camera camera, PieceArt art = null, Material surfaceMaterial = null, bool shadows = false,
-            Font titleFont = null, Font bodyFont = null)
+            Font titleFont = null, Font bodyFont = null, Transform faceReference = null)
         {
             Art = art;
             Shadows = shadows;
@@ -48,7 +49,7 @@ namespace SaturdayGame.Chess.View
             }
             font = bodyFont != null ? bodyFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             this.titleFont = titleFont;
-            cameraTransform = camera != null ? camera.transform : null;
+            cameraTransform = faceReference != null ? faceReference : camera != null ? camera.transform : null;
             if (cameraTransform != null) FlatPitch = FaceCamera.PitchOf(cameraTransform);
         }
 

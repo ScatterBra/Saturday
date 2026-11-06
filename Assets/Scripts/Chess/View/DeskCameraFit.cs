@@ -8,6 +8,9 @@ namespace SaturdayGame.Chess.View
     /// 让斜视相机自动框住整张桌面布局（左边规则卡区、棋盘、右边规则书）。
     /// 俯仰角和水平转角固定，只调整相机离桌面的距离和注视点，让布局在屏幕上居中；屏幕比例变了会重新计算。
     /// 挂在棋盘相机上，相机需要是 Chess 根物体的子物体。
+    ///
+    /// 玩家旋转（Orbit）：在上面算好的“正面视角”之上，绕棋盘中心再转 orbitYaw（水平）和 orbitPitch（俯仰），orbitZoom 拉近拉远。
+    /// 旋转为 0 时和正面视角完全一样。棋子朝向跟的是 ViewReference（不含玩家的旋转），所以玩家转视角时棋子保持不动。
     /// </summary>
     [RequireComponent(typeof(Camera))]
     public class DeskCameraFit : MonoBehaviour
@@ -27,21 +30,66 @@ namespace SaturdayGame.Chess.View
         [Range(0f, 0.3f)] public float bottomMargin = 0.03f;
         [Range(0f, 0.3f)] public float sideMargin = 0.02f;
 
+        [Header("Player orbit (right-drag)")]
+        [Tooltip("玩家最多往左、往右各转多少度")]
+        [Range(0f, 180f)] public float maxOrbitYaw = 90f;
+        [Tooltip("玩家转动时俯仰角的范围（90 = 正上方往下看）")]
+        public Vector2 orbitPitchRange = new Vector2(25f, 80f);
+        [Tooltip("滚轮缩放的范围，1 = 正常距离，大于 1 拉近")]
+        public Vector2 orbitZoomRange = new Vector2(0.7f, 2.5f);
+
+        [Header("Orbit feel")]
+        [Tooltip("相机追上鼠标要多久（秒）。越大越“润”，跟手的拖尾越明显；0 = 完全跟手")]
+        [Range(0f, 0.5f)] public float orbitSmoothTime = 0.12f;
+        [Tooltip("松手后惯性滑行停下来的快慢，越大停得越快；0 = 没有惯性")]
+        [Range(0f, 20f)] public float orbitFriction = 4f;
+        [Tooltip("拖到边界外还能再拉多少度（越拉越沉，像橡皮筋），松手后弹回边界")]
+        [Range(0f, 30f)] public float orbitOverscroll = 12f;
+        [Tooltip("弹回边界的快慢")]
+        [Range(1f, 30f)] public float orbitSpringBack = 10f;
+        [Tooltip("滚轮缩放追上目标要多久（秒）")]
+        [Range(0f, 0.5f)] public float zoomSmoothTime = 0.15f;
+
         /// <summary>除了平面布局的四个角，还必须框进画面的点（本地坐标），例如第三阶段升起来的城堡顶。改完调用 Fit()。</summary>
         [System.NonSerialized] public List<Vector3> extraPoints = new List<Vector3>();
 
+        /// <summary>玩家在正面视角之上额外转的水平角、俯仰角（度），以及拉近的倍数（现在画面上的值，会慢慢追上目标）。</summary>
+        public float OrbitYaw { get; private set; }
+        public float OrbitPitch { get; private set; }
+        public float OrbitZoom { get; private set; } = 1f;
+
+        // 拖动、滚轮改的是目标值，画面上的值每帧平滑地追上去；松手后目标值带着惯性继续滑一段
+        float targetYaw, targetPitch, targetZoom = 1f;
+        float yawVelocity, pitchVelocity, zoomVelocity;
+        Vector2 inertia; // 度/秒
+        bool dragging;
+
+        /// <summary>正面视角的朝向（不含玩家的旋转）。棋子、文字朝着它摆，玩家转视角时它们不动。</summary>
+        public Transform ViewReference { get; private set; }
+
         Camera cam;
         float fittedAspect;
+        Vector3 frontPosition;
+        Quaternion frontRotation = Quaternion.identity;
 
         void Awake()
         {
             cam = GetComponent<Camera>();
+            var reference = new GameObject("View Reference (not saved)") { hideFlags = HideFlags.DontSave };
+            reference.transform.SetParent(transform.parent, false);
+            ViewReference = reference.transform;
             Fit();
+        }
+
+        void OnDestroy()
+        {
+            if (ViewReference != null) Destroy(ViewReference.gameObject);
         }
 
         void LateUpdate()
         {
             if (!Mathf.Approximately(cam.aspect, fittedAspect)) Fit();
+            UpdateOrbitMotion(Time.unscaledDeltaTime);
         }
 
         // 运行中在 Inspector 里改参数时立刻重新取景
@@ -75,6 +123,128 @@ namespace SaturdayGame.Chess.View
             float finalDistance = far / Mathf.Max(0.01f, zoom);
             focus = Center(rotation, finalDistance);
             Place(rotation, finalDistance, focus);
+
+            frontPosition = transform.localPosition;
+            frontRotation = rotation;
+            if (ViewReference != null) ViewReference.localRotation = rotation;
+            ApplyOrbit();
+        }
+
+        /// <summary>
+        /// 玩家拖动（每帧调用，鼠标没动也要传 0）：改目标角度；拖到边界外越拉越沉。顺便估计拖动的速度，松手后当惯性用。
+        /// </summary>
+        public void Drag(float deltaYaw, float deltaPitch)
+        {
+            dragging = true;
+            deltaYaw *= Resistance(targetYaw, -maxOrbitYaw, maxOrbitYaw, deltaYaw);
+            deltaPitch *= Resistance(pitch + targetPitch, orbitPitchRange.x, orbitPitchRange.y, deltaPitch);
+            targetYaw += deltaYaw;
+            targetPitch += deltaPitch;
+            float dt = Mathf.Max(Time.unscaledDeltaTime, 0.0001f);
+            inertia = Vector2.Lerp(inertia, new Vector2(deltaYaw, deltaPitch) / dt, 0.5f);
+        }
+
+        /// <summary>松开右键：之后按惯性滑行、弹回边界。</summary>
+        public void EndDrag() => dragging = false;
+
+        /// <summary>滚轮：目标缩放乘上 factor。</summary>
+        public void Zoom(float factor)
+        {
+            targetZoom = Mathf.Clamp(targetZoom * factor, orbitZoomRange.x, orbitZoomRange.y);
+        }
+
+        /// <summary>往边界外拖时的阻力：刚出界几乎不受影响，出界 orbitOverscroll 度时完全拉不动。往回拖不受影响。</summary>
+        float Resistance(float value, float min, float max, float delta)
+        {
+            float over = delta > 0 ? value - max : min - value;
+            if (over <= 0f) return 1f;
+            if (orbitOverscroll <= 0f) return 0f;
+            return Mathf.Clamp01(1f - over / orbitOverscroll);
+        }
+
+        void UpdateOrbitMotion(float dt)
+        {
+            if (dt <= 0f) return;
+            if (!dragging)
+            {
+                // 惯性滑行，按指数衰减
+                if (orbitFriction > 0f && inertia.sqrMagnitude > 0.01f)
+                {
+                    targetYaw += inertia.x * dt;
+                    targetPitch += inertia.y * dt;
+                    inertia *= Mathf.Exp(-orbitFriction * dt);
+                }
+                else inertia = Vector2.zero;
+
+                // 出界了就弹回边界（同时停掉往外的惯性）
+                float spring = 1f - Mathf.Exp(-orbitSpringBack * dt);
+                float clampedYaw = Mathf.Clamp(targetYaw, -maxOrbitYaw, maxOrbitYaw);
+                if (!Mathf.Approximately(clampedYaw, targetYaw))
+                {
+                    targetYaw = Mathf.Lerp(targetYaw, clampedYaw, spring);
+                    inertia.x = 0f;
+                }
+                float clampedPitch = Mathf.Clamp(pitch + targetPitch, orbitPitchRange.x, orbitPitchRange.y) - pitch;
+                if (!Mathf.Approximately(clampedPitch, targetPitch))
+                {
+                    targetPitch = Mathf.Lerp(targetPitch, clampedPitch, spring);
+                    inertia.y = 0f;
+                }
+            }
+
+            // 画面上的值平滑地追上目标
+            if (Mathf.Abs(OrbitYaw - targetYaw) < 0.001f && Mathf.Abs(OrbitPitch - targetPitch) < 0.001f && Mathf.Abs(OrbitZoom - targetZoom) < 0.0001f)
+                return;
+            OrbitYaw = Mathf.SmoothDamp(OrbitYaw, targetYaw, ref yawVelocity, orbitSmoothTime, Mathf.Infinity, dt);
+            OrbitPitch = Mathf.SmoothDamp(OrbitPitch, targetPitch, ref pitchVelocity, orbitSmoothTime, Mathf.Infinity, dt);
+            OrbitZoom = Mathf.SmoothDamp(OrbitZoom, targetZoom, ref zoomVelocity, zoomSmoothTime, Mathf.Infinity, dt);
+            ApplyOrbit();
+        }
+
+        /// <summary>直接设定玩家的旋转（0, 0, 1 = 正面视角）。</summary>
+        /// <summary>直接设定玩家的旋转（0, 0, 1 = 正面视角），立刻生效，停掉惯性。</summary>
+        public void SetOrbit(float orbitYaw, float orbitPitch, float orbitZoom)
+        {
+            OrbitYaw = targetYaw = orbitYaw;
+            OrbitPitch = targetPitch = orbitPitch;
+            OrbitZoom = targetZoom = orbitZoom;
+            yawVelocity = pitchVelocity = zoomVelocity = 0f;
+            inertia = Vector2.zero;
+            dragging = false;
+            ApplyOrbit();
+        }
+
+        public bool IsFront => Mathf.Approximately(OrbitYaw, 0f) && Mathf.Approximately(OrbitPitch, 0f) && Mathf.Approximately(OrbitZoom, 1f)
+            && Mathf.Approximately(targetYaw, 0f) && Mathf.Approximately(targetPitch, 0f) && Mathf.Approximately(targetZoom, 1f);
+
+        /// <summary>在 duration 秒内平滑转回正面视角。</summary>
+        public IEnumerator ReturnToFront(float duration)
+        {
+            if (IsFront) yield break;
+            float y = OrbitYaw, p = OrbitPitch, z = OrbitZoom;
+            for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.01f, duration))
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t);
+                SetOrbit(Mathf.Lerp(y, 0f, k), Mathf.Lerp(p, 0f, k), Mathf.Lerp(z, 1f, k));
+                yield return null;
+            }
+            SetOrbit(0f, 0f, 1f);
+        }
+
+        /// <summary>
+        /// 把正面视角绕棋盘中心（Chess 根物体的原点）转 OrbitYaw / OrbitPitch，再按 OrbitZoom 拉近：
+        /// 相机和棋盘中心的相对位置一起转，所以旋转为 0 时和正面视角一模一样，转起来棋盘大小也基本不变。
+        /// </summary>
+        void ApplyOrbit()
+        {
+            // 允许暂时拉出范围一点（橡皮筋），但不能钻到桌子下面或翻过头顶
+            float low = Mathf.Max(1f, Mathf.Min(orbitPitchRange.x, pitch) - orbitOverscroll);
+            float high = Mathf.Min(89.9f, Mathf.Max(orbitPitchRange.y, pitch) + orbitOverscroll);
+            float orbitPitchNow = Mathf.Clamp(pitch + OrbitPitch, low, high) - pitch;
+            var rotation = Quaternion.Euler(pitch + orbitPitchNow, yaw + OrbitYaw, 0f);
+            var offset = Quaternion.Inverse(frontRotation) * frontPosition / Mathf.Max(0.01f, OrbitZoom);
+            transform.localRotation = rotation;
+            transform.localPosition = rotation * offset;
         }
 
         /// <summary>在 duration 秒内平滑转到新的俯仰角，转的过程中一直保持布局框在屏幕里。</summary>
