@@ -63,11 +63,17 @@ namespace SaturdayGame.Chess.View
         public float dialogueDuration = 1.4f;
         [Tooltip("风暴沙尘卷起和散去各用多久")]
         public float stormDuration = 0.8f;
-        [Tooltip("风暴后（第三阶段）、选了树技能后，相机都转到这个俯仰角；0 = 不转")]
+        [Tooltip("中间视角：第三阶段之前，棋盘上第一次出现 3D 模型（第 5 回合主教变体，或者树）时相机转到这个俯仰角；0 = 不转。Play 模式下斜过来之后改它会实时生效")]
+        [Range(0f, 90f)] public float midCameraPitch = 60f;
+        [Tooltip("中间视角的视野角")]
+        [Range(10f, 100f)] public float midFieldOfView = 30f;
+        [Tooltip("中间视角的缩放，1 = 刚好框住整个布局")]
+        [Range(0.5f, 3f)] public float midZoom = 1f;
+        [Tooltip("风暴后（第三阶段）相机转到这个俯仰角；0 = 不转")]
         [Range(0f, 90f)] public float stage3CameraPitch = 65f;
-        [Tooltip("第三阶段和树技能之后相机的视野角。越大近大远小越明显，山显得越高；Play 模式下在第三阶段改它会实时生效")]
+        [Tooltip("第三阶段相机的视野角。越大近大远小越明显，山显得越高；Play 模式下在第三阶段改它会实时生效")]
         [Range(10f, 100f)] public float stage3FieldOfView = 30f;
-        [Tooltip("第三阶段和树技能之后的缩放，1 = 刚好框住整个布局；大于 1 拉近，小于 1 拉远；Play 模式下在第三阶段改它会实时生效")]
+        [Tooltip("第三阶段的缩放，1 = 刚好框住整个布局；大于 1 拉近，小于 1 拉远；Play 模式下在第三阶段改它会实时生效")]
         [Range(0.5f, 3f)] public float stage3Zoom = 1f;
         [Tooltip("相机转过去用多久")]
         public float cameraTurnDuration = 1f;
@@ -81,6 +87,8 @@ namespace SaturdayGame.Chess.View
         float startFieldOfView;
         float startZoom;
         bool cameraTurning;
+        /// <summary>这一局相机已经转到中间视角了（只转一次）。</summary>
+        bool midViewShown;
         bool busy;
         bool jumpToStage3;
         Piece selected;
@@ -127,14 +135,35 @@ namespace SaturdayGame.Chess.View
             finally { jumpToStage3 = false; }
         }
 
-        // 第三阶段时在 Inspector 里改相机参数，立刻套到相机上预览（相机还在转的时候不打断它）
+        // 中间视角、第三阶段时在 Inspector 里改相机参数，立刻套到相机上预览（相机还在转的时候不打断它）
         void OnValidate()
         {
-            if (!Application.isPlaying || cameraFit == null || game == null || !game.InStage3 || cameraTurning) return;
-            if (stage3CameraPitch > 0f) cameraFit.pitch = stage3CameraPitch;
-            cameraFit.fieldOfView = stage3FieldOfView;
-            cameraFit.zoom = stage3Zoom;
+            if (!Application.isPlaying || cameraFit == null || game == null || cameraTurning) return;
+            if (game.InStage3)
+            {
+                if (stage3CameraPitch > 0f) cameraFit.pitch = stage3CameraPitch;
+                cameraFit.fieldOfView = stage3FieldOfView;
+                cameraFit.zoom = stage3Zoom;
+            }
+            else if (midViewShown)
+            {
+                if (midCameraPitch > 0f) cameraFit.pitch = midCameraPitch;
+                cameraFit.fieldOfView = midFieldOfView;
+                cameraFit.zoom = midZoom;
+            }
+            else return;
             cameraFit.Fit();
+        }
+
+        /// <summary>第三阶段之前，棋盘上第一次出现 3D 模型时，相机转到中间视角（每局一次）。</summary>
+        IEnumerator TurnToMidViewIfNeeded()
+        {
+            if (midViewShown || game.InStage3 || cameraFit == null || !board.AnyModel) yield break;
+            midViewShown = true;
+            float pitch = midCameraPitch > 0f ? midCameraPitch : cameraFit.pitch;
+            cameraTurning = true;
+            yield return cameraFit.TurnTo(pitch, midFieldOfView, midZoom, cameraTurnDuration);
+            cameraTurning = false;
         }
 
         public void NewGame()
@@ -142,6 +171,7 @@ namespace SaturdayGame.Chess.View
             StopAllCoroutines();
             busy = false;
             cameraTurning = false;
+            midViewShown = false;
             var settings = new GameSettings
             {
                 StageTurns = stageTurns,
@@ -383,6 +413,8 @@ namespace SaturdayGame.Chess.View
                         if (e.Frozen && e.Text == "tree") PlaySound(s => s.tree);
                         else if (!e.Frozen && e.Text != null) PlaySound(s => s.pieceChange);
                         yield return board.AnimatePop(e.PieceId, effectDuration);
+                        // 第一个 3D 模型冒出来了（主教变体、消防栓、树……）：相机斜过来才看得出立体
+                        yield return TurnToMidViewIfNeeded();
                         break;
                     case GameEventType.Revived:
                         yield return board.AnimateSpawn(e.PieceId, effectDuration * 2);
@@ -443,14 +475,6 @@ namespace SaturdayGame.Chess.View
                         hud.HideOffers();
                         hud.ShowSkip(false);
                         hud.AddRule(e.Rule);
-                        // 选了树技能：相机转到和第三阶段一样的视角，才看得出立体的树
-                        if (e.Rule is TreePawnsRule && cameraFit != null)
-                        {
-                            float pitch = stage3CameraPitch > 0f ? stage3CameraPitch : cameraFit.pitch;
-                            cameraTurning = true;
-                            yield return cameraFit.TurnTo(pitch, stage3FieldOfView, stage3Zoom, cameraTurnDuration);
-                            cameraTurning = false;
-                        }
                         break;
                     case GameEventType.TargetRequested:
                         if (!e.Request.IsPieceRequest) board.Highlight(null, null, e.Request.Options, lastMove);

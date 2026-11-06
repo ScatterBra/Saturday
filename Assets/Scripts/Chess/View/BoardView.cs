@@ -220,6 +220,17 @@ namespace SaturdayGame.Chess.View
             return view;
         }
 
+        /// <summary>棋盘上有棋子用 3D 模型显示（例如主教变体、消防栓、树）。</summary>
+        public bool AnyModel
+        {
+            get
+            {
+                foreach (var view in pieces.Values)
+                    if (view.HasModel && view.Root.activeSelf) return true;
+                return false;
+            }
+        }
+
         /// <summary>棋盘已经是第三阶段：棋子换成 3D 模型。</summary>
         bool Stage3 => board != null && board.Stage3;
 

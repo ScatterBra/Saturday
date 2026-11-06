@@ -26,7 +26,9 @@ namespace SaturdayGame.Chess.View
             public Sprite[] black = Array.Empty<Sprite>();
             [Tooltip("3D 模型（FBX 或预制体）。配了模型就在棋盘上用模型代替贴图（贴图仍用在被吃区等 2D 界面里），多个模型按棋子编号固定选一个")]
             public GameObject[] models = Array.Empty<GameObject>();
-            [Tooltip("models 里是立牌模型（例如新的树）：正面朝着相机摆，不随机转")]
+            [Tooltip("黑方用的模型（所有阶段）；留空时黑方用上面的模型乘上 variantBlackTint")]
+            public GameObject[] blackModels = Array.Empty<GameObject>();
+            [Tooltip("models 里是立牌模型（例如树、主教变体）：正面朝着相机摆，不随机转")]
             public bool standee;
             [Tooltip("第三阶段才换上的 3D 模型（白方）。多个模型按棋子编号固定选一个")]
             public GameObject[] stage3Models = Array.Empty<GameObject>();
@@ -149,11 +151,8 @@ namespace SaturdayGame.Chess.View
                 }
             }
 
-            var black = piece.Side == Side.Black
-                ? Pick(piece.Type, blackPawn, blackKnight, blackBishop, blackRook, blackQueen, blackKing)
-                : null;
-            result.Sprite = black != null ? black : Pick(piece.Type, pawn, knight, bishop, rook, queen, king);
-            result.Tint = piece.Side == Side.Black && black == null ? blackTint : Color.white;
+            result.Sprite = BaseSprite(piece, out bool hasBlackSprite);
+            result.Tint = piece.Side == Side.Black && !hasBlackSprite ? blackTint : Color.white;
             if (stage3)
             {
                 var blackModel = piece.Side == Side.Black
@@ -179,18 +178,21 @@ namespace SaturdayGame.Chess.View
                 bool hasBlack = piece.Side == Side.Black && entry.black != null && entry.black.Length > 0;
                 var list = hasBlack ? entry.black : entry.white;
                 bool hasModel = entry.models != null && entry.models.Length > 0;
+                bool hasBlackModel = piece.Side == Side.Black && entry.blackModels != null && entry.blackModels.Length > 0;
                 bool hasBlackStage3 = piece.Side == Side.Black && entry.stage3BlackModels != null && entry.stage3BlackModels.Length > 0;
                 var stage3List = hasBlackStage3 ? entry.stage3BlackModels : entry.stage3Models;
                 bool hasStage3 = stage3 && stage3List != null && stage3List.Length > 0;
                 if ((list == null || list.Length == 0) && !hasModel && !hasStage3) continue;
                 if (list != null && list.Length > 0) result.Sprite = list[Variant(piece, list.Length)];
+                else result.Sprite = BaseSprite(piece, out _); // 只有模型的外观（例如大象），被吃区里显示基础棋子的图
                 result.Tint = piece.Side == Side.Black && !hasBlack ? variantBlackTint : Color.white;
                 if (hasModel)
                 {
-                    // 全阶段都用的模型（例如树）保持原色，不压暗
-                    result.Model = entry.models[Variant(piece, entry.models.Length)];
+                    // 全阶段都用的模型（树、主教变体、消防栓、青蛙）；黑方没有单独模型时压暗
+                    var models = hasBlackModel ? entry.blackModels : entry.models;
+                    result.Model = models[Variant(piece, models.Length)];
                     result.Standee = entry.standee;
-                    result.Tint = Color.white;
+                    result.Tint = piece.Side == Side.Black && !hasBlackModel ? variantBlackTint : Color.white;
                 }
                 if (hasStage3)
                 {
@@ -208,6 +210,16 @@ namespace SaturdayGame.Chess.View
         /// （棋子编号在一排里是隔一个排的，直接用编号取余只会轮到一半的图。）
         /// </summary>
         static int Variant(Piece piece, int count) => (piece.StartPos.Y * 8 + piece.StartPos.X) % count;
+
+        /// <summary>基础棋子的图：黑方有单独的图就用，没有就用白方的（hasBlackSprite = false，要乘 blackTint）。</summary>
+        Sprite BaseSprite(Piece piece, out bool hasBlackSprite)
+        {
+            var black = piece.Side == Side.Black
+                ? Pick(piece.Type, blackPawn, blackKnight, blackBishop, blackRook, blackQueen, blackKing)
+                : null;
+            hasBlackSprite = black != null;
+            return black != null ? black : Pick(piece.Type, pawn, knight, bishop, rook, queen, king);
+        }
 
         static T Pick<T>(PieceType type, T p, T n, T b, T r, T q, T k)
         {

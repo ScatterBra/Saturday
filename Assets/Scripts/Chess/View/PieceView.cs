@@ -120,6 +120,9 @@ namespace SaturdayGame.Chess.View
                 : null;
         }
 
+        /// <summary>现在用 3D 模型显示。</summary>
+        public bool HasModel => model != null;
+
         public void SetPosition(Vector3 localPosition) => Root.transform.localPosition = localPosition;
 
         public void Destroy() => ViewUtil.Destroy(Root);

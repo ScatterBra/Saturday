@@ -62,8 +62,11 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 8b04aa6d93ce86948842e55932122013, type: 3}
     black:
     - {fileID: 21300000, guid: a8fca54bfeb855c4f8b475c4d4014599, type: 3}
-    models: []
-    standee: 0
+    models:
+    - {fileID: 919132149155446097, guid: 2b5f65d407df78a4ba6960287df67aec, type: 3}
+    blackModels:
+    - {fileID: 919132149155446097, guid: 5ce80593d9ef3b64ba82d92e9c9b1ae7, type: 3}
+    standee: 1
     stage3Models:
     - {fileID: 919132149155446097, guid: 2b5f65d407df78a4ba6960287df67aec, type: 3}
     stage3BlackModels:
@@ -74,8 +77,10 @@ MonoBehaviour:
     white:
     - {fileID: 21300000, guid: 0e3194f2940c6bf4683ced5c93cd05b5, type: 3}
     black: []
-    models: []
-    standee: 0
+    models:
+    - {fileID: 919132149155446097, guid: 11acbe4cee24b9c448a0b15f6617feb1, type: 3}
+    blackModels: []
+    standee: 1
     stage3Models:
     - {fileID: 919132149155446097, guid: 11acbe4cee24b9c448a0b15f6617feb1, type: 3}
     stage3BlackModels: []
@@ -85,8 +90,10 @@ MonoBehaviour:
     white:
     - {fileID: 21300000, guid: 210ebc8f4ba940943884e00d34337894, type: 3}
     black: []
-    models: []
-    standee: 0
+    models:
+    - {fileID: 919132149155446097, guid: e123dedf83bdeef4fa12a6deba5486bd, type: 3}
+    blackModels: []
+    standee: 1
     stage3Models:
     - {fileID: 919132149155446097, guid: e123dedf83bdeef4fa12a6deba5486bd, type: 3}
     stage3BlackModels: []
@@ -108,6 +115,13 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: bd16f4c12c37e3e41a4395b04479244c, type: 3}
     - {fileID: 919132149155446097, guid: d9fd84c4453e0a64f95020547c588b7c, type: 3}
     - {fileID: 919132149155446097, guid: fc9b025a3e3af8b47aa29f8975450c8b, type: 3}
+    blackModels:
+    - {fileID: 919132149155446097, guid: 09ad783185cfe724fbc3f43280dd863c, type: 3}
+    - {fileID: 919132149155446097, guid: 5f49abd451a8122449602bb546488900, type: 3}
+    - {fileID: 919132149155446097, guid: 24e731f89c4b69d45977297e046e973c, type: 3}
+    - {fileID: 919132149155446097, guid: bd16f4c12c37e3e41a4395b04479244c, type: 3}
+    - {fileID: 919132149155446097, guid: d9fd84c4453e0a64f95020547c588b7c, type: 3}
+    - {fileID: 919132149155446097, guid: fc9b025a3e3af8b47aa29f8975450c8b, type: 3}
     standee: 1
     stage3Models: []
     stage3BlackModels: []
@@ -119,6 +133,7 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: 897c1343972f6704eaf46dad7b5af47e, type: 3}
     models: []
+    blackModels: []
     standee: 0
     stage3Models: []
     stage3BlackModels: []
@@ -130,6 +145,7 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: 6aa2435a9fdaefc418e34466cca8fe95, type: 3}
     models: []
+    blackModels: []
     standee: 0
     stage3Models: []
     stage3BlackModels: []
@@ -141,6 +157,7 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: 2a3a2289c0507b446ab1c60b288cbe16, type: 3}
     models: []
+    blackModels: []
     standee: 0
     stage3Models: []
     stage3BlackModels: []
@@ -152,6 +169,7 @@ MonoBehaviour:
     black:
     - {fileID: 21300000, guid: e278e5e6d4039b945bf76843217c8a57, type: 3}
     models: []
+    blackModels: []
     standee: 0
     stage3Models: []
     stage3BlackModels: []
@@ -161,8 +179,10 @@ MonoBehaviour:
     white:
     - {fileID: 21300000, guid: 03b979098cab9d14ebc85cae39541360, type: 3}
     black: []
-    models: []
-    standee: 0
+    models:
+    - {fileID: 919132149155446097, guid: cfb94b3129704dd47be3c57d7b86f5cc, type: 3}
+    blackModels: []
+    standee: 1
     stage3Models:
     - {fileID: 919132149155446097, guid: cfb94b3129704dd47be3c57d7b86f5cc, type: 3}
     stage3BlackModels: []
@@ -173,6 +193,7 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 2034e094792ccd643b933687d030dbcf, type: 3}
     black: []
     models: []
+    blackModels: []
     standee: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: 501cca75f7fdaa742acf4fcfbc92c4a2, type: 3}
@@ -184,9 +205,24 @@ MonoBehaviour:
     - {fileID: 21300000, guid: 5bd9a28723dcff84dae2c22bacd5b6dc, type: 3}
     black:
     - {fileID: 21300000, guid: b55f4507049c60e4191ab113b397de0d, type: 3}
-    models: []
-    standee: 0
+    models:
+    - {fileID: 919132149155446097, guid: 73ebacaf677c47d46948a7e6e36d5745, type: 3}
+    blackModels:
+    - {fileID: 919132149155446097, guid: 827aba8e7d4ff3949925941a234c5ea2, type: 3}
+    standee: 1
     stage3Models:
     - {fileID: 919132149155446097, guid: 73ebacaf677c47d46948a7e6e36d5745, type: 3}
     stage3BlackModels:
     - {fileID: 919132149155446097, guid: 827aba8e7d4ff3949925941a234c5ea2, type: 3}
+  - skin: elephant
+    onlyForType: 0
+    type: 0
+    white: []
+    black: []
+    models:
+    - {fileID: 919132149155446097, guid: 6b6476645ed5b304682ba536961b7395, type: 3}
+    blackModels:
+    - {fileID: 919132149155446097, guid: d295938004c545640a072971c06c8130, type: 3}
+    standee: 1
+    stage3Models: []
+    stage3BlackModels: []
