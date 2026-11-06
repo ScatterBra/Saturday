@@ -211,9 +211,9 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsTrue(events.Any(e => e.Type == GameEventType.Pushed && e.To == C("d6")));
             Assert.IsTrue(events.Any(e => e.Type == GameEventType.Captured && e.Text == "lava" && e.PieceId == pawn.Id));
 
-            board = Setup(Flat, new[] { "Kd5", "Rd4", "kh8" }, "d6");
+            board = Setup(Flat, new[] { "Ke1", "Rd4", "kd5" }, "d6");
             Effect(board, "d4", "hydrant", 1);
-            Assert.AreEqual(C("d5"), board.King(Side.White).Pos, "the king can't be sprayed into the lava, so it stays put");
+            Assert.AreEqual(C("d5"), board.King(Side.Black).Pos, "the king can't be sprayed into the lava, so it stays put");
         }
 
         [Test]

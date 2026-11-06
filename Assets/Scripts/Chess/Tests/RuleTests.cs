@@ -146,13 +146,15 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void Hydrant_PushesTheNeighbourTwoSquaresAway_FriendOrFoe()
+        public void Hydrant_PushesTheEnemyNextToItTwoSquaresAway_NeverItsOwnPieces()
         {
-            var board = Setup("Rd4", "Pd5", "nf6");
+            var board = Setup("Rd4", "pd5", "Pc4", "Pd3");
             var pawn = board.PieceAt(C("d5"));
             var events = new List<GameEvent>();
             Spray(board, "d4", 1, events);
-            Assert.AreEqual(C("d7"), pawn.Pos, "own pawn pushed straight up two squares");
+            Assert.AreEqual(C("d7"), pawn.Pos, "the enemy pawn is pushed straight up two squares");
+            Assert.IsNotNull(board.PieceAt(C("c4")), "own pieces next to the hydrant stay put");
+            Assert.IsNotNull(board.PieceAt(C("d3")));
             Assert.IsNull(board.PieceAt(C("d5")));
             var push = events.Single(e => e.Type == GameEventType.Pushed);
             Assert.AreEqual(C("d5"), push.From);
@@ -162,7 +164,7 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void Hydrant_PrefersOrthogonalNeighbours_ThenDiagonal()
         {
-            var board = Setup("Rd4", "pe5", "Nd3");
+            var board = Setup("Rd4", "pe5", "nd3");
             Spray(board, "d4");
             Assert.AreEqual(C("d1"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight).Pos, "the knight below is closer than the diagonal pawn");
             Assert.AreEqual(C("e5"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos);
@@ -176,37 +178,40 @@ namespace SaturdayGame.Chess.Tests
         public void Hydrant_StopsAtPiecesAndTheEdge_AndSkipsWhatCannotMove()
         {
             // d5 后面一格就有子：推不动，换另一枚
-            var board = Setup("Rd4", "Pd5", "pd6", "Nc4");
+            var board = Setup("Rd4", "pd5", "pd6", "nc4");
             Spray(board, "d4");
-            Assert.AreEqual(C("d5"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn && p.Side == Side.White).Pos);
+            Assert.AreEqual(C("d5"), board.AllPieces.First(p => p.OnBoard && p.StartPos == C("d5")).Pos);
             Assert.AreEqual(C("a4"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight).Pos);
 
             // 第二格被挡住：只推一格
-            board = Setup("Rd4", "Pd5", "pd7");
+            board = Setup("Rd4", "pd5", "Pd7");
             Spray(board, "d4");
-            Assert.AreEqual(C("d6"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn && p.Side == Side.White).Pos);
+            Assert.AreEqual(C("d6"), board.AllPieces.First(p => p.OnBoard && p.StartPos == C("d5")).Pos);
 
             // 贴着棋盘边：推不出去
-            board = Setup("Ra2", "Na1");
+            board = Setup("Ra2", "na1");
             Spray(board, "a2");
             Assert.AreEqual(C("a1"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight).Pos);
         }
 
         [Test]
-        public void Hydrant_PushesKings_AndPicksRandomlyAmongTheClosest()
+        public void Hydrant_PushesTheEnemyKing_AndPicksRandomlyAmongTheClosest()
         {
-            var board = Setup("Rd1");
-            var whiteKing = board.King(Side.White);
+            var board = Setup("Rd8");
+            Spray(board, "d8");
+            Assert.AreEqual(C("g8"), board.King(Side.Black).Pos, "the enemy king next to the hydrant gets pushed too");
+            board = Setup("Rd1");
             Spray(board, "d1");
-            Assert.AreEqual(C("g1"), whiteKing.Pos, "the king next to the hydrant gets pushed too");
+            Assert.AreEqual(C("e1"), board.King(Side.White).Pos, "its own king is left alone");
 
             var pushed = new HashSet<string>();
             for (int seed = 0; seed < 40; seed++)
             {
-                board = Setup("Rd4", "Pd5", "Pc4", "Pe4", "Pd3");
-                var before = board.AllPieces.Where(p => p.OnBoard && p.Type == PieceType.Pawn).ToDictionary(p => p.Id, p => p.Pos);
+                board = Setup("Rd4", "pd5", "pc4", "pe4", "pd3");
+                // d3 的兵被推到第 1 行会升变成后，所以按“黑方的非王棋子”找
+                var before = board.AllPieces.Where(p => p.OnBoard && p.Side == Side.Black && p.Type != PieceType.King).ToDictionary(p => p.Id, p => p.Pos);
                 Spray(board, "d4", seed);
-                var moved = board.AllPieces.Where(p => p.OnBoard && p.Type == PieceType.Pawn && p.Pos != before[p.Id]).ToList();
+                var moved = board.AllPieces.Where(p => before.ContainsKey(p.Id) && p.Pos != before[p.Id]).ToList();
                 Assert.AreEqual(1, moved.Count, "only one piece is pushed");
                 pushed.Add(before[moved[0].Id].ToString());
             }
@@ -216,13 +221,13 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void Hydrant_PawnPushedOntoTheLastRankPromotes_AndOnlyRooksSpray()
         {
-            var board = Setup("Rd5", "Pd6");
-            Spray(board, "d5");
-            var pawn = board.AllPieces.First(p => p.OnBoard && p.Side == Side.White && p.StartPos == C("d6"));
-            Assert.AreEqual(C("d8"), pawn.Pos);
+            var board = Setup("Rd4", "pd3");
+            Spray(board, "d4");
+            var pawn = board.AllPieces.First(p => p.OnBoard && p.StartPos == C("d3"));
+            Assert.AreEqual(C("d1"), pawn.Pos, "a black pawn pushed onto rank 1 promotes");
             Assert.AreEqual(PieceType.Queen, pawn.Type);
 
-            board = Setup("Nd4", "Pd5");
+            board = Setup("Nd4", "pd5");
             var knight = board.PieceAt(C("d4"));
             new FireHydrantRule().OnPieceMoved(Context(board, 1), knight, knight.Pos);
             Assert.AreEqual(C("d5"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos);

@@ -7,7 +7,7 @@ namespace SaturdayGame.Chess
 
     /// <summary>
     /// 车变成消防栓和青蛙：玩家 a 列的车（按开局位置算）变消防栓、h 列的变青蛙，朋友的反过来（a 列青蛙、h 列消防栓）。
-    /// 消防栓每次落地，把紧挨着它的一枚棋子（不分敌友，王也算）喷开，最多两格（HydrantSpray）。
+    /// 消防栓每次落地，把紧挨着它的一枚对方棋子（王也算）喷开，最多两格（HydrantSpray）。
     /// 青蛙每次落地，用舌头把直线上最近的一枚敌方棋子（王也算）拉近一格（FrogTongue）。
     /// 走法都和车一样。第三阶段也生效，推、拉到岩浆格上的棋子会烧掉（王不会进岩浆）。
     /// 同样近的目标有好几个时随机挑一个；玩家走的那一步会用预览里显示的那个（RuleContext.PreferredTargetId）。
@@ -22,7 +22,7 @@ namespace SaturdayGame.Chess
         public override string Title => "Hydrants and Frogs";
         public override string Description =>
             "Your a-rook is a fire hydrant and your h-rook is a frog. Your friend's are the other way round. " +
-            "A hydrant that lands sprays the closest piece next to it up to 2 squares away, friend or foe. " +
+            "A hydrant that lands sprays the closest enemy next to it up to 2 squares away. " +
             "A frog that lands pulls the closest enemy in a straight line, up to 3 squares away, one step closer.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 0;
@@ -53,7 +53,7 @@ namespace SaturdayGame.Chess
         public static List<HydrantSpray.Result> EffectCandidates(Board board, Piece mover)
         {
             if (mover.Type != PieceType.Rook || !mover.OnBoard) return new List<HydrantSpray.Result>();
-            if (mover.Skin == Hydrant) return HydrantSpray.Candidates(board, mover.Pos);
+            if (mover.Skin == Hydrant) return HydrantSpray.Candidates(board, mover);
             if (mover.Skin == Frog) return FrogTongue.Candidates(board, mover);
             return new List<HydrantSpray.Result>();
         }
@@ -128,7 +128,7 @@ namespace SaturdayGame.Chess
     }
 
     /// <summary>
-    /// 消防栓喷水：找紧挨着消防栓的棋子，沿“消防栓 → 棋子”的方向推开，最多 MaxDistance 格；路上碰到棋子、城堡或棋盘边就停在前面，
+    /// 消防栓喷水：找紧挨着消防栓的对方棋子（自己人不喷），沿“消防栓 → 棋子”的方向推开，最多 MaxDistance 格；路上碰到棋子、城堡或棋盘边就停在前面，
     /// 碰到岩浆就掉进去（王不进岩浆，停在岩浆前面）。
     /// 上下左右的比斜角的近；同样近的有好几枚时随机挑一枚（一格都推不动的不算）。
     /// 和第三阶段的击飞（Knockback）是两套独立的代码，以后两边可以各改各的。
@@ -148,24 +148,24 @@ namespace SaturdayGame.Chess
             public bool Burns;
         }
 
-        public static Result? Plan(Board board, Coord hydrant, Random rng)
+        public static Result? Plan(Board board, Piece hydrant, Random rng)
         {
             var options = Candidates(board, hydrant);
             return options.Count > 0 ? options[rng.Next(options.Count)] : (Result?)null;
         }
 
-        /// <summary>最近的那一组目标（先上下左右，没有再斜角）。</summary>
-        public static List<Result> Candidates(Board board, Coord hydrant)
+        /// <summary>最近的那一组对方棋子（先上下左右，没有再斜角）。</summary>
+        public static List<Result> Candidates(Board board, Piece hydrant)
         {
             foreach (var group in new[] { Orthogonal, Diagonal })
             {
                 var options = new List<Result>();
                 foreach (var dir in group)
                 {
-                    var at = hydrant + dir;
+                    var at = hydrant.Pos + dir;
                     if (!at.IsValid) continue;
                     var piece = board.PieceAt(at);
-                    if (piece == null) continue;
+                    if (piece == null || piece.Side == hydrant.Side) continue;
                     var landing = Landing(board, piece, dir);
                     if (landing.HasValue) options.Add(new Result { Piece = piece, To = landing.Value, Burns = board.IsLava(landing.Value) });
                 }
