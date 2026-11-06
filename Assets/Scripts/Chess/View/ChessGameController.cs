@@ -60,6 +60,7 @@ namespace SaturdayGame.Chess.View
         public float aiThinkTime = 0.6f;
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
+        [Tooltip("朋友放技能、跳过回合这类提示停留多久；对白不受影响，要点一下才继续")]
         public float dialogueDuration = 1.4f;
         [Tooltip("规则卡出现时，每张卡从左边飞进来用多久（一张接一张）")]
         public float cardFlyDuration = 0.3f;
@@ -397,6 +398,20 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 演出 ----------
 
+        /// <summary>等玩家点一下鼠标（或按空格、回车）。至少等一帧，避免把触发这段演出的那一下也算进去。</summary>
+        IEnumerator WaitForClick()
+        {
+            yield return null;
+            while (true)
+            {
+                var mouse = Mouse.current;
+                var keyboard = Keyboard.current;
+                if (mouse != null && mouse.leftButton.wasPressedThisFrame) yield break;
+                if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame)) yield break;
+                yield return null;
+            }
+        }
+
         void PlaySound(System.Func<ChessSounds, ChessSounds.Sfx> pick)
         {
             if (sounds != null) sounds.Play(pick(sounds));
@@ -510,7 +525,7 @@ namespace SaturdayGame.Chess.View
                         break;
                     case GameEventType.Dialogue:
                         hud.ShowCaption(e.Speaker, e.Text);
-                        yield return new WaitForSeconds(dialogueDuration);
+                        yield return WaitForClick();
                         break;
                     case GameEventType.GameOver:
                         hud.ShowGameOver(e.Text, MinigameSession.IsHosted);

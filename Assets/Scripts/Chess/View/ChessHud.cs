@@ -166,6 +166,13 @@ namespace SaturdayGame.Chess.View
             captionSpeaker.color = new Color(1f, 0.8f, 0.45f);
             captionText = Label(caption, "Line", "", 26, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(24, -40), new Vector2(-48, 50));
             captionText.color = Color.white;
+            // 右下角的小提示：对白要点一下才继续
+            var hint = Label(caption, "Continue", "click to continue >", 16, FontStyle.Normal, TextAnchor.LowerRight, new Vector2(-14, 8), new Vector2(-28, 22));
+            var hintRect = hint.rectTransform;
+            hintRect.anchorMin = hintRect.anchorMax = hintRect.pivot = new Vector2(1, 0);
+            hintRect.anchoredPosition = new Vector2(-16, 8);
+            hintRect.sizeDelta = new Vector2(260, 22);
+            hint.color = new Color(1f, 1f, 1f, 0.6f);
             captionRoot.SetActive(false);
 
             // 跳过按钮（城堡选藏身棋子时用）
