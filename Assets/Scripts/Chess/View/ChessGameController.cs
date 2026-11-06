@@ -162,6 +162,7 @@ namespace SaturdayGame.Chess.View
             midViewShown = true;
             float pitch = midCameraPitch > 0f ? midCameraPitch : cameraFit.pitch;
             cameraTurning = true;
+            PlaySound(s => s.cameraChange);
             yield return cameraFit.TurnTo(pitch, midFieldOfView, midZoom, cameraTurnDuration);
             cameraTurning = false;
         }
@@ -470,6 +471,7 @@ namespace SaturdayGame.Chess.View
                             cameraFit.extraPoints = board.TallPoints();
                             float pitch = stage3CameraPitch > 0f ? stage3CameraPitch : cameraFit.pitch;
                             cameraTurning = true;
+                            PlaySound(s => s.cameraChange);
                             yield return cameraFit.TurnTo(pitch, stage3FieldOfView, stage3Zoom, cameraTurnDuration);
                             cameraTurning = false;
                         }

@@ -550,6 +550,9 @@ MonoBehaviour:
   effectDuration: 0.35
   dialogueDuration: 1.4
   stormDuration: 0.8
+  midCameraPitch: 60
+  midFieldOfView: 30
+  midZoom: 1
   stage3CameraPitch: 40
   stage3FieldOfView: 30
   stage3Zoom: 1
@@ -616,6 +619,11 @@ MonoBehaviour:
   frog:
     clips:
     - {fileID: 8300000, guid: 579c5f0a82949ae4db2d6506f3541058, type: 3}
+    volume: 1
+    pitchJitter: 0.05
+  cameraChange:
+    clips:
+    - {fileID: 8300000, guid: b23b371242c44274a8ed1d34edc9be2b, type: 3}
     volume: 1
     pitchJitter: 0
 --- !u!1 &1298310296
