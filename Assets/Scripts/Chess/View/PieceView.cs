@@ -129,6 +129,35 @@ namespace SaturdayGame.Chess.View
         /// <summary>现在用 3D 模型显示。</summary>
         public bool HasModel => model != null;
 
+        /// <summary>
+        /// 鼠标射线有没有碰到这枚棋子看得见的部分（贴图、模型或占位圆柱的包围盒），distance 是碰到的距离。
+        /// 用来点中、悬停高高立着的棋子（只按格子顶面算的话，会点到立牌后面那一格）。
+        /// </summary>
+        public bool Raycast(Ray ray, out float distance)
+        {
+            distance = float.MaxValue;
+            bool hit = false;
+            if (model != null)
+            {
+                foreach (var r in model.GetComponentsInChildren<Renderer>())
+                    hit |= HitBounds(r, ray, ref distance);
+            }
+            else if (sprite != null && sprite.enabled) hit |= HitBounds(sprite, ray, ref distance);
+            else if (disc.activeSelf) hit |= HitBounds(disc.GetComponent<Renderer>(), ray, ref distance);
+            return hit;
+        }
+
+        static bool HitBounds(Renderer renderer, Ray ray, ref float distance)
+        {
+            if (renderer == null || !renderer.enabled) return false;
+            var bounds = renderer.bounds;
+            // 平躺的贴图包围盒是扁的，加一点厚度射线才碰得到
+            bounds.Expand(0.02f);
+            if (!bounds.IntersectRay(ray, out float d) || d >= distance) return false;
+            distance = d;
+            return true;
+        }
+
         public void SetPosition(Vector3 localPosition) => Root.transform.localPosition = localPosition;
 
         public void Destroy() => ViewUtil.Destroy(Root);

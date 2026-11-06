@@ -27,7 +27,12 @@ namespace SaturdayGame.Chess
             else ctx.Say(Speakers.You, "I summon... the birds!");
             foreach (var p in TargetPicker.PickMany(Targets(ctx), TargetPicker.BirdWeight, MaxTargets, ctx.Rng))
                 ctx.Freeze(p, FreezeTurns, "poop");
-            if (ctx.CastByFriend) ctx.Say(Speakers.You, "Ew! Not fair!");
+            // 鸟群没有规则卡（朋友放的），效果靠对白说明
+            if (ctx.CastByFriend)
+            {
+                ctx.Say(Speakers.You, "Ew! Not fair!");
+                ctx.Say(Speakers.Friend, $"Messy pieces can't move for {FreezeTurns} turns. Rules are rules.");
+            }
             else ctx.Say(Speakers.Friend, "Ew! Ew ew ew.");
             yield break;
         }

@@ -124,6 +124,32 @@ namespace SaturdayGame.Chess.View
             return found;
         }
 
+        /// <summary>鼠标射线碰到的、离相机最近的棋子（复活预览的影子不算）。</summary>
+        public bool TryGetPiece(Ray ray, out int pieceId)
+        {
+            pieceId = -1;
+            float best = float.MaxValue;
+            foreach (var pair in pieces)
+            {
+                if (board == null || !board.GetPiece(pair.Key).OnBoard) continue;
+                if (!pair.Value.Raycast(ray, out float distance) || distance >= best) continue;
+                best = distance;
+                pieceId = pair.Key;
+            }
+            return pieceId >= 0;
+        }
+
+        /// <summary>鼠标指着哪一格：先看有没有点中棋子本身（立起来的棋子会挡住后面的格子），没有再按格子顶面算。</summary>
+        public bool TryGetPointedCoord(Ray ray, out Coord coord)
+        {
+            if (TryGetPiece(ray, out int id))
+            {
+                coord = board.GetPiece(id).Pos;
+                return true;
+            }
+            return TryGetCoord(ray, out coord);
+        }
+
         /// <summary>换一局新棋：清掉旧棋子，按新棋盘重建。</summary>
         public void Bind(Board newBoard)
         {

@@ -11,7 +11,7 @@ namespace SaturdayGame.Chess
 
         public override string Id => "tree_pawns";
         public override string Title => "Pawns Grow Roots";
-        public override string Description => $"Your friend's pawns turn into trees and can't move for {FreezeTurns} turns.";
+        public override string Description => $"All of your friend's pawns turn into trees. Trees can't move for {FreezeTurns} turns.";
         public override RuleKind Kind => RuleKind.Debuff;
         public override int Stage => 1;
 
@@ -73,7 +73,7 @@ namespace SaturdayGame.Chess
 
         public override string Id => "crayon_revival";
         public override string Title => "Crayon Comeback";
-        public override string Description => "Bring back one of your lost pieces, wherever you like on your half of the board. Some come back drawn in crayon.";
+        public override string Description => "Pick one of your lost pieces, then pick where it comes back on your half of the board. Some come back drawn in crayon.";
         public override RuleKind Kind => RuleKind.Buff;
         public override int Stage => 1;
 

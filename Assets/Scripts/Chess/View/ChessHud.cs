@@ -58,6 +58,13 @@ namespace SaturdayGame.Chess.View
         readonly List<RuleBase> ruleBook = new List<RuleBase>();
         RectTransform lostRoot;
         Image stormOverlay;
+        RectTransform tooltipRoot;
+        Text tooltipTitle;
+        Text tooltipOwner;
+        Text tooltipBody;
+        Text tooltipStatus;
+        /// <summary>风暴之后：规则书换成第三阶段的规则。</summary>
+        bool stage3;
         PieceArt art;
         ChessDesk desk;
 
@@ -189,6 +196,8 @@ namespace SaturdayGame.Chess.View
             backButton = Button(buttonRow, "Back", "Back to office", new Vector2(0.5f, 0.5f), new Vector2(150, 0), new Vector2(260, 64), () => BackClicked?.Invoke()).gameObject;
             gameOverRoot.SetActive(false);
 
+            BuildTooltip(root);
+
             // 风暴：盖住整个画面的沙尘，透明度由控制器控制
             stormOverlay = Panel(root, "Storm", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.62f, 0.55f, 0.45f, 0f)).GetComponent<Image>();
             stormOverlay.raycastTarget = false;
@@ -199,6 +208,8 @@ namespace SaturdayGame.Chess.View
         public void ResetForNewGame()
         {
             ruleBook.Clear();
+            stage3 = false;
+            HideTooltip();
             RefreshRuleBook();
             HideOffers();
             HideCaption();
@@ -234,10 +245,51 @@ namespace SaturdayGame.Chess.View
             cards.Clear();
         }
 
+        /// <summary>规则生效了：一直生效的规则（有 RuleBookText）写进规则书，一次性的技能不写。</summary>
         public void AddRule(RuleBase rule)
         {
+            if (string.IsNullOrEmpty(rule.RuleBookText) || ruleBook.Contains(rule)) return;
             ruleBook.Add(rule);
             RefreshRuleBook();
+        }
+
+        /// <summary>进入第三阶段：规则书的基本规则换成城堡营救的规则。</summary>
+        public void SetStage3(bool value)
+        {
+            stage3 = value;
+            RefreshRuleBook();
+        }
+
+        /// <summary>在鼠标旁边显示棋子说明。screenPosition 是鼠标的屏幕像素坐标。</summary>
+        public void ShowTooltip(PieceTooltip.Info info, Vector2 screenPosition)
+        {
+            tooltipTitle.text = info.Title;
+            tooltipOwner.text = info.Owner;
+            tooltipOwner.color = info.IsYours ? new Color(0.15f, 0.4f, 0.75f) : new Color(0.7f, 0.2f, 0.15f);
+            tooltipBody.text = info.Body ?? "";
+            tooltipBody.gameObject.SetActive(!string.IsNullOrEmpty(info.Body));
+            tooltipStatus.text = info.Status ?? "";
+            tooltipStatus.gameObject.SetActive(!string.IsNullOrEmpty(info.Status));
+            tooltipRoot.gameObject.SetActive(true);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tooltipRoot);
+
+            // 屏幕像素 → 参考分辨率下的 Canvas 坐标；放在鼠标右下方，靠近屏幕边缘就翻到另一边
+            var canvasRect = (RectTransform)transform;
+            float scale = canvasRect.lossyScale.x > 0f ? canvasRect.lossyScale.x : 1f;
+            var p = screenPosition / scale;
+            var size = tooltipRoot.rect.size;
+            var canvasSize = canvasRect.rect.size;
+            const float offset = 24f;
+            float x = p.x + offset;
+            float y = p.y - offset;
+            if (x + size.x > canvasSize.x - 8f) x = p.x - offset - size.x;
+            if (y - size.y < 8f) y = p.y + offset + size.y;
+            tooltipRoot.anchoredPosition = new Vector2(Mathf.Max(8f, x), Mathf.Min(canvasSize.y - 8f, y));
+        }
+
+        public void HideTooltip()
+        {
+            if (tooltipRoot != null) tooltipRoot.gameObject.SetActive(false);
         }
 
         public void ShowCaption(string speaker, string text)
@@ -305,21 +357,61 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 内部 ----------
 
+        /// <summary>
+        /// 规则书只写一直生效的规则：基本规则（第三阶段换成城堡营救的规则）+ 生效中的常驻规则（各一两句）。
+        /// 一次性技能的说明只在规则卡上；棋子的细节在悬浮窗里。
+        /// </summary>
         void RefreshRuleBook()
         {
             var sb = new StringBuilder();
-            sb.Append("<b>Regular chess, except:</b>\n");
-            sb.Append("  • get checkmated and you lose\n");
-            sb.Append("  • in check? you may use a skill\n");
-            sb.Append("  • no castling, no en passant\n");
-            sb.Append("  • pawns always become queens\n");
+            if (!stage3)
+            {
+                sb.Append("<b>Regular chess, except:</b>\n");
+                sb.Append("  • get checkmated and you lose\n");
+                sb.Append("  • in check? you may use a skill\n");
+                sb.Append("  • no castling, no en passant\n");
+                sb.Append("  • pawns always become queens\n");
+            }
+            else
+            {
+                sb.Append("<b>After the storm:</b>\n");
+                sb.Append("  • get a knight into the castle to save the princess\n");
+                sb.Append("  • your friend doesn't capture, it knocks your pieces away\n");
+                sb.Append("  • nobody can step on lava\n");
+                sb.Append("  • whatever falls into the lava is gone\n");
+            }
             foreach (var rule in ruleBook)
             {
-                sb.Append($"\n<b>{RuleCatalog.StageNames[rule.Stage]}: {rule.Title}</b>\n");
-                sb.Append($"{rule.Description}\n");
+                sb.Append($"\n<b>{rule.Title}</b>\n");
+                sb.Append($"{rule.RuleBookText}\n");
             }
-            if (ruleBook.Count < RuleCatalog.StageCount) sb.Append("\n<i>(the rest of the pages are blank)</i>");
+            if (!stage3) sb.Append("\n<i>(the rest of the pages are blank)</i>");
             ruleBookText.text = sb.ToString();
+        }
+
+        /// <summary>棋子说明的小纸条：屏幕最上层，跟着鼠标走，高度随文字自动撑开。</summary>
+        void BuildTooltip(RectTransform root)
+        {
+            tooltipRoot = Panel(root, "Piece Tooltip", Vector2.zero, Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(440, 0), Paper);
+            tooltipRoot.GetComponent<Image>().raycastTarget = false;
+            var layout = tooltipRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(18, 18, 12, 14);
+            layout.spacing = 4;
+            layout.childControlHeight = true;
+            layout.childControlWidth = true;
+            layout.childForceExpandHeight = false;
+            var fitter = tooltipRoot.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var outline = tooltipRoot.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.16f, 0.12f, 0.1f, 0.8f);
+            outline.effectDistance = new Vector2(2, -2);
+
+            tooltipTitle = Label(tooltipRoot, "Title", "", 28, FontStyle.Bold, TextAnchor.UpperLeft, Vector2.zero, Vector2.zero);
+            tooltipOwner = Label(tooltipRoot, "Owner", "", 22, FontStyle.Italic, TextAnchor.UpperLeft, Vector2.zero, Vector2.zero);
+            tooltipBody = Label(tooltipRoot, "Body", "", 24, FontStyle.Normal, TextAnchor.UpperLeft, Vector2.zero, Vector2.zero);
+            tooltipStatus = Label(tooltipRoot, "Status", "", 24, FontStyle.Italic, TextAnchor.UpperLeft, Vector2.zero, Vector2.zero);
+            tooltipStatus.color = new Color(0.55f, 0.25f, 0.1f);
+            tooltipRoot.gameObject.SetActive(false);
         }
 
         /// <summary>规则卡的几张底图打乱顺序；没有配图时为空。</summary>

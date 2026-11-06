@@ -24,6 +24,7 @@ namespace SaturdayGame.Chess
             "Your a-rook is a fire hydrant and your h-rook is a frog. Your friend's are the other way round. " +
             "A hydrant that lands sprays the closest enemy next to it up to 2 squares away. " +
             "A frog that lands pulls the closest enemy in a straight line, up to 3 squares away, one step closer.";
+        public override string RuleBookText => "Hydrants spray enemies away. Frogs pull enemies closer. Hover over one to see how.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 0;
 
@@ -42,7 +43,8 @@ namespace SaturdayGame.Chess
             foreach (var side in new[] { ctx.Player, ctx.Opponent })
                 foreach (var rook in ctx.Visible(side, PieceType.Rook))
                     ctx.SetSkin(rook, SkinFor(rook, ctx.Player));
-            ctx.Say(Speakers.Friend, "Rooks got jobs. Hydrants spray, frogs grab. Don't stand too close to either.");
+            ctx.Say(Speakers.Friend, "Rooks got jobs. Hydrants spray enemies away, frogs pull them closer.");
+            ctx.Say(Speakers.You, "Don't stand too close to either. Got it.");
             yield break;
         }
 
@@ -203,6 +205,7 @@ namespace SaturdayGame.Chess
         public override string Id => "bishop_variants";
         public override string Title => "Bishops Can Be Anything";
         public override string Description => "Every bishop picked something else to be: an elephant, a fish shop, a bird or a cake. They stay that way.";
+        public override string RuleBookText => "Bishops picked new looks. They still move like bishops.";
         public override RuleKind Kind => RuleKind.Cosmetic;
         public override int Stage => 0;
 
@@ -225,6 +228,7 @@ namespace SaturdayGame.Chess
 
             ctx.Say(Speakers.Friend, "Bishops are boring. Let them be whatever they want.");
             ctx.Say(Speakers.You, "...Is that one a cake?");
+            ctx.Say(Speakers.Friend, "It's still a bishop. It just wants to be a cake.");
             yield break;
         }
     }

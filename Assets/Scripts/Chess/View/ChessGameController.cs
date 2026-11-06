@@ -86,6 +86,8 @@ namespace SaturdayGame.Chess.View
         public float orbitZoomStep = 0.1f;
         [Tooltip("要看规则卡、点阵亡区时，相机自动转回正面用多久")]
         public float returnToFrontDuration = 0.4f;
+        [Tooltip("鼠标在有特殊外观或状态的棋子上停多久才弹出说明（秒）")]
+        public float tooltipDelay = 0.2f;
 
         ChessGame game;
         ChessAI ai;
@@ -112,6 +114,9 @@ namespace SaturdayGame.Chess.View
         Coord? previewSquare;
         HydrantSpray.Result? preview;
         Move? lastMove;
+        /// <summary>鼠标停在哪枚有说明的棋子上（-1 = 没有），从什么时候开始停的。</summary>
+        int hoverPieceId = -1;
+        float hoverSince;
 
         public ChessGame Game => game;
         public bool IsBusy => busy;
@@ -232,6 +237,7 @@ namespace SaturdayGame.Chess.View
         {
             if (game == null) return;
             UpdateOrbit();
+            UpdateTooltip();
             if (busy) return;
             if (game.Phase == GamePhase.OpponentTurn)
             {
@@ -247,7 +253,32 @@ namespace SaturdayGame.Chess.View
             if (mouse.rightButton.wasReleasedThisFrame && !rightDragging) Deselect();
             if (!mouse.leftButton.wasPressedThisFrame) return;
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
-            if (board.TryGetCoord(boardCamera.ScreenPointToRay(mouse.position.ReadValue()), out var coord)) ClickSquare(coord);
+            if (board.TryGetPointedCoord(boardCamera.ScreenPointToRay(mouse.position.ReadValue()), out var coord)) ClickSquare(coord);
+        }
+
+        /// <summary>
+        /// 鼠标停在有特殊外观或状态的棋子上（消防栓、青蛙、主教变体、龙、树、被鸟屎糊住的、复活的……）一小会儿，就在旁边弹出说明。
+        /// 拖动视角、鼠标在 UI 上、风暴遮着画面时不弹。演出中也能看（例如对白停着等点击时）。
+        /// </summary>
+        void UpdateTooltip()
+        {
+            var mouse = Mouse.current;
+            int id = -1;
+            if (mouse != null && !(mouse.rightButton.isPressed && rightDragging) && !cameraTurning &&
+                (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()) &&
+                board.TryGetPiece(boardCamera.ScreenPointToRay(mouse.position.ReadValue()), out int hit) &&
+                PieceTooltip.HasTooltip(game.Board.GetPiece(hit)))
+                id = hit;
+            if (id != hoverPieceId)
+            {
+                hoverPieceId = id;
+                hoverSince = Time.unscaledTime;
+            }
+            var info = id >= 0 && Time.unscaledTime - hoverSince >= tooltipDelay
+                ? PieceTooltip.Describe(game.Board.GetPiece(id), game.PlayerSide, game.InStage3)
+                : null;
+            if (info.HasValue) hud.ShowTooltip(info.Value, mouse.position.ReadValue());
+            else hud.HideTooltip();
         }
 
         /// <summary>
@@ -411,7 +442,7 @@ namespace SaturdayGame.Chess.View
         {
             Coord? hovered = null;
             if (selected != null && game.Phase == GamePhase.PlayerTurn &&
-                board.TryGetCoord(boardCamera.ScreenPointToRay(mousePosition), out var c) && selectedMoves.Any(m => m.To == c))
+                board.TryGetPointedCoord(boardCamera.ScreenPointToRay(mousePosition), out var c) && selectedMoves.Any(m => m.To == c))
                 hovered = c;
             if (hovered == previewSquare) return;
 
@@ -551,6 +582,7 @@ namespace SaturdayGame.Chess.View
                         board.Highlight(null, null, null, null);
                         // 第三阶段：棋子随着相机的角度立起来
                         FaceCamera.FollowCameraPitch = true;
+                        hud.SetStage3(true);
                         // 沙尘还盖着画面时把相机转到斜视角，并把升起来的城堡框进画面
                         if (cameraFit != null)
                         {

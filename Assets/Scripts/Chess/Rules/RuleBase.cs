@@ -29,7 +29,13 @@ namespace SaturdayGame.Chess
     {
         public abstract string Id { get; }
         public abstract string Title { get; }
+        /// <summary>规则卡上的完整说明。</summary>
         public abstract string Description { get; }
+        /// <summary>
+        /// 一直生效的规则写进右边规则书的一两句话；null = 一次性的技能，用完就不进规则书（说明只在规则卡上）。
+        /// 细节交给棋子的悬浮窗（PieceTooltip）。
+        /// </summary>
+        public virtual string RuleBookText => null;
         public abstract RuleKind Kind { get; }
         /// <summary>0 = 开局，1 = 中局，2 = 第三阶段（城堡营救）。</summary>
         public abstract int Stage { get; }
