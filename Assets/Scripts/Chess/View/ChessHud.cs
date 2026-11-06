@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -329,11 +330,20 @@ namespace SaturdayGame.Chess.View
             return list;
         }
 
+        /// <summary>
+        /// 一张规则卡。外层（返回值）只在竖排布局里占位置；里面的 "Paper" 才是看得见的卡片，飞进来的动画挪的是它。
+        /// </summary>
         GameObject Card(RuleBase rule, Sprite cardSprite, Action onClick)
         {
-            var go = new GameObject($"Card {rule.Id}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-            go.transform.SetParent(cardsRoot, false);
-            go.GetComponent<LayoutElement>().preferredHeight = 230;
+            var slot = new GameObject($"Card {rule.Id}", typeof(RectTransform), typeof(LayoutElement));
+            slot.transform.SetParent(cardsRoot, false);
+            slot.GetComponent<LayoutElement>().preferredHeight = 230;
+            var go = new GameObject("Paper", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(slot.transform, false);
+            var paperRect = (RectTransform)go.transform;
+            paperRect.anchorMin = Vector2.zero;
+            paperRect.anchorMax = Vector2.one;
+            paperRect.offsetMin = paperRect.offsetMax = Vector2.zero;
             var image = go.GetComponent<Image>();
             go.GetComponent<Button>().onClick.AddListener(() => onClick());
             var rt = (RectTransform)go.transform;
@@ -354,7 +364,41 @@ namespace SaturdayGame.Chess.View
                 kind.color = Color.Lerp(KindColor(rule.Kind), Color.black, 0.55f);
             }
             else image.color = KindColor(rule.Kind);
-            return go;
+            return slot;
+        }
+
+        /// <summary>
+        /// 规则卡从上到下一张一张从左边飞进来（每张飞 duration 秒），每张开始飞的时候调用 onEach（放音效）。
+        /// 调用前先 ShowOffers；卡片在飞进来之前是看不见的。
+        /// </summary>
+        public IEnumerator FlyInCards(float duration, Action onEach)
+        {
+            var papers = new List<RectTransform>();
+            foreach (var card in cards)
+            {
+                var paper = (RectTransform)card.transform.Find("Paper");
+                papers.Add(paper);
+                paper.gameObject.SetActive(false);
+            }
+            // 从卡片区左边外面出发：一张卡宽 + 一点余量
+            float start = -(cardsRoot.rect.width + 120f);
+            foreach (var paper in papers)
+            {
+                if (paper == null) continue;
+                paper.gameObject.SetActive(true);
+                onEach?.Invoke();
+                for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.01f, duration))
+                {
+                    if (paper == null) yield break; // 中途被收起（例如开了新局）
+                    float k = 1f - Mathf.Pow(1f - t, 3f); // 先快后慢
+                    paper.anchoredPosition = new Vector2(Mathf.Lerp(start, 0f, k), 0f);
+                    paper.localRotation = Quaternion.Euler(0, 0, Mathf.Lerp(14f, 0f, k));
+                    yield return null;
+                }
+                if (paper == null) yield break;
+                paper.anchoredPosition = Vector2.zero;
+                paper.localRotation = Quaternion.identity;
+            }
         }
 
         static Color KindColor(RuleKind kind)

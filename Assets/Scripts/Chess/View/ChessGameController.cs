@@ -61,6 +61,8 @@ namespace SaturdayGame.Chess.View
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
         public float dialogueDuration = 1.4f;
+        [Tooltip("规则卡出现时，每张卡从左边飞进来用多久（一张接一张）")]
+        public float cardFlyDuration = 0.3f;
         [Tooltip("风暴沙尘卷起和散去各用多久")]
         public float stormDuration = 0.8f;
         [Tooltip("中间视角：第三阶段之前，棋盘上第一次出现 3D 模型（第 5 回合主教变体，或者树）时相机转到这个俯仰角；0 = 不转。Play 模式下斜过来之后改它会实时生效")]
@@ -492,8 +494,9 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.RulesOffered:
-                        PlaySound(s => s.paperPopup);
                         hud.ShowOffers(e.Rules, e.OfferKind);
+                        // 从上到下一张一张飞进来，每张一声
+                        yield return hud.FlyInCards(cardFlyDuration, () => PlaySound(s => s.paperPopup));
                         hud.ShowSkip(true);
                         break;
                     case GameEventType.RuleActivated:

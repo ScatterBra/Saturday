@@ -29,7 +29,7 @@ namespace SaturdayGame.Chess.View
         public Sfx pieceChange = new Sfx();
         [Tooltip("一枚棋子变成树（每棵树冒出来时各播一次）")]
         public Sfx tree = new Sfx();
-        [Tooltip("一组规则卡出现（整组播一次）")]
+        [Tooltip("规则卡飞进来（每张卡各播一次）")]
         public Sfx paperPopup = new Sfx();
         [Tooltip("消防栓喷水")]
         public Sfx hydrant = new Sfx();
