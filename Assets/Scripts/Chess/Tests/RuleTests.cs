@@ -294,87 +294,83 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsFalse(new DragonKnightRule().IsAvailable(Context(board, 1)));
         }
 
-        [Test]
-        public void CrayonRevival_NeverRevivesQueenOrRook()
+        /// <summary>跑 Crayon Comeback：挑 pieceSquare 原来那枚棋子（null = 跳过），放到 to（null = 跳过）。</summary>
+        static (TargetRequest pick, TargetRequest place) Comeback(Board board, Piece piece, string to, List<GameEvent> events = null)
         {
-            for (int seed = 0; seed < 100; seed++)
-            {
-                var board = Board.CreateStandard();
-                Capture(board, "d1", "a1", "b1", "e2");
-                var events = new List<GameEvent>();
-                var rule = new CrayonRevivalRule();
-                var ctx = Context(board, seed, events);
-                Assert.IsTrue(rule.IsAvailable(ctx));
-                Run(rule, ctx);
-
-                var revived = board.GetPiece(events.Single(e => e.Type == GameEventType.Revived).PieceId);
-                Assert.That(revived.Type, Is.EqualTo(PieceType.Knight).Or.EqualTo(PieceType.Pawn));
-                Assert.AreEqual(revived.StartPos, revived.Pos, "start square was free, so it should return there");
-                Assert.AreEqual("crayon", revived.Skin);
-                Assert.AreSame(revived, board.PieceAt(revived.Pos));
-            }
+            var requests = new CrayonRevivalRule().Activate(Context(board, 1, events)).GetEnumerator();
+            Assert.IsTrue(requests.MoveNext());
+            var pick = requests.Current;
+            pick.PieceResult = piece?.Id;
+            if (!requests.MoveNext()) return (pick, null);
+            var place = requests.Current;
+            place.Result = to == null ? (Coord?)null : C(to);
+            Assert.IsFalse(requests.MoveNext());
+            return (pick, place);
         }
 
         [Test]
-        public void CrayonRevival_UnavailableWhenOnlyQueenOrRookLost()
-        {
-            var board = Board.CreateStandard();
-            Assert.IsFalse(new CrayonRevivalRule().IsAvailable(Context(board, 1)));
-            Capture(board, "d1", "h1");
-            Assert.IsFalse(new CrayonRevivalRule().IsAvailable(Context(board, 1)));
-        }
-
-        [Test]
-        public void CrayonRevival_PawnAvoidsBackRanksWhenStartSquareTaken()
-        {
-            var board = new Board();
-            board.AddPiece(PieceType.King, Side.White, C("e1"));
-            board.AddPiece(PieceType.King, Side.Black, C("e8"));
-            var pawn = board.AddPiece(PieceType.Pawn, Side.White, C("a2"));
-            board.RemovePiece(pawn);
-            board.AddPiece(PieceType.Knight, Side.White, C("a2"));
-            var square = CrayonRevivalRule.FindSquare(board, pawn).Value;
-            Assert.AreEqual(1, square.DistanceTo(C("a2")));
-            Assert.AreNotEqual(0, square.Y);
-            Assert.AreEqual(C("b2"), square, "same distance: prefer the square closest to home");
-        }
-
-        [Test]
-        public void RevivePiece_PlayerPicksWhichLostPieceComesBack()
+        public void CrayonComeback_PlayerPicksAnyLostPiece_ThenASquareOnTheirHalf()
         {
             var board = Board.CreateStandard();
             Capture(board, "b1", "e2", "d1");
-            var rule = new RevivePieceRule();
-            var ctx = Context(board, 1);
-            Assert.IsTrue(rule.IsAvailable(ctx));
-
-            var requests = rule.Activate(ctx).GetEnumerator();
-            Assert.IsTrue(requests.MoveNext());
-            var request = requests.Current;
-            Assert.IsTrue(request.IsPieceRequest);
-            Assert.IsTrue(request.AllowSkip);
             var queen = board.AllPieces.Single(p => p.Type == PieceType.Queen && p.Side == Side.White);
-            CollectionAssert.Contains(request.PieceOptions, queen.Id, "any lost piece can be picked, even the queen");
-            Assert.AreEqual(3, request.PieceOptions.Count);
+            var (pick, place) = Comeback(board, queen, "d4");
 
-            request.PieceResult = queen.Id;
-            Assert.IsFalse(requests.MoveNext());
+            Assert.IsTrue(pick.IsPieceRequest);
+            Assert.IsTrue(pick.AllowSkip);
+            Assert.AreEqual(3, pick.PieceOptions.Count, "any lost piece can be picked, even the queen");
+            Assert.IsFalse(place.IsPieceRequest);
+            Assert.IsTrue(place.AllowSkip);
+            Assert.AreEqual(queen.Id, place.PreviewPieceId);
+            Assert.IsTrue(place.Options.All(c => c.Y <= 3 && board.IsEmpty(c) || c == C("d4")), "only free squares on the player's half");
+            CollectionAssert.DoesNotContain(place.Options, C("d5"));
             Assert.IsTrue(queen.OnBoard);
-            Assert.AreEqual(C("d1"), queen.Pos, "goes back to its start square when it is free");
+            Assert.AreEqual(C("d4"), queen.Pos);
+            Assert.AreEqual("crayon", queen.Skin, "queens have crayon art too");
         }
 
         [Test]
-        public void RevivePiece_UnavailableWithNothingLost_AndSkipKeepsBoard()
+        public void CrayonComeback_LooksLikeCrayonWhenThereIsArt_AndKeepsOtherLooks()
         {
             var board = Board.CreateStandard();
-            Assert.IsFalse(new RevivePieceRule().IsAvailable(Context(board, 1)));
+            Capture(board, "b1", "h1");
+            var knight = board.AllPieces.First(p => p.StartPos == C("b1"));
+            var rook = board.AllPieces.First(p => p.StartPos == C("h1"));
+            rook.Skin = "frog";
 
-            Capture(board, "b1");
-            var requests = new RevivePieceRule().Activate(Context(board, 1)).GetEnumerator();
-            Assert.IsTrue(requests.MoveNext());
-            requests.Current.PieceResult = null;
-            Assert.IsFalse(requests.MoveNext());
-            Assert.IsNull(board.PieceAt(C("b1")));
+            var (_, place) = Comeback(board, knight, "c3");
+            Assert.AreEqual("crayon", place.PreviewSkin);
+            Assert.AreEqual("crayon", knight.Skin);
+
+            Capture(board, "c1");
+            var bishop = board.AllPieces.First(p => p.StartPos == C("c1"));
+            (_, place) = Comeback(board, bishop, "d3");
+            Assert.IsNull(bishop.Skin, "no crayon bishop yet: it comes back as paper");
+
+            (_, place) = Comeback(board, rook, "h3");
+            Assert.AreEqual("frog", place.PreviewSkin);
+            Assert.AreEqual("frog", rook.Skin, "a frog comes back as a frog (it has a 3D model)");
+        }
+
+        [Test]
+        public void CrayonComeback_PawnsAvoidTheBackRank_AndBothStepsCanBeSkipped()
+        {
+            var board = Board.CreateStandard();
+            Assert.IsFalse(new CrayonRevivalRule().IsAvailable(Context(board, 1)), "nothing lost, nothing to bring back");
+            Capture(board, "a2");
+            var pawn = board.AllPieces.First(p => p.StartPos == C("a2"));
+            var squares = RevivalPlacement.Squares(board, pawn);
+            Assert.IsTrue(squares.All(c => c.Y >= 1 && c.Y <= 3));
+            CollectionAssert.Contains(squares, C("a2"));
+
+            var (_, place) = Comeback(board, null, null);
+            Assert.IsNull(place, "skipping the piece ends the skill");
+            Assert.IsFalse(pawn.OnBoard);
+
+            (_, place) = Comeback(board, pawn, null);
+            Assert.IsNotNull(place);
+            Assert.IsFalse(pawn.OnBoard, "skipping the square ends the skill too");
+            Assert.IsNull(pawn.Skin);
         }
 
         [Test]

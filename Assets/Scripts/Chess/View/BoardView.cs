@@ -127,6 +127,7 @@ namespace SaturdayGame.Chess.View
         /// <summary>换一局新棋：清掉旧棋子，按新棋盘重建。</summary>
         public void Bind(Board newBoard)
         {
+            HideGhost();
             foreach (var view in pieces.Values) view.Destroy();
             pieces.Clear();
             board = newBoard;
@@ -210,6 +211,42 @@ namespace SaturdayGame.Chess.View
                 view.SetPosition(PiecePosition(piece.Pos));
                 view.Refresh(piece, Stage3);
             }
+        }
+
+        PieceView ghost;
+        int ghostPieceId = -1;
+        Coord ghostAt;
+
+        /// <summary>
+        /// 在 at 上预览一枚（还没上棋盘的）棋子，外观换成 skin；at 为 null 时收起预览。
+        /// 用一份拷贝显示，不改真正的棋子。
+        /// </summary>
+        public void ShowGhost(Piece piece, string skin, Coord? at)
+        {
+            if (piece != null && at.HasValue && ghost != null && ghostPieceId == piece.Id && ghostAt == at.Value) return;
+            HideGhost();
+            if (piece == null || !at.HasValue) return;
+            var copy = piece.Clone();
+            copy.OnBoard = true;
+            copy.Pos = at.Value;
+            copy.Skin = skin;
+            copy.FrozenTurns = 0;
+            copy.FrozenSkin = null;
+            copy.WasLost = true;
+            ghost = new PieceView(factory, pieceRoot, copy);
+            ghost.Root.name = "Revive Preview";
+            ghost.Refresh(copy, Stage3);
+            ghost.SetPosition(PiecePosition(at.Value));
+            ghost.MakeGhost();
+            ghostPieceId = piece.Id;
+            ghostAt = at.Value;
+        }
+
+        public void HideGhost()
+        {
+            if (ghost != null) ghost.Destroy();
+            ghost = null;
+            ghostPieceId = -1;
         }
 
         PieceView Create(Piece piece)

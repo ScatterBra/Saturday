@@ -35,17 +35,6 @@ namespace SaturdayGame.Chess
             }
         }
 
-        /// <summary>复活：只复活兵、马、象，不复活后和车。</summary>
-        public static int ReviveWeight(Piece p)
-        {
-            switch (p.Type)
-            {
-                case PieceType.Pawn: return 3;
-                case PieceType.Knight:
-                case PieceType.Bishop: return 1;
-                default: return 0;
-            }
-        }
 
         public static T Pick<T>(IList<T> items, Func<T, int> weight, Random rng) where T : class
         {

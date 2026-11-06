@@ -219,6 +219,7 @@ namespace SaturdayGame.Chess.View
             var mouse = Mouse.current;
             if (mouse == null) return;
             UpdatePreview(mouse.position.ReadValue());
+            UpdateRevivePreview(mouse.position.ReadValue());
             if (mouse.rightButton.wasPressedThisFrame) Deselect();
             if (!mouse.leftButton.wasPressedThisFrame) return;
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
@@ -323,6 +324,8 @@ namespace SaturdayGame.Chess.View
         {
             selected = null;
             selectedMoves.Clear();
+            previewSquare = null;
+            preview = null;
             if (game.Phase != GamePhase.ChoosingTarget) board.Highlight(null, null, null, lastMove, DangerSquare());
             UpdateStatus();
         }
@@ -341,6 +344,7 @@ namespace SaturdayGame.Chess.View
 
             previewSquare = hovered;
             preview = null;
+            if (selected == null) return; // 选中的棋子已经没了（例如开了新局），只清掉记录
             if (hovered.HasValue)
             {
                 var move = selectedMoves.First(m => m.To == hovered.Value);
@@ -351,6 +355,20 @@ namespace SaturdayGame.Chess.View
             }
             board.Highlight(selected.Pos, selectedMoves, null, lastMove, DangerSquare(),
                 preview.HasValue ? (preview.Value.Piece.Pos, preview.Value.To, preview.Value.Burns) : ((Coord, Coord, bool)?)null);
+        }
+
+        /// <summary>复活时挑位置：鼠标停在哪个可选格子上，就在那里显示这枚棋子复活后的样子。</summary>
+        void UpdateRevivePreview(Vector2 mousePosition)
+        {
+            var request = game.Phase == GamePhase.ChoosingTarget ? game.PendingTarget : null;
+            if (request == null || request.IsPieceRequest || !request.PreviewPieceId.HasValue)
+            {
+                board.HideGhost();
+                return;
+            }
+            Coord? hovered = null;
+            if (board.TryGetCoord(boardCamera.ScreenPointToRay(mousePosition), out var c) && request.Options.Contains(c)) hovered = c;
+            board.ShowGhost(game.Board.GetPiece(request.PreviewPieceId.Value), request.PreviewSkin, hovered);
         }
 
         /// <summary>玩家被将军时王所在的格子（标红）。</summary>
@@ -384,6 +402,7 @@ namespace SaturdayGame.Chess.View
         IEnumerator PlayEvents(List<GameEvent> events)
         {
             busy = true;
+            board.HideGhost();
             board.Highlight(null, null, null, lastMove);
             foreach (var e in events)
             {
@@ -419,6 +438,8 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.Revived:
                         yield return board.AnimateSpawn(e.PieceId, effectDuration * 2);
                         PlaySound(s => s.pieceFall);
+                        // 复活的是消防栓、主教变体这类 3D 模型：第一次出现 3D 时转到中间视角
+                        yield return TurnToMidViewIfNeeded();
                         break;
                     case GameEventType.LavaAdded:
                         board.Highlight(null, null, null, lastMove);
@@ -436,6 +457,8 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.BoardRebuilt:
                         lastMove = null;
                         selected = null;
+                        previewSquare = null;
+                        preview = null;
                         board.RebuildTerrain();
                         board.SyncAll();
                         board.Highlight(null, null, null, null);
@@ -469,7 +492,7 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.RulesOffered:
                         PlaySound(s => s.paperPopup);
                         hud.ShowOffers(e.Rules, e.OfferKind);
-                        hud.ShowSkip(e.OfferKind != OfferKind.StageCard);
+                        hud.ShowSkip(true);
                         break;
                     case GameEventType.RuleActivated:
                         hud.HideOffers();
@@ -521,7 +544,7 @@ namespace SaturdayGame.Chess.View
                     break;
                 case GamePhase.ChoosingRule:
                     hud.SetStatus(game.CurrentOfferKind == OfferKind.StageCard
-                        ? $"Turn {turn} - pick a new house rule"
+                        ? $"Turn {turn} - pick a new house rule, or skip"
                         : $"Turn {turn} - pick a skill, or skip");
                     break;
                 case GamePhase.ChoosingTarget:

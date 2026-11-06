@@ -120,6 +120,12 @@ namespace SaturdayGame.Chess.View
                 : null;
         }
 
+        /// <summary>做成半透明的预览（复活前看看它会出现在哪）。贴图变半透明；3D 模型的材质不透明，保持原样。</summary>
+        public void MakeGhost()
+        {
+            if (sprite != null) sprite.color = new Color(sprite.color.r, sprite.color.g, sprite.color.b, 0.55f);
+        }
+
         /// <summary>现在用 3D 模型显示。</summary>
         public bool HasModel => model != null;
 

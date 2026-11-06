@@ -100,7 +100,7 @@ namespace SaturdayGame.Chess
         /// <summary>当前这组规则卡是在什么情况下弹出的。</summary>
         public OfferKind CurrentOfferKind => offerKind;
         /// <summary>当前这组规则卡可以跳过（救急技能和第三阶段技能可以，固定选卡不行）。</summary>
-        public bool CanSkipOffers => Phase == GamePhase.ChoosingRule && offerKind != OfferKind.StageCard;
+        public bool CanSkipOffers => Phase == GamePhase.ChoosingRule;
         /// <summary>ChoosingTarget 阶段等待的点选请求。</summary>
         public TargetRequest PendingTarget { get; private set; }
         /// <summary>下一次出现新规则的回合（第一阶段排好的规则，或固定选卡），没有了返回 -1。</summary>

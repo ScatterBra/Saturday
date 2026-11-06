@@ -61,45 +61,72 @@ namespace SaturdayGame.Chess
         }
     }
 
-    /// <summary>随机复活自己一个被吃掉的兵、马或象，样子像小孩用蜡笔画的。</summary>
+    /// <summary>
+    /// 复活自己一枚被吃掉的棋子（王以外都行）：玩家先在规则书的被吃区里挑棋子，再在自己那半边棋盘上挑位置，两步都能跳过。
+    /// 复活后的样子：本来有外观的（消防栓、青蛙、主教变体）保持原样；有蜡笔图的（兵、马、车、后）画成蜡笔版；其他的（普通的象）是纸片版。
+    /// 第 10 回合的选卡、被将军时的救急技能、第三阶段的技能都是它。
+    /// </summary>
     public sealed class CrayonRevivalRule : RuleBase
     {
+        /// <summary>有蜡笔图的棋子类型（和 ChessPieceArt 里 crayon 外观配了图的类型一致）。</summary>
+        public static readonly PieceType[] CrayonTypes = { PieceType.Pawn, PieceType.Knight, PieceType.Rook, PieceType.Queen };
+
         public override string Id => "crayon_revival";
         public override string Title => "Crayon Comeback";
-        public override string Description => "One of your lost pawns, knights or bishops comes back, drawn in crayon.";
+        public override string Description => "Bring back one of your lost pieces, wherever you like on your half of the board. Some come back drawn in crayon.";
         public override RuleKind Kind => RuleKind.Buff;
         public override int Stage => 1;
 
-        public override bool IsAvailable(RuleContext ctx)
-        {
-            foreach (var p in Candidates(ctx))
-                if (FindSquare(ctx.Board, p).HasValue) return true;
-            return false;
-        }
+        public override bool IsAvailable(RuleContext ctx) => Candidates(ctx).Count > 0;
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {
             var candidates = Candidates(ctx);
-            candidates.RemoveAll(p => !FindSquare(ctx.Board, p).HasValue);
-            var piece = TargetPicker.Pick(candidates, TargetPicker.ReviveWeight, ctx.Rng);
-            if (piece != null)
+            if (candidates.Count == 0) yield break;
+            var pick = new TargetRequest
             {
-                ctx.Revive(piece, FindSquare(ctx.Board, piece).Value, "crayon");
+                Prompt = "Pick a lost piece to bring back (in the rule book), or skip.",
+                PieceOptions = candidates.ConvertAll(p => p.Id),
+                AllowSkip = true,
+            };
+            yield return pick;
+            if (!pick.PieceResult.HasValue) yield break;
+
+            var piece = ctx.Board.GetPiece(pick.PieceResult.Value);
+            string skin = LookAfterRevival(piece);
+            var place = new TargetRequest
+            {
+                Prompt = $"Pick where your {piece.Type.ToString().ToLower()} comes back (your half of the board), or skip.",
+                Options = RevivalPlacement.Squares(ctx.Board, piece),
+                AllowSkip = true,
+                PreviewPieceId = piece.Id,
+                PreviewSkin = skin,
+            };
+            yield return place;
+            if (!place.Result.HasValue) yield break;
+
+            ctx.Revive(piece, place.Result.Value, skin);
+            if (skin == "crayon")
+            {
                 ctx.Say(Speakers.Friend, "Did you just draw that?");
                 ctx.Say(Speakers.You, "It counts.");
             }
-            yield break;
+            else ctx.Say(Speakers.Friend, "Welcome back, I guess.");
+        }
+
+        /// <summary>复活后的外观：有外观就保留，没有外观的、有蜡笔图的变成蜡笔版，其他的为 null（表现层显示纸片版）。</summary>
+        public static string LookAfterRevival(Piece piece)
+        {
+            if (!string.IsNullOrEmpty(piece.Skin)) return piece.Skin;
+            return System.Array.IndexOf(CrayonTypes, piece.Type) >= 0 ? "crayon" : null;
         }
 
         static List<Piece> Candidates(RuleContext ctx)
         {
             var list = new List<Piece>();
             foreach (var p in ctx.Board.CapturedOf(ctx.Player))
-                if (TargetPicker.ReviveWeight(p) > 0) list.Add(p);
+                if (p.Type != PieceType.King && RevivalPlacement.Squares(ctx.Board, p).Count > 0) list.Add(p);
             return list;
         }
-
-        /// <summary>复活位置规则见 RevivalPlacement。</summary>
-        public static Coord? FindSquare(Board board, Piece piece) => RevivalPlacement.FindSquare(board, piece);
     }
 }

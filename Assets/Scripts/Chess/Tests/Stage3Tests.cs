@@ -249,13 +249,16 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void RevivingInStage3_PlacesNearTheKing()
+        public void RevivingInStage3_OnlyOnThePlayersHalf_NeverOnLavaOrTheCastle()
         {
-            var board = Setup(Flat, new[] { "Ke4", "Nb1", "ka8" });
+            var board = Setup(Flat, new[] { "Ke4", "Nb1", "ka8" }, "c2");
             var knight = board.PieceAt(C("b1"));
             board.RemovePiece(knight);
-            var square = RevivalPlacement.FindSquare(board, knight).Value;
-            Assert.AreEqual(1, square.DistanceTo(C("e4")));
+            var squares = RevivalPlacement.Squares(board, knight);
+            Assert.IsTrue(squares.All(c => c.Y <= 3));
+            CollectionAssert.DoesNotContain(squares, C("c2"), "not on lava");
+            CollectionAssert.DoesNotContain(squares, C("e4"), "not on an occupied square");
+            CollectionAssert.Contains(squares, C("b1"));
         }
 
         [Test]

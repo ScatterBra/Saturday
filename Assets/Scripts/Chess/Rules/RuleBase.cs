@@ -71,6 +71,10 @@ namespace SaturdayGame.Chess
         /// <summary>玩家选的棋子 Id；跳过时为 null。</summary>
         public int? PieceResult;
 
+        /// <summary>点选格子时，在鼠标停的格子上预览这枚棋子（例如复活前看看它会出现在哪），以及它到时候的外观。</summary>
+        public int? PreviewPieceId;
+        public string PreviewSkin;
+
         public bool IsPieceRequest => PieceOptions != null;
     }
 

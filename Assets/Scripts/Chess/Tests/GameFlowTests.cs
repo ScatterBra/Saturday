@@ -264,12 +264,15 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void StageCardsCannotBeSkipped()
+        public void StageCardsCanBeSkippedToo()
         {
             var auto = new AutoPlayer(7, null);
             while (!(auto.Game.Phase == GamePhase.ChoosingRule && auto.Game.CurrentOfferKind == OfferKind.StageCard)) auto.Step();
-            Assert.IsFalse(auto.Game.CanSkipOffers);
-            Assert.Throws<InvalidOperationException>(() => auto.Game.SkipOffers());
+            Assert.IsTrue(auto.Game.CanSkipOffers);
+            int before = auto.Game.ActiveRules.Count;
+            auto.Game.SkipOffers();
+            Assert.AreEqual(before, auto.Game.ActiveRules.Count, "skipping adds no rule");
+            Assert.AreNotEqual(GamePhase.ChoosingRule, auto.Game.Phase);
         }
 
         [Test]
