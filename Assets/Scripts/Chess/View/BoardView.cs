@@ -386,6 +386,9 @@ namespace SaturdayGame.Chess.View
             if (treeEffect == null) return;
             var fx = ParticleFx.Spawn(treeEffect, root, localPosition, treeEffectScale, Random.Range(0f, 360f));
             fx.name = "Tree Effect";
+            // DustExplosion 里的冲击波扭曲圈太大（缩小后半径还有 4 格左右），关掉，只留粉尘和火星
+            var shockwave = fx.transform.Find("Shockwave");
+            if (shockwave != null) shockwave.gameObject.SetActive(false);
             ParticleFx.PlayOnce(fx);
         }
 
