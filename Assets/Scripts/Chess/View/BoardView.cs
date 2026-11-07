@@ -38,6 +38,10 @@ namespace SaturdayGame.Chess.View
         readonly Transform pieceRoot;
         GameObject castleLabel;
         Board board;
+        readonly GameObject lavaEffect;
+        readonly float lavaEffectScale;
+        readonly float lavaEffectLift;
+        readonly List<GameObject> lavaEffects = new List<GameObject>();
 
         public BoardView(Transform parent, ChessViewFactory factory, ChessDesk desk = null)
         {
@@ -45,6 +49,12 @@ namespace SaturdayGame.Chess.View
             root = new GameObject("Board").transform;
             root.SetParent(parent, false);
             hasBoardArt = desk != null && desk.HasBoardArt;
+            if (desk != null)
+            {
+                lavaEffect = desk.lavaEffect;
+                lavaEffectScale = desk.lavaEffectScale;
+                lavaEffectLift = desk.lavaEffectLift;
+            }
 
             // 桌面（backdrop）：顶面在 y = -0.405，在 0.4 厚的棋盘模型底下，比相机能看到的范围大很多，宽屏也不会露边
             var tableTop = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.455f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
@@ -182,6 +192,8 @@ namespace SaturdayGame.Chess.View
                 }
             }
 
+            RebuildLavaEffects();
+
             if (castleLabel != null) ViewUtil.Destroy(castleLabel);
             castleLabel = null;
             if (castleCount > 0)
@@ -189,6 +201,36 @@ namespace SaturdayGame.Chess.View
                 var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Princess", title: true);
                 label.color = new Color(1f, 0.85f, 0.95f);
                 castleLabel = label.gameObject;
+            }
+        }
+
+        /// <summary>每格岩浆上放一份特效（ChessDesk.lavaEffect），旧的先清掉。</summary>
+        void RebuildLavaEffects()
+        {
+            foreach (var fx in lavaEffects) ViewUtil.Destroy(fx);
+            lavaEffects.Clear();
+            if (lavaEffect == null || board == null) return;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                if (!board.IsLava(c)) continue;
+                var fx = Object.Instantiate(lavaEffect, root);
+                fx.name = $"Lava Effect {c}";
+                fx.transform.localPosition = PiecePosition(c) + Vector3.up * lavaEffectLift;
+                // 每格随机转个方向，火苗看起来不一样
+                fx.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                fx.transform.localScale = Vector3.one * lavaEffectScale;
+                // 随机快进一段，各格的火不同步，一出现就已经烧起来了
+                float warm = Random.Range(2f, 6f);
+                foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    var main = ps.main;
+                    // 粒子包里的特效默认只认自己的缩放，改成跟着父物体一起缩
+                    main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                    ps.Simulate(warm, false, true);
+                    ps.Play(false);
+                }
+                lavaEffects.Add(fx);
             }
         }
 

@@ -258,7 +258,7 @@ Light:
   serializedVersion: 13
   m_Type: 0
   m_Color: {r: 1, g: 0.88075805, b: 0.59622645, a: 1}
-  m_Intensity: 100
+  m_Intensity: 10
   m_Range: 10
   m_SpotAngle: 71.28778
   m_InnerSpotAngle: 47.35174
@@ -345,6 +345,8 @@ MonoBehaviour:
   boardHasCoordinates: 1
   newArea: {fileID: 1329013920}
   ruleBook: {fileID: 388564103}
+  lavaEffect: {fileID: 1956197547661106, guid: f293a2dcc753a4a489fefe7f8f312d69, type: 3}
+  lavaEffectScale: 0.3
   ruleCards:
   - {fileID: 21300000, guid: a2ce7ec04c3bac14fa1ae1d90dcb2541, type: 3}
   - {fileID: 21300000, guid: e2546e28ab1f43c4f88d3ea54f586590, type: 3}
@@ -611,7 +613,7 @@ Light:
   serializedVersion: 13
   m_Type: 0
   m_Color: {r: 1, g: 0.88075805, b: 0.59622645, a: 1}
-  m_Intensity: 100
+  m_Intensity: 10
   m_Range: 10
   m_SpotAngle: 71.28778
   m_InnerSpotAngle: 47.35174
@@ -767,7 +769,7 @@ Light:
   serializedVersion: 13
   m_Type: 0
   m_Color: {r: 1, g: 0.88075805, b: 0.59622645, a: 1}
-  m_Intensity: 100
+  m_Intensity: 10
   m_Range: 10
   m_SpotAngle: 71.28778
   m_InnerSpotAngle: 47.35174
@@ -1121,7 +1123,7 @@ Light:
   serializedVersion: 13
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1.5
+  m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -1160,7 +1162,7 @@ Light:
     serializedVersion: 2
     m_Bits: 4294967295
   m_RenderingLayerMask: 1
-  m_Lightmapping: 4
+  m_Lightmapping: 2
   m_LightShadowCasterMode: 0
   m_AreaSize: {x: 1, y: 1}
   m_BounceIntensity: 1
@@ -1183,13 +1185,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1479744975}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: -0.7071068}
+  m_LocalRotation: {x: -0.82511353, y: 0, z: 0, w: -0.56496704}
   m_LocalPosition: {x: 1000.1168, y: 6.086848, z: 0.50061667}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: -270, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -248.8, y: 0, z: 0}
 --- !u!1 &1517344090
 GameObject:
   m_ObjectHideFlags: 0

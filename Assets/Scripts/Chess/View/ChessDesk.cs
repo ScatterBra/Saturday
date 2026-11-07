@@ -20,6 +20,13 @@ namespace SaturdayGame.Chess.View
         [Tooltip("右边规则书：规则文字和被吃区挂在这个物体下面（4.2 × 9 格）。子物体上的模型或 SpriteRenderer 是本子的底图，物体本身放在本子顶面的高度。这个物体本身不要旋转（字的画布会自己平躺），要转方向就转子物体")]
         public Transform ruleBook;
 
+        [Tooltip("每格岩浆上放一份的特效（例如 ParticlePack 的 WildFire），留空就只有橙色色块")]
+        public GameObject lavaEffect;
+        [Tooltip("岩浆特效的整体缩放。WildFire 原大约 3.6 格宽，0.3 左右刚好盖住一格")]
+        public float lavaEffectScale = 0.3f;
+        [Tooltip("岩浆特效往上抬多少（世界单位）。WildFire 的火苗从地面以下长出来，不抬会被棋盘顶面挡住一大半")]
+        public float lavaEffectLift = 0.2f;
+
         [Tooltip("规则卡底图，每次弹卡随机挑（同一组卡不重复），张数不限")]
         public Sprite[] ruleCards = new Sprite[0];
 
