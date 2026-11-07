@@ -134,6 +134,7 @@ namespace SaturdayGame.Chess.View
                 startZoom = cameraFit.zoom;
             }
             EnsureLight();
+            CollectStageLights();
             var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows, titleFont, bodyFont,
                 cameraFit != null ? cameraFit.ViewReference : null);
             if (desk == null) desk = GetComponentInChildren<ChessDesk>();
@@ -218,6 +219,7 @@ namespace SaturdayGame.Chess.View
             preview = null;
             lastMove = null;
             board.Bind(game.Board);
+            ApplyStageLighting(game.Board.Stage3);
             hud.ResetForNewGame();
             hud.SetStorm(0);
             // 上一局转过的相机回到场景里设的角度，棋子重新平躺
@@ -579,6 +581,8 @@ namespace SaturdayGame.Chess.View
                         preview = null;
                         board.RebuildTerrain();
                         board.SyncAll();
+                        // 沙尘盖着画面时换灯：平行光关掉，聚光灯打开
+                        ApplyStageLighting(true);
                         board.Highlight(null, null, null, null);
                         // 第三阶段：棋子随着相机的角度立起来
                         FaceCamera.FollowCameraPitch = true;
@@ -702,6 +706,29 @@ namespace SaturdayGame.Chess.View
             if (FindAnyObjectByType<EventSystem>() != null) return;
             var go = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
             go.transform.SetParent(transform, false);
+        }
+
+        readonly List<Light> directionalLights = new List<Light>();
+        readonly List<Light> spotLights = new List<Light>();
+
+        /// <summary>记下本场景里摆好的灯（开局时就在的，特效自带的灯不算），按类型分开。</summary>
+        void CollectStageLights()
+        {
+            directionalLights.Clear();
+            spotLights.Clear();
+            foreach (var root in gameObject.scene.GetRootGameObjects())
+                foreach (var light in root.GetComponentsInChildren<Light>(true))
+                {
+                    if (light.type == LightType.Directional) directionalLights.Add(light);
+                    else if (light.type == LightType.Spot) spotLights.Add(light);
+                }
+        }
+
+        /// <summary>第一、二阶段只亮平行光；第三阶段平行光关掉，只亮聚光灯。</summary>
+        void ApplyStageLighting(bool stage3)
+        {
+            foreach (var light in directionalLights) if (light != null) light.enabled = !stage3;
+            foreach (var light in spotLights) if (light != null) light.enabled = stage3;
         }
 
         /// <summary>3D 模型（例如树）用的是受光照的材质，场景里没有灯时补一盏平行光，不然模型是黑的。占位图形和贴图不受光照影响。</summary>
