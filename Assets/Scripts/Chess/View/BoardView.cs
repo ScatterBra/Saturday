@@ -42,6 +42,25 @@ namespace SaturdayGame.Chess.View
         readonly float lavaEffectScale;
         readonly float lavaEffectLift;
         readonly List<GameObject> lavaEffects = new List<GameObject>();
+        readonly GameObject treeEffect;
+        readonly float treeEffectScale;
+        /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
+        readonly Dictionary<int, bool> treeShown = new Dictionary<int, bool>();
+        /// <summary>换新棋盘时只记下谁是树，不播特效。</summary>
+        bool quietTrees;
+        /// <summary>上次 ConsumeTreeVanished 之后有树消失过。</summary>
+        bool treeVanished;
+
+        /// <summary>
+        /// 自上次调用以来有没有树消失（变回兵、被吃、掉进岩浆），读完清零。
+        /// 好几棵树同时变回兵也只算一次，音效只播一遍。
+        /// </summary>
+        public bool ConsumeTreeVanished()
+        {
+            bool vanished = treeVanished;
+            treeVanished = false;
+            return vanished;
+        }
 
         public BoardView(Transform parent, ChessViewFactory factory, ChessDesk desk = null)
         {
@@ -54,6 +73,8 @@ namespace SaturdayGame.Chess.View
                 lavaEffect = desk.lavaEffect;
                 lavaEffectScale = desk.lavaEffectScale;
                 lavaEffectLift = desk.lavaEffectLift;
+                treeEffect = desk.treeEffect;
+                treeEffectScale = desk.treeEffectScale;
             }
 
             // 桌面（backdrop）：顶面在 y = -0.405，在 0.4 厚的棋盘模型底下，比相机能看到的范围大很多，宽屏也不会露边
@@ -166,9 +187,13 @@ namespace SaturdayGame.Chess.View
             HideGhost();
             foreach (var view in pieces.Values) view.Destroy();
             pieces.Clear();
+            treeShown.Clear();
+            treeVanished = false;
             board = newBoard;
             RebuildTerrain();
-            SyncAll();
+            quietTrees = true;
+            try { SyncAll(); }
+            finally { quietTrees = false; }
             Highlight(null, null, null, null);
         }
 
@@ -214,22 +239,10 @@ namespace SaturdayGame.Chess.View
             {
                 var c = Coord.FromIndex(i);
                 if (!board.IsLava(c)) continue;
-                var fx = Object.Instantiate(lavaEffect, root);
+                // 每格随机转个方向、随机快进一段：火苗各不一样、不同步，一出现就已经烧起来了
+                var fx = ParticleFx.Spawn(lavaEffect, root, PiecePosition(c) + Vector3.up * lavaEffectLift, lavaEffectScale, Random.Range(0f, 360f));
                 fx.name = $"Lava Effect {c}";
-                fx.transform.localPosition = PiecePosition(c) + Vector3.up * lavaEffectLift;
-                // 每格随机转个方向，火苗看起来不一样
-                fx.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-                fx.transform.localScale = Vector3.one * lavaEffectScale;
-                // 随机快进一段，各格的火不同步，一出现就已经烧起来了
-                float warm = Random.Range(2f, 6f);
-                foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
-                {
-                    var main = ps.main;
-                    // 粒子包里的特效默认只认自己的缩放，改成跟着父物体一起缩
-                    main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-                    ps.Simulate(warm, false, true);
-                    ps.Play(false);
-                }
+                ParticleFx.Warm(fx, Random.Range(2f, 6f));
                 lavaEffects.Add(fx);
             }
         }
@@ -268,6 +281,7 @@ namespace SaturdayGame.Chess.View
                 {
                     if (view != null)
                     {
+                        TreeGone(piece.Id, view.Root.transform.localPosition);
                         view.Destroy();
                         pieces.Remove(piece.Id);
                     }
@@ -277,7 +291,7 @@ namespace SaturdayGame.Chess.View
                 view.Root.SetActive(true);
                 view.Root.transform.localScale = Vector3.one;
                 view.SetPosition(PiecePosition(piece.Pos));
-                view.Refresh(piece, Stage3);
+                Refresh(view, piece);
             }
         }
 
@@ -341,7 +355,38 @@ namespace SaturdayGame.Chess.View
 
         public void RefreshPiece(int id)
         {
-            if (pieces.TryGetValue(id, out var view)) view.Refresh(board.GetPiece(id), Stage3);
+            if (pieces.TryGetValue(id, out var view)) Refresh(view, board.GetPiece(id));
+        }
+
+        /// <summary>刷新棋子的显示；兵变成树、树变回兵时在那一格播一次树特效。</summary>
+        void Refresh(PieceView view, Piece piece)
+        {
+            view.Refresh(piece, Stage3);
+            bool tree = piece.OnBoard && piece.IsFrozen && piece.FrozenSkin == "tree";
+            treeShown.TryGetValue(piece.Id, out bool was);
+            if (tree == was) return;
+            treeShown[piece.Id] = tree;
+            if (quietTrees) return;
+            PlayTreeEffect(PiecePosition(piece.Pos));
+            if (!tree) treeVanished = true;
+        }
+
+        /// <summary>棋子离开棋盘（被吃、掉进岩浆）时它要是树，也播一次树特效。</summary>
+        void TreeGone(int id, Vector3 localPosition)
+        {
+            if (!treeShown.TryGetValue(id, out bool was)) return;
+            treeShown.Remove(id);
+            if (!was || quietTrees) return;
+            PlayTreeEffect(localPosition);
+            treeVanished = true;
+        }
+
+        void PlayTreeEffect(Vector3 localPosition)
+        {
+            if (treeEffect == null) return;
+            var fx = ParticleFx.Spawn(treeEffect, root, localPosition, treeEffectScale, Random.Range(0f, 360f));
+            fx.name = "Tree Effect";
+            ParticleFx.PlayOnce(fx);
         }
 
         /// <summary>
@@ -480,6 +525,7 @@ namespace SaturdayGame.Chess.View
         {
             if (!pieces.TryGetValue(id, out var view)) yield break;
             pieces.Remove(id);
+            TreeGone(id, view.Root.transform.localPosition);
             if (burned)
             {
                 var flame = factory.Primitive(PrimitiveType.Sphere, view.Root.transform, new Vector3(0, 0.4f, 0), Vector3.one * 0.9f);
@@ -498,8 +544,8 @@ namespace SaturdayGame.Chess.View
         {
             var piece = board.GetPiece(id);
             if (!pieces.TryGetValue(id, out var view)) view = Create(piece);
-            view.Refresh(piece, Stage3);
             view.SetPosition(PiecePosition(piece.Pos));
+            Refresh(view, piece);
             for (float t = 0; t < 1f; t += Time.deltaTime / duration)
             {
                 view.Root.transform.localScale = Vector3.one * Mathf.SmoothStep(0, 1, t);
@@ -512,7 +558,7 @@ namespace SaturdayGame.Chess.View
         public IEnumerator AnimatePop(int id, float duration)
         {
             if (!pieces.TryGetValue(id, out var view)) yield break;
-            view.Refresh(board.GetPiece(id), Stage3);
+            Refresh(view, board.GetPiece(id));
             for (float t = 0; t < 1f; t += Time.deltaTime / duration)
             {
                 view.Root.transform.localScale = Vector3.one * (1f + 0.25f * Mathf.Sin(t * Mathf.PI));

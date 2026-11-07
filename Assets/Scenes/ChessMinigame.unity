@@ -347,6 +347,9 @@ MonoBehaviour:
   ruleBook: {fileID: 388564103}
   lavaEffect: {fileID: 1956197547661106, guid: f293a2dcc753a4a489fefe7f8f312d69, type: 3}
   lavaEffectScale: 0.3
+  lavaEffectLift: 0.2
+  treeEffect: {fileID: 1025285306637258, guid: d8f0099df63275647a8bcf646df1ca00, type: 3}
+  treeEffectScale: 0.4
   ruleCards:
   - {fileID: 21300000, guid: a2ce7ec04c3bac14fa1ae1d90dcb2541, type: 3}
   - {fileID: 21300000, guid: e2546e28ab1f43c4f88d3ea54f586590, type: 3}
@@ -1185,13 +1188,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1479744975}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.82511353, y: 0, z: 0, w: -0.56496704}
-  m_LocalPosition: {x: 1000.1168, y: 6.086848, z: 0.50061667}
+  m_LocalRotation: {x: -0.838195, y: 0, z: 0, w: -0.5453707}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: -248.8, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -246.1, y: 0, z: 0}
 --- !u!1 &1517344090
 GameObject:
   m_ObjectHideFlags: 0

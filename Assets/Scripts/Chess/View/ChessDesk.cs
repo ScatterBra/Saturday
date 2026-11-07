@@ -27,6 +27,11 @@ namespace SaturdayGame.Chess.View
         [Tooltip("岩浆特效往上抬多少（世界单位）。WildFire 的火苗从地面以下长出来，不抬会被棋盘顶面挡住一大半")]
         public float lavaEffectLift = 0.2f;
 
+        [Tooltip("兵变成树、树变回兵（或被吃掉）时在那一格播一次的特效（例如 ParticlePack 的 DustExplosion），留空就不播")]
+        public GameObject treeEffect;
+        [Tooltip("树特效的整体缩放")]
+        public float treeEffectScale = 0.4f;
+
         [Tooltip("规则卡底图，每次弹卡随机挑（同一组卡不重复），张数不限")]
         public Sprite[] ruleCards = new Sprite[0];
 

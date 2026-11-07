@@ -637,10 +637,14 @@ namespace SaturdayGame.Chess.View
                         hud.ShowGameOver(e.Text, MinigameSession.IsHosted);
                         break;
                 }
+                // 树被吃掉、掉进岩浆：和出现时一样播种树的音效
+                if (board.ConsumeTreeVanished()) PlaySound(s => s.tree);
             }
             // 对白播完就收起字幕，不挡住棋盘
             hud.HideCaption();
             board.SyncAll();
+            // 树变回兵（冻结到期）在这里刷出来；好几棵同时变回也只播一次
+            if (board.ConsumeTreeVanished()) PlaySound(s => s.tree);
             bool pickingPiece = game.Phase == GamePhase.ChoosingTarget && game.PendingTarget.IsPieceRequest;
             hud.SetLostPieces(game.Board.CapturedOf(game.PlayerSide), pickingPiece ? game.PendingTarget.PieceOptions.ToList() : null);
             if (game.Phase == GamePhase.ChoosingTarget && !pickingPiece)
