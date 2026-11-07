@@ -123,6 +123,7 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: d9fd84c4453e0a64f95020547c588b7c, type: 3}
     - {fileID: 919132149155446097, guid: fc9b025a3e3af8b47aa29f8975450c8b, type: 3}
     standee: 1
+    randomYaw: 25
     stage3Models: []
     stage3BlackModels: []
   - skin: crayon

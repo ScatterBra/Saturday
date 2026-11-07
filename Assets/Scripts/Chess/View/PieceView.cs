@@ -115,6 +115,8 @@ namespace SaturdayGame.Chess.View
             if (model != null) ViewUtil.Destroy(model);
             modelSource = source;
             float yaw = resolved.Standee ? factory.CameraYaw + factory.Art.stage3ModelYaw : piece.Id * 137f;
+            // 例如树：每棵生成时随机歪一点，不会整整齐齐朝着同一个方向（模型换掉前保持这个角度）
+            if (resolved.RandomYaw > 0f) yaw += Random.Range(-resolved.RandomYaw, resolved.RandomYaw);
             model = source != null
                 ? factory.Model(source, Root.transform, factory.Art.modelHeight, factory.Art.modelWidth, yaw)
                 : null;

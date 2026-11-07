@@ -30,6 +30,8 @@ namespace SaturdayGame.Chess.View
             public GameObject[] blackModels = Array.Empty<GameObject>();
             [Tooltip("models 里是立牌模型（例如树、主教变体）：正面朝着相机摆，不随机转")]
             public bool standee;
+            [Tooltip("模型生成时在原来的朝向上随机多转 ±这么多度（例如树，看起来不会排得太整齐）；0 = 不随机")]
+            [UnityEngine.Range(0f, 180f)] public float randomYaw;
             [Tooltip("第三阶段才换上的 3D 模型（白方）。多个模型按棋子编号固定选一个")]
             public GameObject[] stage3Models = Array.Empty<GameObject>();
             [Tooltip("第三阶段黑方的 3D 模型；留空时用白方模型乘上 variantBlackTint")]
@@ -51,6 +53,8 @@ namespace SaturdayGame.Chess.View
             public bool Standee;
             /// <summary>纸片版（被吃过的普通棋子）：一直平躺在棋盘上。</summary>
             public bool Paper;
+            /// <summary>模型生成时随机多转 ±这么多度。</summary>
+            public float RandomYaw;
         }
 
         [Header("White (default) sprites")]
@@ -194,6 +198,7 @@ namespace SaturdayGame.Chess.View
                     var models = hasBlackModel ? entry.blackModels : entry.models;
                     result.Model = models[Variant(piece, models.Length)];
                     result.Standee = entry.standee;
+                    result.RandomYaw = entry.randomYaw;
                     result.Tint = piece.Side == Side.Black && !hasBlackModel ? variantBlackTint : Color.white;
                 }
                 if (hasStage3)
