@@ -27,6 +27,19 @@ namespace SaturdayGame.Chess.View
         [Tooltip("岩浆特效往上抬多少（世界单位）。WildFire 的火苗从地面以下长出来，不抬会被棋盘顶面挡住一大半")]
         public float lavaEffectLift = 0.2f;
 
+        [Tooltip("第三阶段盖在整个棋盘上空的雷雨云（例如 ParticlePack 的 LightnigStormCloud），留空就没有")]
+        public GameObject stormCloud;
+        [Tooltip("雷雨云比最高的地形（城堡和 Princess 字样）再高多少（世界单位）。相机大约在 17 高，云要比它低")]
+        public float stormCloudClearance = 1.5f;
+        [Tooltip("雷雨云铺开的边长（世界单位）。棋盘是 9 × 9")]
+        public float stormCloudSize = 10f;
+        [Tooltip("云朵粒子比原特效大几倍（铺得开、粒子数不会太多）")]
+        public float stormCloudPuffScale = 2f;
+        [Tooltip("云朵的不透明度（0–1）。云挡在相机和棋盘之间，太浓会看不清棋子")]
+        [Range(0f, 1f)] public float stormCloudOpacity = 0.3f;
+        [Tooltip("云量：1 = 按面积铺满；小一点云会稀一些，露出更多棋盘")]
+        [Range(0f, 2f)] public float stormCloudDensity = 0.5f;
+
         [Tooltip("兵变成树、树变回兵（或被吃掉）时在那一格播一次的特效（例如 ParticlePack 的 DustExplosion），留空就不播")]
         public GameObject treeEffect;
         [Tooltip("树特效的整体缩放")]

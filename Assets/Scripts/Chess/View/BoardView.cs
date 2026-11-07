@@ -42,6 +42,11 @@ namespace SaturdayGame.Chess.View
         readonly float lavaEffectScale;
         readonly float lavaEffectLift;
         readonly List<GameObject> lavaEffects = new List<GameObject>();
+        readonly GameObject stormCloud;
+        readonly float stormCloudClearance, stormCloudSize, stormCloudPuffScale, stormCloudOpacity, stormCloudDensity;
+        GameObject stormCloudInstance;
+        /// <summary>调淡了的云材质（每次生成一份副本，云删掉时一起删）。</summary>
+        Material stormCloudMaterial;
         readonly GameObject treeEffect;
         readonly float treeEffectScale;
         /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
@@ -74,6 +79,12 @@ namespace SaturdayGame.Chess.View
                 lavaEffectScale = desk.lavaEffectScale;
                 lavaEffectLift = desk.lavaEffectLift;
                 treeEffect = desk.treeEffect;
+                stormCloud = desk.stormCloud;
+                stormCloudClearance = desk.stormCloudClearance;
+                stormCloudSize = desk.stormCloudSize;
+                stormCloudPuffScale = desk.stormCloudPuffScale;
+                stormCloudOpacity = desk.stormCloudOpacity;
+                stormCloudDensity = desk.stormCloudDensity;
                 treeEffectScale = desk.treeEffectScale;
             }
 
@@ -227,6 +238,68 @@ namespace SaturdayGame.Chess.View
                 label.color = new Color(1f, 0.85f, 0.95f);
                 castleLabel = label.gameObject;
             }
+
+            RebuildStormCloud();
+        }
+
+        /// <summary>
+        /// 第三阶段在棋盘上空放一团雷雨云（ChessDesk.stormCloud）：铺满整个棋盘，比城堡和 Princess 字样高，比相机低。
+        /// 原特效只有 2.4 × 1 格大，这里把发射范围拉到 stormCloudSize 见方，粒子放大、数量按面积加。
+        /// </summary>
+        void RebuildStormCloud()
+        {
+            if (stormCloudInstance != null) ViewUtil.Destroy(stormCloudInstance);
+            if (stormCloudMaterial != null) ViewUtil.Destroy(stormCloudMaterial);
+            stormCloudInstance = null;
+            stormCloudMaterial = null;
+            if (stormCloud == null || board == null || !board.Stage3) return;
+
+            float highest = 0f;
+            for (int i = 0; i < 64; i++) highest = Mathf.Max(highest, TopOf(Coord.FromIndex(i)));
+            if (castleLabel != null) highest = Mathf.Max(highest, castleLabel.transform.localPosition.y + 0.3f);
+
+            var fx = ParticleFx.Spawn(stormCloud, root, new Vector3(0f, highest + stormCloudClearance, 0f), 1f);
+            fx.name = "Storm Cloud";
+            float puff = Mathf.Max(0.1f, stormCloudPuffScale);
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var shape = ps.shape;
+                if (!shape.enabled) continue;
+                var main = ps.main;
+                var emission = ps.emission;
+                if (shape.shapeType == ParticleSystemShapeType.Box)
+                {
+                    // 云本身：盒子在 prefab 里是横躺的（本地 X、Y 是水平方向），铺到整个棋盘
+                    float oldArea = Mathf.Max(0.01f, shape.scale.x * shape.scale.y);
+                    shape.scale = new Vector3(stormCloudSize, stormCloudSize, shape.scale.z);
+                    float more = stormCloudSize * stormCloudSize / oldArea / (puff * puff) * stormCloudDensity;
+                    emission.rateOverTimeMultiplier *= more;
+                    main.maxParticles = Mathf.Max(main.maxParticles, Mathf.CeilToInt(main.maxParticles * more));
+                    main.startSizeMultiplier *= puff;
+                    // 云挡在相机和棋盘之间：把材质调淡，透出下面的棋子
+                    var renderer = ps.GetComponent<ParticleSystemRenderer>();
+                    if (renderer != null && renderer.sharedMaterial != null && renderer.sharedMaterial.HasProperty("_BaseColor"))
+                    {
+                        stormCloudMaterial = new Material(renderer.sharedMaterial);
+                        var tint = stormCloudMaterial.GetColor("_BaseColor");
+                        tint.a *= stormCloudOpacity;
+                        stormCloudMaterial.SetColor("_BaseColor", tint);
+                        renderer.sharedMaterial = stormCloudMaterial;
+                    }
+                }
+                else
+                {
+                    // 闪电的灯光、雨：发射范围也跟着铺开
+                    float oldRadius = Mathf.Max(0.01f, shape.radius);
+                    shape.radius = stormCloudSize * 0.45f;
+                    float more = Mathf.Pow(shape.radius / oldRadius, 2f);
+                    emission.rateOverTimeMultiplier *= Mathf.Min(more, 10f);
+                    main.maxParticles = Mathf.Max(main.maxParticles, Mathf.CeilToInt(main.maxParticles * Mathf.Min(more, 10f)));
+                }
+            }
+            // 风暴散去时云已经聚好了
+            ParticleFx.Warm(fx, 3f);
+            stormCloudInstance = fx;
         }
 
         /// <summary>每格岩浆上放一份特效（ChessDesk.lavaEffect），旧的先清掉。</summary>
