@@ -543,7 +543,9 @@ namespace SaturdayGame.Chess.View
                         yield return board.AnimateKnockback(e.PieceId, e.To, effectDuration * 2);
                         break;
                     case GameEventType.Captured:
-                        yield return board.AnimateCapture(e.PieceId, e.Text == "burned" || e.Text == "lava", effectDuration);
+                        bool burned = e.Text == "burned" || e.Text == "lava";
+                        if (burned) PlaySound(s => s.burn);
+                        yield return board.AnimateCapture(e.PieceId, burned, effectDuration);
                         break;
                     case GameEventType.Promoted:
                         yield return board.AnimatePop(e.PieceId, effectDuration);

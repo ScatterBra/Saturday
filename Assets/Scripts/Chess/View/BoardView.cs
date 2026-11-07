@@ -47,6 +47,14 @@ namespace SaturdayGame.Chess.View
         GameObject stormCloudInstance;
         /// <summary>调淡了的云材质（每次生成一份副本，云删掉时一起删）。</summary>
         Material stormCloudMaterial;
+        readonly Material dissolveMaterial;
+        readonly float dissolveDuration;
+        readonly GameObject dissolveParticles;
+        readonly float dissolveParticlesScale;
+        static readonly int ProgressId = Shader.PropertyToID("_Progress");
+        static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        static readonly int NoiseOffsetId = Shader.PropertyToID("_NoiseOffset");
         readonly GameObject treeEffect;
         readonly float treeEffectScale;
         /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
@@ -79,6 +87,10 @@ namespace SaturdayGame.Chess.View
                 lavaEffectScale = desk.lavaEffectScale;
                 lavaEffectLift = desk.lavaEffectLift;
                 treeEffect = desk.treeEffect;
+                dissolveMaterial = desk.dissolveMaterial;
+                dissolveDuration = desk.dissolveDuration;
+                dissolveParticles = desk.dissolveParticles;
+                dissolveParticlesScale = desk.dissolveParticlesScale;
                 stormCloud = desk.stormCloud;
                 stormCloudClearance = desk.stormCloudClearance;
                 stormCloudSize = desk.stormCloudSize;
@@ -602,6 +614,12 @@ namespace SaturdayGame.Chess.View
             if (!pieces.TryGetValue(id, out var view)) yield break;
             pieces.Remove(id);
             TreeGone(id, view.Root.transform.localPosition);
+            if (burned && dissolveMaterial != null)
+            {
+                yield return Dissolve(view);
+                view.Destroy();
+                yield break;
+            }
             if (burned)
             {
                 var flame = factory.Primitive(PrimitiveType.Sphere, view.Root.transform, new Vector3(0, 0.4f, 0), Vector3.one * 0.9f);
@@ -614,6 +632,61 @@ namespace SaturdayGame.Chess.View
                 yield return null;
             }
             view.Destroy();
+        }
+
+        /// <summary>
+        /// 被烧掉：棋子身上所有的图和模型换成溶解材质（贴图、颜色照抄），按噪声一块块镂空，边缘发光，同时飘一次火星。
+        /// 棋子上的小字（剩几回合之类）直接收起来。
+        /// </summary>
+        IEnumerator Dissolve(PieceView view)
+        {
+            var materials = new List<Material>();
+            var noiseOffset = new Vector4(Random.value * 10f, Random.value * 10f, Random.value * 10f, 0f);
+            foreach (var renderer in view.Root.GetComponentsInChildren<Renderer>())
+            {
+                if (renderer.GetComponent<TextMesh>() != null)
+                {
+                    renderer.enabled = false;
+                    continue;
+                }
+                var originals = renderer.sharedMaterials;
+                var replaced = new Material[originals.Length];
+                for (int i = 0; i < originals.Length; i++)
+                {
+                    var material = new Material(dissolveMaterial);
+                    var original = originals[i];
+                    // 贴图棋子的贴图由 SpriteRenderer 自己塞进 _MainTex；模型要把原材质的贴图、颜色抄过来
+                    if (original != null && !(renderer is SpriteRenderer))
+                    {
+                        var texture = original.HasProperty("_BaseMap") ? original.GetTexture("_BaseMap") : original.mainTexture;
+                        if (texture != null) material.SetTexture(MainTexId, texture);
+                        if (original.HasProperty(BaseColorId)) material.SetColor(BaseColorId, original.GetColor(BaseColorId));
+                        else if (original.HasProperty("_Color")) material.SetColor(BaseColorId, original.color);
+                    }
+                    material.SetVector(NoiseOffsetId, noiseOffset);
+                    replaced[i] = material;
+                    materials.Add(material);
+                }
+                renderer.sharedMaterials = replaced;
+            }
+
+            if (dissolveParticles != null)
+            {
+                var fx = ParticleFx.Spawn(dissolveParticles, root, view.Root.transform.localPosition + Vector3.up * 0.4f, dissolveParticlesScale);
+                fx.name = "Dissolve Effect";
+                // ParticlePack 的 Dissolve 根物体上就是演示用的球和让它循环重播的脚本，都不要
+                foreach (var r in fx.GetComponentsInChildren<MeshRenderer>(true)) r.enabled = false;
+                foreach (var script in fx.GetComponentsInChildren<MonoBehaviour>(true)) Object.DestroyImmediate(script);
+                ParticleFx.PlayOnce(fx);
+            }
+
+            float duration = Mathf.Max(0.05f, dissolveDuration);
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                foreach (var material in materials) material.SetFloat(ProgressId, t);
+                yield return null;
+            }
+            foreach (var material in materials) ViewUtil.Destroy(material);
         }
 
         public IEnumerator AnimateSpawn(int id, float duration)

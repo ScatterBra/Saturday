@@ -40,6 +40,15 @@ namespace SaturdayGame.Chess.View
         [Tooltip("云量：1 = 按面积铺满；小一点云会稀一些，露出更多棋盘")]
         [Range(0f, 2f)] public float stormCloudDensity = 0.5f;
 
+        [Tooltip("棋子被烧掉（火龙、掉进岩浆）时换上的溶解材质（Saturday/Chess Dissolve），留空就用原来的橙色球 + 缩小")]
+        public Material dissolveMaterial;
+        [Tooltip("溶解要多久（秒）")]
+        public float dissolveDuration = 1.2f;
+        [Tooltip("溶解时在棋子上播一次的粒子（例如 ParticlePack 的 Dissolve，里面演示用的球会自动关掉），留空就不播")]
+        public GameObject dissolveParticles;
+        [Tooltip("溶解粒子的整体缩放")]
+        public float dissolveParticlesScale = 1f;
+
         [Tooltip("兵变成树、树变回兵（或被吃掉）时在那一格播一次的特效（例如 ParticlePack 的 DustExplosion），留空就不播")]
         public GameObject treeEffect;
         [Tooltip("树特效的整体缩放")]

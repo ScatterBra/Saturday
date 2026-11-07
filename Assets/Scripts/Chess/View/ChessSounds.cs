@@ -35,6 +35,8 @@ namespace SaturdayGame.Chess.View
         public Sfx hydrant = new Sfx();
         [Tooltip("青蛙把棋子拉过来")]
         public Sfx frog = new Sfx();
+        [Tooltip("棋子被烧掉（火龙、掉进岩浆），和溶解同时播")]
+        public Sfx burn = new Sfx();
         [Tooltip("相机转到新视角（中间视角、第三阶段视角）")]
         public Sfx cameraChange = new Sfx();
 
