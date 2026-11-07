@@ -466,6 +466,12 @@ namespace SaturdayGame.Chess.View
             treeVanished = true;
         }
 
+        /// <summary>棋子变回原来的样子（例如喷完火的龙变回马）：和树出现、消失一样冒一团粉尘。</summary>
+        public void PlayRevertEffect(int id)
+        {
+            if (pieces.TryGetValue(id, out var view)) PlayTreeEffect(view.Root.transform.localPosition);
+        }
+
         void PlayTreeEffect(Vector3 localPosition)
         {
             if (treeEffect == null) return;

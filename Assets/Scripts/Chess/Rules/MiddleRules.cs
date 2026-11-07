@@ -27,12 +27,12 @@ namespace SaturdayGame.Chess
         }
     }
 
-    /// <summary>自己的一匹马变成龙，喷火随机烧掉对手一个兵、马或象。</summary>
+    /// <summary>自己的一匹马变成龙，喷火随机烧掉对手一个兵、马或象，然后变回原来的样子。</summary>
     public sealed class DragonKnightRule : RuleBase
     {
         public override string Id => "dragon_knight";
         public override string Title => "Here Be Dragons";
-        public override string Description => "One of your knights becomes a dragon and burns a random enemy pawn, knight or bishop.";
+        public override string Description => "One of your knights becomes a dragon, burns a random enemy pawn, knight or bishop, then turns back into a knight.";
         public override RuleKind Kind => RuleKind.Buff;
         public override int Stage => 1;
 
@@ -43,11 +43,14 @@ namespace SaturdayGame.Chess
         {
             var knights = ctx.Visible(ctx.Player, PieceType.Knight);
             var dragon = knights[ctx.Rng.Next(knights.Count)];
+            // 记下原来的样子（例如复活回来的蜡笔马），喷完火变回去
+            var originalSkin = dragon.Skin;
             ctx.SetSkin(dragon, "dragon");
             ctx.Say(Speakers.You, "Dragon fire!");
 
             var victim = TargetPicker.Pick(Targets(ctx), TargetPicker.BurnWeight, ctx.Rng);
             if (victim != null) ctx.Destroy(victim, "burned", dragon);
+            ctx.RevertSkin(dragon, originalSkin);
             ctx.Say(Speakers.Friend, "That's so unfair. I love it.");
             yield break;
         }

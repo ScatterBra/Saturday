@@ -132,6 +132,13 @@ namespace SaturdayGame.Chess
             emit(GameEvent.AppearanceChanged(piece, skin));
         }
 
+        /// <summary>临时变身结束，变回原来的外观 skin（表现层播变回去的特效和音效）。</summary>
+        public void RevertSkin(Piece piece, string skin)
+        {
+            piece.Skin = skin;
+            emit(GameEvent.AppearanceChanged(piece, skin, reverted: true));
+        }
+
         /// <summary>冻结棋子若干个（它自己一方的）回合。王永远不会被冻结。</summary>
         public void Freeze(Piece piece, int turns, string frozenSkin)
         {

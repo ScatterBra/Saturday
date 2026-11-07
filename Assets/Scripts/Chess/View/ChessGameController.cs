@@ -60,6 +60,8 @@ namespace SaturdayGame.Chess.View
         public float aiThinkTime = 0.6f;
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
+        [Tooltip("临时变身的棋子变回原样（例如喷完火的龙变回马）时弹一下的时长，比普通换外观慢")]
+        public float revertDuration = 0.9f;
         [Tooltip("朋友放技能、跳过回合这类提示停留多久；对白不受影响，要点一下才继续")]
         public float dialogueDuration = 1.4f;
         [Tooltip("规则卡出现时，每张卡从左边飞进来用多久（一张接一张）")]
@@ -552,8 +554,14 @@ namespace SaturdayGame.Chess.View
                         break;
                     case GameEventType.AppearanceChanged:
                         if (e.Frozen && e.Text == "tree") PlaySound(s => s.tree);
+                        else if (e.Reverted)
+                        {
+                            // 变回原样（喷完火的龙变回马）：和树一样冒粉尘、播树的音效
+                            PlaySound(s => s.tree);
+                            board.PlayRevertEffect(e.PieceId);
+                        }
                         else if (!e.Frozen && e.Text != null) PlaySound(s => s.pieceChange);
-                        yield return board.AnimatePop(e.PieceId, effectDuration);
+                        yield return board.AnimatePop(e.PieceId, e.Reverted ? revertDuration : effectDuration);
                         // 第一个 3D 模型冒出来了（主教变体、消防栓、树……）：相机斜过来才看得出立体
                         yield return TurnToMidViewIfNeeded();
                         break;

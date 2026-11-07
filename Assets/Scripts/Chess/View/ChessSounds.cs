@@ -27,7 +27,7 @@ namespace SaturdayGame.Chess.View
         public Sfx pieceFall = new Sfx { pitchJitter = 0.05f };
         [Tooltip("棋子换外观（主教变体、车变消防栓或青蛙等）")]
         public Sfx pieceChange = new Sfx();
-        [Tooltip("一枚棋子变成树（每棵树冒出来时各播一次）")]
+        [Tooltip("一枚棋子变成树（每棵树冒出来时各播一次）、树消失，以及临时变身的棋子变回原样（例如喷完火的龙变回马）")]
         public Sfx tree = new Sfx();
         [Tooltip("规则卡飞进来（每张卡各播一次）")]
         public Sfx paperPopup = new Sfx();

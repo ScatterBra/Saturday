@@ -275,7 +275,12 @@ namespace SaturdayGame.Chess.Tests
                 var victim = board.GetPiece(burn.PieceId);
                 Assert.AreEqual(Side.Black, victim.Side);
                 Assert.IsFalse(victim.OnBoard);
-                Assert.AreEqual("dragon", board.GetPiece(burn.SourcePieceId).Skin);
+                // 喷火的是龙，喷完变回原来的马
+                var dragon = board.GetPiece(burn.SourcePieceId);
+                Assert.AreEqual(PieceType.Knight, dragon.Type);
+                Assert.IsTrue(events.Any(e => e.Type == GameEventType.AppearanceChanged && e.PieceId == dragon.Id && e.Text == "dragon"));
+                Assert.IsNull(dragon.Skin);
+                Assert.IsTrue(events.Last(e => e.Type == GameEventType.AppearanceChanged).Reverted);
                 burned[victim.Type] = burned.TryGetValue(victim.Type, out var n) ? n + 1 : 1;
             }
             CollectionAssert.IsSubsetOf(burned.Keys, new[] { PieceType.Pawn, PieceType.Knight, PieceType.Bishop });

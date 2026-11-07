@@ -51,10 +51,6 @@ namespace SaturdayGame.Chess.View
                     info.Title = SkinName(piece.Skin);
                     info.Body = $"A bishop in disguise. {moves}";
                     break;
-                case "dragon":
-                    info.Title = "Dragon";
-                    info.Body = $"Already breathed its fire. {moves}";
-                    break;
                 case "crayon":
                     info.Title = $"Crayon {type}";
                     // TODO 蜡笔棋子之后会有特殊功能，现在先占位
