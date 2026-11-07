@@ -67,6 +67,7 @@ MonoBehaviour:
     blackModels:
     - {fileID: 919132149155446097, guid: 5ce80593d9ef3b64ba82d92e9c9b1ae7, type: 3}
     standee: 1
+    randomYaw: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: 2b5f65d407df78a4ba6960287df67aec, type: 3}
     stage3BlackModels:
@@ -81,6 +82,7 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: 11acbe4cee24b9c448a0b15f6617feb1, type: 3}
     blackModels: []
     standee: 1
+    randomYaw: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: 11acbe4cee24b9c448a0b15f6617feb1, type: 3}
     stage3BlackModels: []
@@ -94,6 +96,7 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: e123dedf83bdeef4fa12a6deba5486bd, type: 3}
     blackModels: []
     standee: 1
+    randomYaw: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: e123dedf83bdeef4fa12a6deba5486bd, type: 3}
     stage3BlackModels: []
@@ -123,7 +126,7 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: d9fd84c4453e0a64f95020547c588b7c, type: 3}
     - {fileID: 919132149155446097, guid: fc9b025a3e3af8b47aa29f8975450c8b, type: 3}
     standee: 1
-    randomYaw: 25
+    randomYaw: 50
     stage3Models: []
     stage3BlackModels: []
   - skin: crayon
@@ -136,6 +139,7 @@ MonoBehaviour:
     models: []
     blackModels: []
     standee: 0
+    randomYaw: 0
     stage3Models: []
     stage3BlackModels: []
   - skin: crayon
@@ -148,6 +152,7 @@ MonoBehaviour:
     models: []
     blackModels: []
     standee: 0
+    randomYaw: 0
     stage3Models: []
     stage3BlackModels: []
   - skin: crayon
@@ -160,6 +165,7 @@ MonoBehaviour:
     models: []
     blackModels: []
     standee: 0
+    randomYaw: 0
     stage3Models: []
     stage3BlackModels: []
   - skin: crayon
@@ -172,6 +178,7 @@ MonoBehaviour:
     models: []
     blackModels: []
     standee: 0
+    randomYaw: 0
     stage3Models: []
     stage3BlackModels: []
   - skin: cake
@@ -184,6 +191,7 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: cfb94b3129704dd47be3c57d7b86f5cc, type: 3}
     blackModels: []
     standee: 1
+    randomYaw: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: cfb94b3129704dd47be3c57d7b86f5cc, type: 3}
     stage3BlackModels: []
@@ -196,6 +204,7 @@ MonoBehaviour:
     models: []
     blackModels: []
     standee: 0
+    randomYaw: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: 501cca75f7fdaa742acf4fcfbc92c4a2, type: 3}
     stage3BlackModels: []
@@ -211,6 +220,7 @@ MonoBehaviour:
     blackModels:
     - {fileID: 919132149155446097, guid: 827aba8e7d4ff3949925941a234c5ea2, type: 3}
     standee: 1
+    randomYaw: 0
     stage3Models:
     - {fileID: 919132149155446097, guid: 73ebacaf677c47d46948a7e6e36d5745, type: 3}
     stage3BlackModels:
@@ -225,5 +235,6 @@ MonoBehaviour:
     blackModels:
     - {fileID: 919132149155446097, guid: d295938004c545640a072971c06c8130, type: 3}
     standee: 1
+    randomYaw: 0
     stage3Models: []
     stage3BlackModels: []

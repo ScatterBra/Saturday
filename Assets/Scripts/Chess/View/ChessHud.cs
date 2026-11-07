@@ -91,7 +91,7 @@ namespace SaturdayGame.Chess.View
 
         /// <summary>
         /// 平躺在桌面上的一块 World Space Canvas。场景里摆了这块区域（ChessDesk.newArea / ruleBook）时挂在它下面、跟着它走；
-        /// 没摆就放在 (centerX, -0.075, 0)。
+        /// 没摆就放在 (centerX, -0.075, 0)（没有场景桌面时的旧布局）。
         /// </summary>
         static RectTransform DeskCanvas(Transform parent, Transform area, string name, float centerX, Camera camera)
         {
@@ -99,7 +99,7 @@ namespace SaturdayGame.Chess.View
             var rt = (RectTransform)go.transform;
             rt.SetParent(area != null ? area : parent, false);
             rt.sizeDelta = new Vector2(DeskLayout.PanelWidth, DeskLayout.PanelDepth) * DeskLayout.PixelsPerUnit;
-            // 贴在桌面上（桌面顶面 y = -0.08），比棋盘格子（y = 0）略低，像放在桌上的纸；场景里的区域本身已经在桌面高度，字只抬高一点点
+            // 场景里的区域本身已经在纸面高度（NEW 区在桌面上，规则书在本子顶面），字只抬高一点点；没有场景桌面时贴在旧的桌面高度 y = -0.08
             rt.localPosition = area != null ? new Vector3(0f, 0.001f, 0f) : new Vector3(centerX, -0.075f, 0f);
             // Canvas 默认面朝 -Z，绕 X 转 90° 后面朝上、顶边朝远处，平躺在桌面上
             rt.localRotation = Quaternion.Euler(90f, 0f, 0f);

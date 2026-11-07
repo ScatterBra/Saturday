@@ -46,8 +46,8 @@ namespace SaturdayGame.Chess.View
             root.SetParent(parent, false);
             hasBoardArt = desk != null && desk.HasBoardArt;
 
-            // 桌面（backdrop）：顶面在 y = -0.08，比相机能看到的范围大很多，宽屏也不会露边
-            var tableTop = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.13f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
+            // 桌面（backdrop）：顶面在 y = -0.405，在 0.4 厚的棋盘模型底下，比相机能看到的范围大很多，宽屏也不会露边
+            var tableTop = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.455f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
             tableTop.name = "Table Top";
             factory.SetColor(tableTop, new Color(0.42f, 0.3f, 0.22f));
             var frame = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.12f, 0), new Vector3(9f, 0.1f, 9f), surface: true);
