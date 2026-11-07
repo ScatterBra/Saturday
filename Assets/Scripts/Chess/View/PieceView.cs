@@ -118,7 +118,7 @@ namespace SaturdayGame.Chess.View
             // 例如树：每棵生成时随机歪一点，不会整整齐齐朝着同一个方向（模型换掉前保持这个角度）
             if (resolved.RandomYaw > 0f) yaw += Random.Range(-resolved.RandomYaw, resolved.RandomYaw);
             model = source != null
-                ? factory.Model(source, Root.transform, factory.Art.modelHeight, factory.Art.modelWidth, yaw)
+                ? factory.Model(source, Root.transform, factory.Art.modelHeight * resolved.ModelScale, factory.Art.modelWidth * resolved.ModelScale, yaw)
                 : null;
         }
 

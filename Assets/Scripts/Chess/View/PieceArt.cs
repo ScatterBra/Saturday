@@ -32,6 +32,8 @@ namespace SaturdayGame.Chess.View
             public bool standee;
             [Tooltip("模型生成时在原来的朝向上随机多转 ±这么多度（例如树，看起来不会排得太整齐）；0 = 不随机")]
             [UnityEngine.Range(0f, 180f)] public float randomYaw;
+            [Tooltip("勾选后这个外观的模型保持原大小，不乘下面的 pawnModelScale / bishopModelScale / kingModelScale / otherModelScale（例如树）")]
+            public bool keepModelSize;
             [Tooltip("第三阶段才换上的 3D 模型（白方）。多个模型按棋子编号固定选一个")]
             public GameObject[] stage3Models = Array.Empty<GameObject>();
             [Tooltip("第三阶段黑方的 3D 模型；留空时用白方模型乘上 variantBlackTint")]
@@ -55,6 +57,8 @@ namespace SaturdayGame.Chess.View
             public bool Paper;
             /// <summary>模型生成时随机多转 ±这么多度。</summary>
             public float RandomYaw;
+            /// <summary>模型在 modelHeight / modelWidth 基础上再乘的大小。</summary>
+            public float ModelScale;
         }
 
         [Header("White (default) sprites")]
@@ -117,6 +121,14 @@ namespace SaturdayGame.Chess.View
         public float modelHeight = 1.1f;
         [Tooltip("3D 模型最宽不超过这么多（一格 = 1）")]
         public float modelWidth = 0.95f;
+        [Tooltip("兵的 3D 模型在上面的高度、宽度基础上再乘这么多，等比缩放（外观勾了 keepModelSize 的除外，例如树）")]
+        public float pawnModelScale = 0.62f;
+        [Tooltip("象（主教和它的变体：蛋糕、大象、鱼店、主教鸟）的 3D 模型再乘这么多，等比缩放")]
+        public float bishopModelScale = 0.7f;
+        [Tooltip("王的 3D 模型再乘这么多，等比缩放。王的模型比较宽，大小是被宽度卡住的，比例要给大一点才比兵高")]
+        public float kingModelScale = 0.95f;
+        [Tooltip("其他 3D 模型在上面的高度、宽度基础上再乘这么多，等比缩放（外观勾了 keepModelSize 的除外）")]
+        public float otherModelScale = 0.8f;
 
         [Header("Skins")]
         public List<SkinArt> skins = new List<SkinArt>();
@@ -126,6 +138,17 @@ namespace SaturdayGame.Chess.View
         /// stage3 = true 时（第三阶段的棋盘）外观和基础棋子配了第三阶段模型的就用模型；纸片版仍然是贴图。
         /// </summary>
         public Resolved Resolve(Piece piece, bool stage3 = false)
+        {
+            var result = ResolveArt(piece, stage3);
+            if (result.ModelScale <= 0f)
+                result.ModelScale = piece.Type == PieceType.Pawn ? pawnModelScale
+                    : piece.Type == PieceType.Bishop ? bishopModelScale
+                    : piece.Type == PieceType.King ? kingModelScale
+                    : otherModelScale;
+            return result;
+        }
+
+        Resolved ResolveArt(Piece piece, bool stage3)
         {
             var result = new Resolved();
             if (piece.IsFrozen && TrySkin(piece.FrozenSkin, piece, stage3, ref result))
@@ -199,12 +222,14 @@ namespace SaturdayGame.Chess.View
                     result.Model = models[Variant(piece, models.Length)];
                     result.Standee = entry.standee;
                     result.RandomYaw = entry.randomYaw;
+                    if (entry.keepModelSize) result.ModelScale = 1f;
                     result.Tint = piece.Side == Side.Black && !hasBlackModel ? variantBlackTint : Color.white;
                 }
                 if (hasStage3)
                 {
                     result.Model = stage3List[Variant(piece, stage3List.Length)];
                     result.Standee = true;
+                    result.ModelScale = entry.keepModelSize ? 1f : 0f;
                     result.Tint = piece.Side == Side.Black && !hasBlackStage3 ? variantBlackTint : Color.white;
                 }
                 return result.Sprite != null || result.Model != null;
