@@ -110,6 +110,8 @@ namespace SaturdayGame.Chess.View
         public GameObject blackKingModel;
         [Tooltip("第三阶段模型额外绕竖轴转多少度。0 = 模型正面朝着相机；模型背对相机时填 180")]
         public float stage3ModelYaw = 0f;
+        [Tooltip("第三阶段的棋子模型生成时在面朝相机的基础上随机多转 ±这么多度（和树一样，看起来不会排得太整齐）；0 = 不随机。外观自己设了 randomYaw 的（例如树）用自己的")]
+        [UnityEngine.Range(0f, 180f)] public float stage3RandomYaw = 25f;
 
         [Tooltip("黑方没有单独贴图时，白方贴图乘上这个颜色")]
         public Color blackTint = new Color(0.42f, 0.42f, 0.48f);
@@ -140,6 +142,7 @@ namespace SaturdayGame.Chess.View
         public Resolved Resolve(Piece piece, bool stage3 = false)
         {
             var result = ResolveArt(piece, stage3);
+            if (stage3 && result.Model != null && result.RandomYaw <= 0f) result.RandomYaw = stage3RandomYaw;
             if (result.ModelScale <= 0f)
                 result.ModelScale = piece.Type == PieceType.Pawn ? pawnModelScale
                     : piece.Type == PieceType.Bishop ? bishopModelScale
