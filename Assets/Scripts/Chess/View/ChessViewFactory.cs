@@ -27,6 +27,9 @@ namespace SaturdayGame.Chess.View
         /// <summary>相机现在的水平转角（度），立牌模型按它摆正面。</summary>
         public float CameraYaw => cameraTransform != null ? FaceCamera.Rotation(cameraTransform, 0f).eulerAngles.y : 0f;
 
+        /// <summary>棋盘相机（喷水这类要正对相机的动画用）。</summary>
+        public readonly Camera Camera;
+
         /// <summary>3D 模型是否投影子。</summary>
         public readonly bool Shadows;
 
@@ -35,6 +38,7 @@ namespace SaturdayGame.Chess.View
             Font titleFont = null, Font bodyFont = null, Transform faceReference = null)
         {
             Art = art;
+            Camera = camera;
             Shadows = shadows;
             // 运行时建的材质不存进场景（编辑器预览里也会建）
             this.material = material != null ? material : new Material(Shader.Find("Universal Render Pipeline/Unlit")) { hideFlags = HideFlags.DontSave };

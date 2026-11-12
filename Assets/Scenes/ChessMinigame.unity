@@ -358,6 +358,16 @@ MonoBehaviour:
   dissolveDuration: 1.2
   dissolveParticles: {fileID: 8594448520171598934, guid: afadc6fdacd43754a903476d963a596b, type: 3}
   dissolveParticlesScale: 1
+  hydrantSprayFrames:
+  - {fileID: 21300000, guid: 431a5cba29904c14bbb4a404bb70de56, type: 3}
+  - {fileID: 21300000, guid: e8f668c86a95e104c9013a8bbbc7ee63, type: 3}
+  - {fileID: 21300000, guid: 1c82e0d92fc927140924857b84b00c96, type: 3}
+  - {fileID: 21300000, guid: b1ac76f7ee07f9443840c1eba704d210, type: 3}
+  - {fileID: 21300000, guid: f30c757547e7de545b23e384c06b6ebc, type: 3}
+  - {fileID: 21300000, guid: 6b4063762f2897e489c86fe0c5678052, type: 3}
+  - {fileID: 21300000, guid: b6ca42360ceb20e4abbc2bf95ba30274, type: 3}
+  hydrantSprayFps: 12.5
+  hydrantSprayHeight: 0.35
   treeEffect: {fileID: 1025285306637258, guid: d8f0099df63275647a8bcf646df1ca00, type: 3}
   treeEffectScale: 0.4
   ruleCards:
@@ -1089,6 +1099,7 @@ MonoBehaviour:
   aiThinkTime: 0.6
   moveDuration: 0.25
   effectDuration: 0.35
+  revertDuration: 0.9
   dialogueDuration: 1.4
   cardFlyDuration: 0.3
   stormDuration: 0.8

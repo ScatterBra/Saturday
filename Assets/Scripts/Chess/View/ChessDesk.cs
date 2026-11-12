@@ -49,6 +49,15 @@ namespace SaturdayGame.Chess.View
         [Tooltip("溶解粒子的整体缩放")]
         public float dissolveParticlesScale = 1f;
 
+        [Tooltip("消防栓喷水的帧动画（由 water.gif 拆出来，图片左端是喷水口），和喷水音效同时播；留空就没有")]
+        public Sprite[] hydrantSprayFrames = new Sprite[0];
+        [Tooltip("喷水动画每秒几帧（water.gif 是每帧 0.08 秒 = 12.5）")]
+        public float hydrantSprayFps = 12.5f;
+        [Tooltip("喷水口离棋盘多高（世界单位）")]
+        public float hydrantSprayHeight = 0.35f;
+        [Tooltip("水柱的起点离消防栓多远（沿喷水方向，世界单位）；0 = 从消防栓正中间喷出")]
+        public float hydrantSprayOffset = 0.3f;
+
         [Tooltip("兵变成树、树变回兵（或被吃掉）时在那一格播一次的特效（例如 ParticlePack 的 DustExplosion），留空就不播")]
         public GameObject treeEffect;
         [Tooltip("树特效的整体缩放")]

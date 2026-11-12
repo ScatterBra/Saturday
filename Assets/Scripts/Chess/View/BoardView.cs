@@ -55,6 +55,8 @@ namespace SaturdayGame.Chess.View
         static readonly int MainTexId = Shader.PropertyToID("_MainTex");
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         static readonly int NoiseOffsetId = Shader.PropertyToID("_NoiseOffset");
+        readonly Sprite[] hydrantSprayFrames;
+        readonly float hydrantSprayFps, hydrantSprayHeight, hydrantSprayOffset;
         readonly GameObject treeEffect;
         readonly float treeEffectScale;
         /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
@@ -87,6 +89,10 @@ namespace SaturdayGame.Chess.View
                 lavaEffectScale = desk.lavaEffectScale;
                 lavaEffectLift = desk.lavaEffectLift;
                 treeEffect = desk.treeEffect;
+                hydrantSprayFrames = desk.hydrantSprayFrames;
+                hydrantSprayFps = desk.hydrantSprayFps;
+                hydrantSprayHeight = desk.hydrantSprayHeight;
+                hydrantSprayOffset = desk.hydrantSprayOffset;
                 dissolveMaterial = desk.dissolveMaterial;
                 dissolveDuration = desk.dissolveDuration;
                 dissolveParticles = desk.dissolveParticles;
@@ -464,6 +470,18 @@ namespace SaturdayGame.Chess.View
             if (!was || quietTrees) return;
             PlayTreeEffect(localPosition);
             treeVanished = true;
+        }
+
+        /// <summary>消防栓从 from 朝 toward 那一格喷水的动画（长度固定，不等它播完）。</summary>
+        public void PlayHydrantSpray(Coord from, Coord toward)
+        {
+            if (hydrantSprayFrames == null || hydrantSprayFrames.Length == 0) return;
+            var localDirection = (SquareCenter(toward) - SquareCenter(from)).normalized;
+            // 起点沿喷水方向往前挪一点，水柱不会从消防栓身体里冒出来
+            var start = PiecePosition(from) + Vector3.up * hydrantSprayHeight + localDirection * hydrantSprayOffset;
+            var direction = root.TransformDirection(localDirection);
+            var spray = LineSpriteAnimation.Play(root, start, direction, hydrantSprayFrames, hydrantSprayFps, factory.Camera);
+            spray.name = "Hydrant Spray";
         }
 
         /// <summary>棋子变回原来的样子（例如喷完火的龙变回马）：和树出现、消失一样冒一团粉尘。</summary>

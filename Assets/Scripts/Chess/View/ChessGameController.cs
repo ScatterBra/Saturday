@@ -537,7 +537,11 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.Pushed:
                         // 推子的是消防栓就是喷水，是青蛙就是舌头
                         var pusher = e.SourcePieceId >= 0 ? game.Board.GetPiece(e.SourcePieceId) : null;
-                        if (pusher?.Skin == FireHydrantRule.Hydrant) PlaySound(s => s.hydrant);
+                        if (pusher?.Skin == FireHydrantRule.Hydrant)
+                        {
+                            PlaySound(s => s.hydrant);
+                            board.PlayHydrantSpray(pusher.Pos, e.From);
+                        }
                         else if (pusher?.Skin == FireHydrantRule.Frog) PlaySound(s => s.frog);
                         yield return board.AnimatePush(e.PieceId, e.To, effectDuration * 1.5f);
                         break;
