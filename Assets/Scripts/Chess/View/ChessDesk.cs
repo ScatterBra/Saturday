@@ -58,6 +58,13 @@ namespace SaturdayGame.Chess.View
         [Tooltip("水柱的起点离消防栓多远（沿喷水方向，世界单位）；0 = 从消防栓正中间喷出")]
         public float hydrantSprayOffset = 0.3f;
 
+        [Tooltip("第三阶段升起的地块：普通方块四个侧面轮流贴这几张（例如 Grid_1、Grid_1.5）。每张图对应 1 × 1 的侧面，顶边是草。留空就是原来的纯色方块")]
+        public Texture2D[] raisedSideTextures = new Texture2D[0];
+        [Tooltip("骷髅方块的一个侧面贴这张（例如 Grid_2），其他三面和普通方块一样")]
+        public Texture2D raisedSkullTexture;
+        [Tooltip("每个方块是骷髅方块的机会（0–1），小一点骷髅就少")]
+        [Range(0f, 1f)] public float raisedSkullChance = 0.15f;
+
         [Tooltip("兵变成树、树变回兵（或被吃掉）时在那一格播一次的特效（例如 ParticlePack 的 DustExplosion），留空就不播")]
         public GameObject treeEffect;
         [Tooltip("树特效的整体缩放")]

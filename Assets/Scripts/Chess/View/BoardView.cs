@@ -31,6 +31,17 @@ namespace SaturdayGame.Chess.View
         readonly Transform root;
         readonly ChessViewFactory factory;
         readonly GameObject[] squares = new GameObject[64];
+        /// <summary>升起的地块用贴图方块叠出来时，最上面那块方块的渲染器（顶面上色用）；平地和城堡为 null。</summary>
+        readonly MeshRenderer[] terrainTops = new MeshRenderer[64];
+        readonly List<GameObject> terrainBlocks = new List<GameObject>();
+        readonly Texture2D[] raisedSideTextures;
+        readonly Texture2D raisedSkullTexture;
+        readonly float raisedSkullChance;
+        Mesh blockMesh;
+        Material blockTopMaterial;
+        Material[] blockSideMaterials;
+        Material blockSkullMaterial;
+        readonly MaterialPropertyBlock topBlock = new MaterialPropertyBlock();
         /// <summary>有棋盘图时盖在每个格子上的色块（高亮、岩浆、暗化），没有棋盘图时为 null。</summary>
         readonly SpriteRenderer[] overlays;
         readonly bool hasBoardArt;
@@ -89,6 +100,9 @@ namespace SaturdayGame.Chess.View
                 lavaEffectScale = desk.lavaEffectScale;
                 lavaEffectLift = desk.lavaEffectLift;
                 treeEffect = desk.treeEffect;
+                raisedSideTextures = desk.raisedSideTextures;
+                raisedSkullTexture = desk.raisedSkullTexture;
+                raisedSkullChance = desk.raisedSkullChance;
                 hydrantSprayFrames = desk.hydrantSprayFrames;
                 hydrantSprayFps = desk.hydrantSprayFps;
                 hydrantSprayHeight = desk.hydrantSprayHeight;
@@ -246,6 +260,7 @@ namespace SaturdayGame.Chess.View
                 }
             }
 
+            RebuildTerrainBlocks();
             RebuildLavaEffects();
 
             if (castleLabel != null) ViewUtil.Destroy(castleLabel);
@@ -318,6 +333,113 @@ namespace SaturdayGame.Chess.View
             // 风暴散去时云已经聚好了
             ParticleFx.Warm(fx, 3f);
             stormCloudInstance = fx;
+        }
+
+        /// <summary>
+        /// 升起的地块（城堡除外）换成贴图方块：每块 1 × 1 × 1，最上面一块的顶边和地块顶面对齐，
+        /// 侧面超过 1 格高就往下再叠一块，直到盖住棋盘面。普通方块四面轮流贴 raisedSideTextures；
+        /// 少数是骷髅方块，其中一面贴 raisedSkullTexture。每块随机转 90° 的倍数，看起来不会一模一样。
+        /// 顶面还是纯色（Highlight 给它上色），以后有顶面贴图再换。
+        /// </summary>
+        void RebuildTerrainBlocks()
+        {
+            foreach (var block in terrainBlocks) ViewUtil.Destroy(block);
+            terrainBlocks.Clear();
+            for (int i = 0; i < 64; i++) terrainTops[i] = null;
+            bool textured = raisedSideTextures != null && raisedSideTextures.Length > 0 && raisedSideTextures[0] != null;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                bool raised = board != null && board.Height(c) > 0 && !board.IsCastle(c);
+                squares[i].SetActive(!(textured && raised));
+                if (!textured || !raised) continue;
+                EnsureBlockAssets(squares[i].GetComponent<MeshRenderer>().sharedMaterial);
+
+                float top = TopOf(c);
+                int count = Mathf.CeilToInt(top - 0.001f);
+                for (int layer = 0; layer < count; layer++)
+                {
+                    var go = new GameObject($"Terrain {c} {layer}");
+                    go.transform.SetParent(root, false);
+                    go.transform.localPosition = SquareCenter(c) + Vector3.up * (top - layer);
+                    go.transform.localRotation = Quaternion.Euler(0f, 90f * Random.Range(0, 4), 0f);
+                    go.AddComponent<MeshFilter>().sharedMesh = blockMesh;
+                    var renderer = go.AddComponent<MeshRenderer>();
+                    bool skull = blockSkullMaterial != null && Random.value < raisedSkullChance;
+                    // 子网格：0 = 顶面和底面，1–4 = 远、右、近、左四个侧面
+                    var materials = new Material[5];
+                    materials[0] = blockTopMaterial;
+                    for (int side = 0; side < 4; side++) materials[side + 1] = blockSideMaterials[side % blockSideMaterials.Length];
+                    if (skull) materials[1 + Random.Range(0, 4)] = blockSkullMaterial;
+                    renderer.sharedMaterials = materials;
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = squares[i].GetComponent<MeshRenderer>().receiveShadows;
+                    terrainBlocks.Add(go);
+                    if (layer == 0) terrainTops[i] = renderer;
+                }
+            }
+        }
+
+        /// <summary>方块网格和材质只建一次（材质照着格子原来的材质抄，受不受光照不变）。</summary>
+        void EnsureBlockAssets(Material baseMaterial)
+        {
+            if (blockMesh != null) return;
+            blockMesh = BuildBlockMesh();
+            blockTopMaterial = new Material(baseMaterial) { hideFlags = HideFlags.DontSave };
+            blockSideMaterials = new Material[raisedSideTextures.Length];
+            for (int k = 0; k < raisedSideTextures.Length; k++) blockSideMaterials[k] = TexturedMaterial(baseMaterial, raisedSideTextures[k]);
+            blockSkullMaterial = raisedSkullTexture != null ? TexturedMaterial(baseMaterial, raisedSkullTexture) : null;
+        }
+
+        static Material TexturedMaterial(Material baseMaterial, Texture texture)
+        {
+            var material = new Material(baseMaterial) { hideFlags = HideFlags.DontSave };
+            if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
+            if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
+            return material;
+        }
+
+        /// <summary>
+        /// 1 × 1 × 1 的方块，原点在顶面中心。子网格 0 = 顶面 + 底面，1–4 = +Z、+X、−Z、−X 四个侧面；
+        /// 侧面的 UV 从外面看左下 (0,0) 到右上 (1,1)，贴图的顶边（草）在上面。
+        /// </summary>
+        static Mesh BuildBlockMesh()
+        {
+            var vertices = new List<Vector3>();
+            var normals = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var submeshes = new List<int>[5];
+            for (int k = 0; k < 5; k++) submeshes[k] = new List<int>();
+            void Face(Vector3 normal, Vector3 faceUp, int submesh)
+            {
+                var right = Vector3.Cross(faceUp, -normal);
+                var center = normal * 0.5f + Vector3.down * 0.5f;
+                int start = vertices.Count;
+                vertices.Add(center - right * 0.5f - faceUp * 0.5f);
+                vertices.Add(center - right * 0.5f + faceUp * 0.5f);
+                vertices.Add(center + right * 0.5f + faceUp * 0.5f);
+                vertices.Add(center + right * 0.5f - faceUp * 0.5f);
+                uvs.Add(new Vector2(0, 0)); uvs.Add(new Vector2(0, 1)); uvs.Add(new Vector2(1, 1)); uvs.Add(new Vector2(1, 0));
+                for (int k = 0; k < 4; k++) normals.Add(normal);
+                submeshes[submesh].AddRange(new[] { start, start + 1, start + 2, start, start + 2, start + 3 });
+            }
+            Face(Vector3.up, Vector3.forward, 0);
+            Face(Vector3.down, Vector3.forward, 0);
+            Face(Vector3.forward, Vector3.up, 1);
+            Face(Vector3.right, Vector3.up, 2);
+            Face(Vector3.back, Vector3.up, 3);
+            Face(Vector3.left, Vector3.up, 4);
+            var mesh = new Mesh { name = "Terrain Block", hideFlags = HideFlags.DontSave };
+            mesh.SetVertices(vertices);
+            mesh.SetNormals(normals);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = 5;
+            for (int k = 0; k < 5; k++) mesh.SetTriangles(submeshes[k], k);
+            mesh.RecalculateBounds();
+            mesh.RecalculateTangents();
+            return mesh;
         }
 
         /// <summary>每格岩浆上放一份特效（ChessDesk.lavaEffect），旧的先清掉。</summary>
@@ -556,6 +678,14 @@ namespace SaturdayGame.Chess.View
                     if (i == effect.Value.To.Index) Mark(colors, marks, i, effect.Value.Burns ? Danger : EffectTarget, 1f, effect.Value.Burns ? 0.85f : 0.4f);
                 }
                 factory.SetColor(squares[i], colors[i]);
+                // 贴图方块只给顶面上色，侧面保持贴图原色
+                if (terrainTops[i] != null)
+                {
+                    topBlock.Clear();
+                    topBlock.SetColor("_BaseColor", colors[i]);
+                    topBlock.SetColor("_Color", colors[i]);
+                    terrainTops[i].SetPropertyBlock(topBlock, 0);
+                }
                 if (overlays != null)
                 {
                     overlays[i].enabled = marks[i].a > 0f;

@@ -368,6 +368,12 @@ MonoBehaviour:
   - {fileID: 21300000, guid: b6ca42360ceb20e4abbc2bf95ba30274, type: 3}
   hydrantSprayFps: 12.5
   hydrantSprayHeight: 0.35
+  hydrantSprayOffset: 0.3
+  raisedSideTextures:
+  - {fileID: 2800000, guid: bc180d087ceeefc4fab1767c71860c79, type: 3}
+  - {fileID: 2800000, guid: 02e920faa9c132c4cb69f54a5f46cc4d, type: 3}
+  raisedSkullTexture: {fileID: 2800000, guid: b6c53a28636f03e49afe452ef4e8c5fc, type: 3}
+  raisedSkullChance: 0.15
   treeEffect: {fileID: 1025285306637258, guid: d8f0099df63275647a8bcf646df1ca00, type: 3}
   treeEffectScale: 0.4
   ruleCards:
