@@ -30,6 +30,11 @@ namespace SaturdayGame.Chess
 
         public bool IsFrozen => FrozenTurns > 0;
 
+        /// <summary>第三阶段：还要潮湿几个（自己一方的）回合。潮湿的棋子遇到火（龙火、掉进岩浆）就爆炸。</summary>
+        public int WetTurns;
+
+        public bool IsWet => WetTurns > 0;
+
         /// <summary>在棋盘上。</summary>
         public bool IsVisible => OnBoard;
 

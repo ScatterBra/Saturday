@@ -59,10 +59,11 @@ namespace SaturdayGame.Chess.View
             UpdateModel(resolved, piece);
             bool useModel = model != null;
             // 第三阶段模型没有黑方版本时压暗；其他模型（例如树）保持原色
+            var wet = piece.IsWet ? factory.WetTint : Color.white;
             if (useModel)
             {
                 var tint = resolved.Standee && resolved.Tint != default ? resolved.Tint : Color.white;
-                factory.TintModel(model, tint);
+                factory.TintModel(model, tint * wet);
             }
             bool useSprite = !useModel && resolved.Sprite != null;
             if (sprite != null)
@@ -77,7 +78,7 @@ namespace SaturdayGame.Chess.View
             letter.gameObject.SetActive(!useSprite && !useModel);
 
             disc.SetActive(!useSprite && !useModel);
-            factory.SetColor(disc, white ? WhiteBody : BlackBody);
+            factory.SetColor(disc, (white ? WhiteBody : BlackBody) * wet);
 
             // 贴图已经画出来的外观就不再显示占位圆环 / 冻结方块和对应的小字
             // 用贴图显示时不画圆环（俯视角下圆环会盖住贴图），改成给贴图染上外观的颜色
@@ -86,6 +87,7 @@ namespace SaturdayGame.Chess.View
             if (skin != null && !useSprite) factory.SetColor(ring, SkinColor(skin));
             if (skin != null && useSprite && sprite != null)
                 sprite.color = resolved.Tint * Color.Lerp(Color.white, SkinColor(skin), 0.6f);
+            if (sprite != null && useSprite) sprite.color *= wet;
 
             frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen);
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
@@ -100,6 +102,7 @@ namespace SaturdayGame.Chess.View
                 string frozen = resolved.ShowsFrozen ? piece.FrozenTurns.ToString() : $"{piece.FrozenSkin} {piece.FrozenTurns}";
                 text = frozen + (text.Length > 0 ? "\n" + text : "");
             }
+            if (piece.IsWet && !useSprite && !useModel) text = $"wet {piece.WetTurns}" + (text.Length > 0 ? "\n" + text : "");
             caption.text = text;
             caption.color = new Color(0.1f, 0.06f, 0.04f);
         }

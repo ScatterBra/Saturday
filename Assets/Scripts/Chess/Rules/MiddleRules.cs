@@ -27,39 +27,80 @@ namespace SaturdayGame.Chess
         }
     }
 
-    /// <summary>自己的一匹马变成龙，喷火随机烧掉对手一个兵、马或象，然后变回原来的样子。</summary>
+    /// <summary>
+    /// 自己的一匹马变成龙，烧掉它身边 Reach 格以内的一个敌方兵、马或象，然后变回原来的样子。
+    /// 玩家自己选：先选马（只有一匹马能喷时直接用它），再选烧谁；两步都能跳过（跳过就当没用）。
+    /// 龙火是火：烧到潮湿的棋子会爆炸（RuleContext.Burn）。冻住的马喷不了火，城堡里的棋子烧不到。
+    /// 第二阶段是一次性的卡；第三阶段是马的常驻技能（ChessGame.UseSkill），有冷却。
+    /// </summary>
     public sealed class DragonKnightRule : RuleBase
     {
+        /// <summary>龙火够得着的距离（切比雪夫距离，2 = 周围两圈）。</summary>
+        public const int Reach = 2;
+
         public override string Id => "dragon_knight";
         public override string Title => "Here Be Dragons";
-        public override string Description => "One of your knights becomes a dragon, burns a random enemy pawn, knight or bishop, then turns back into a knight.";
+        public override string Description => $"One of your knights becomes a dragon and burns an enemy pawn, knight or bishop up to {Reach} squares away. You pick which. Then it turns back into a knight.";
         public override RuleKind Kind => RuleKind.Buff;
         public override int Stage => 1;
 
-        public override bool IsAvailable(RuleContext ctx) =>
-            ctx.Visible(ctx.Player, PieceType.Knight).Count > 0 && Targets(ctx).Count > 0;
+        public override bool IsAvailable(RuleContext ctx) => Dragons(ctx).Count > 0;
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {
-            var knights = ctx.Visible(ctx.Player, PieceType.Knight);
-            var dragon = knights[ctx.Rng.Next(knights.Count)];
+            var knights = Dragons(ctx);
+            if (knights.Count == 0) yield break;
+            var dragon = knights[0];
+            if (knights.Count > 1)
+            {
+                var pickKnight = new TargetRequest
+                {
+                    Prompt = "Pick a knight to turn into a dragon, or skip.",
+                    Options = knights.ConvertAll(k => k.Pos),
+                    AllowSkip = true,
+                };
+                yield return pickKnight;
+                if (!pickKnight.Result.HasValue) yield break;
+                dragon = ctx.Board.PieceAt(pickKnight.Result.Value);
+            }
+
+            var victims = Targets(ctx, dragon);
+            var pickVictim = new TargetRequest
+            {
+                Prompt = "Pick what the dragon burns, or skip.",
+                Options = victims.ConvertAll(v => v.Pos),
+                AllowSkip = true,
+            };
+            yield return pickVictim;
+            if (!pickVictim.Result.HasValue) yield break;
+            var victim = ctx.Board.PieceAt(pickVictim.Result.Value);
+
+            ctx.Acted = true;
             // 记下原来的样子（例如复活回来的蜡笔马），喷完火变回去
             var originalSkin = dragon.Skin;
             ctx.SetSkin(dragon, "dragon");
-            ctx.Say(Speakers.You, "Dragon fire!");
-
-            var victim = TargetPicker.Pick(Targets(ctx), TargetPicker.BurnWeight, ctx.Rng);
-            if (victim != null) ctx.Destroy(victim, "burned", dragon);
+            ctx.Say(Speakers.You, victim.IsWet ? "Dragon fire! ...Wait, that one's wet." : "Dragon fire!");
+            ctx.Burn(victim, dragon);
             ctx.RevertSkin(dragon, originalSkin);
             ctx.Say(Speakers.Friend, "That's so unfair. I love it.");
-            yield break;
         }
 
-        static List<Piece> Targets(RuleContext ctx)
+        /// <summary>能喷火的马：没冻住，身边够得着至少一个目标。</summary>
+        static List<Piece> Dragons(RuleContext ctx)
+        {
+            var list = new List<Piece>();
+            foreach (var knight in ctx.Visible(ctx.Player, PieceType.Knight))
+                if (!knight.IsFrozen && Targets(ctx, knight).Count > 0) list.Add(knight);
+            return list;
+        }
+
+        /// <summary>这匹马够得着的目标：Reach 格以内、城堡外的敌方兵、马、象。</summary>
+        public static List<Piece> Targets(RuleContext ctx, Piece knight)
         {
             var list = new List<Piece>();
             foreach (var p in ctx.Board.PiecesOf(ctx.Opponent))
-                if (p.IsTargetable && TargetPicker.BurnWeight(p) > 0) list.Add(p);
+                if (p.IsTargetable && TargetPicker.BurnWeight(p) > 0 && !ctx.Board.InCastle(p) && p.Pos.DistanceTo(knight.Pos) <= Reach)
+                    list.Add(p);
             return list;
         }
     }
@@ -67,7 +108,7 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 复活自己一枚被吃掉的棋子（王以外都行）：玩家先在规则书的被吃区里挑棋子，再在自己那半边棋盘上挑位置，两步都能跳过。
     /// 复活后的样子：本来有外观的（消防栓、青蛙、主教变体）保持原样；有蜡笔图的（兵、马、车、后）画成蜡笔版；其他的（普通的象）是纸片版。
-    /// 第 10 回合的选卡、被将军时的救急技能、第三阶段的技能都是它。
+    /// 第 10 回合的选卡、被将军时的救急技能里有它；第三阶段不能复活。
     /// </summary>
     public sealed class CrayonRevivalRule : RuleBase
     {

@@ -258,33 +258,46 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void DragonKnight_BurnsOnlyPawnsKnightsBishops_PawnsMostOften()
+        public void DragonKnight_ThePlayerPicksWhatBurns_WithinTwoSquaresOfTheKnight()
         {
-            var burned = new Dictionary<PieceType, int>();
-            for (int seed = 0; seed < 300; seed++)
-            {
-                var board = Board.CreateStandard();
-                var events = new List<GameEvent>();
-                var ctx = Context(board, seed, events);
-                var rule = new DragonKnightRule();
-                Assert.IsTrue(rule.IsAvailable(ctx));
-                Run(rule, ctx);
+            var board = Setup("Nd4", "Nb1", "pe5", "bf6", "rd6", "ph8");
+            var events = new List<GameEvent>();
+            var ctx = Context(board, 1, events);
+            var rule = new DragonKnightRule();
+            Assert.IsTrue(rule.IsAvailable(ctx));
+            var requests = rule.Activate(ctx).GetEnumerator();
 
-                var burn = events.Single(e => e.Type == GameEventType.Captured);
-                Assert.AreEqual("burned", burn.Text);
-                var victim = board.GetPiece(burn.PieceId);
-                Assert.AreEqual(Side.Black, victim.Side);
-                Assert.IsFalse(victim.OnBoard);
-                // 喷火的是龙，喷完变回原来的马
-                var dragon = board.GetPiece(burn.SourcePieceId);
-                Assert.AreEqual(PieceType.Knight, dragon.Type);
-                Assert.IsTrue(events.Any(e => e.Type == GameEventType.AppearanceChanged && e.PieceId == dragon.Id && e.Text == "dragon"));
-                Assert.IsNull(dragon.Skin);
-                Assert.IsTrue(events.Last(e => e.Type == GameEventType.AppearanceChanged).Reverted);
-                burned[victim.Type] = burned.TryGetValue(victim.Type, out var n) ? n + 1 : 1;
-            }
-            CollectionAssert.IsSubsetOf(burned.Keys, new[] { PieceType.Pawn, PieceType.Knight, PieceType.Bishop });
-            Assert.Greater(burned[PieceType.Pawn], burned[PieceType.Knight] + burned[PieceType.Bishop]);
+            // b1 够不着任何目标，只有 d4 能喷，所以不用先选马
+            Assert.IsTrue(requests.MoveNext());
+            CollectionAssert.AreEquivalent(new[] { C("e5"), C("f6") }, requests.Current.Options,
+                "pawns, knights and bishops within two squares; the rook and the far pawn are out");
+            requests.Current.Result = C("f6");
+            Assert.IsFalse(requests.MoveNext());
+            Assert.IsTrue(ctx.Acted);
+
+            var burn = events.Single(e => e.Type == GameEventType.Captured);
+            Assert.AreEqual("burned", burn.Text);
+            Assert.AreEqual(C("f6"), burn.To);
+            // 喷火的是龙，喷完变回原来的马
+            var dragon = board.GetPiece(burn.SourcePieceId);
+            Assert.AreEqual(C("d4"), dragon.Pos);
+            Assert.IsTrue(events.Any(e => e.Type == GameEventType.AppearanceChanged && e.PieceId == dragon.Id && e.Text == "dragon"));
+            Assert.IsNull(dragon.Skin);
+            Assert.IsTrue(events.Last(e => e.Type == GameEventType.AppearanceChanged).Reverted);
+        }
+
+        [Test]
+        public void DragonKnight_SeveralKnights_PickTheKnightFirst_AndSkippingDoesNothing()
+        {
+            var board = Setup("Nd4", "Na1", "pe5", "pb3");
+            var ctx = Context(board, 1);
+            var requests = new DragonKnightRule().Activate(ctx).GetEnumerator();
+            Assert.IsTrue(requests.MoveNext());
+            CollectionAssert.AreEquivalent(new[] { C("d4"), C("a1") }, requests.Current.Options);
+            requests.Current.Result = null;
+            Assert.IsFalse(requests.MoveNext());
+            Assert.IsFalse(ctx.Acted);
+            Assert.AreEqual(2, board.PiecesOf(Side.Black).Count(p => p.Type == PieceType.Pawn));
         }
 
         [Test]
@@ -295,8 +308,10 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsFalse(new DragonKnightRule().IsAvailable(Context(board, 1)));
 
             board = Board.CreateStandard();
-            Capture(board, "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", "b8", "c8", "f8", "g8");
-            Assert.IsFalse(new DragonKnightRule().IsAvailable(Context(board, 1)));
+            Assert.IsFalse(new DragonKnightRule().IsAvailable(Context(board, 1)), "at the start nothing is within two squares of a knight");
+
+            board = Setup("Nd4", "rd5", "qe5");
+            Assert.IsFalse(new DragonKnightRule().IsAvailable(Context(board, 1)), "rooks and queens don't burn");
         }
 
         /// <summary>跑 Crayon Comeback：挑 pieceSquare 原来那枚棋子（null = 跳过），放到 to（null = 跳过）。</summary>

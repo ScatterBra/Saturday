@@ -81,6 +81,12 @@ namespace SaturdayGame.Chess
         public int? PreviewPieceId;
         public string PreviewSkin;
 
+        /// <summary>
+        /// 点选格子时，鼠标停在某个可选格子上会打到哪些格子（例如光束经过的斜线、雷暴的 4 × 4 范围），表现层用来预览；
+        /// 为 null 时不预览。
+        /// </summary>
+        public Func<Coord, IReadOnlyList<Coord>> Affected;
+
         public bool IsPieceRequest => PieceOptions != null;
     }
 
@@ -112,6 +118,24 @@ namespace SaturdayGame.Chess
         /// 只在 OnPieceMoved 期间有值。
         /// </summary>
         public int? PreferredTargetId;
+
+        /// <summary>
+        /// 技能真的放出去了（没有在点选时跳过）。第三阶段的常驻技能放出去就结束这一回合、开始冷却；
+        /// 手里的卡放出去才算用掉。由 ChessGame 在每次放技能前清零。
+        /// </summary>
+        public bool Acted;
+
+        /// <summary>技能额外给雷暴积累条加的格数（例如自爆），ChessGame 用 TakeThunderCharge 取走。</summary>
+        int thunderCharge;
+
+        public void AddThunderCharge(int amount) => thunderCharge += amount;
+
+        public int TakeThunderCharge()
+        {
+            int amount = thunderCharge;
+            thunderCharge = 0;
+            return amount;
+        }
 
         public void Emit(GameEvent e) => emit(e);
 
@@ -157,6 +181,74 @@ namespace SaturdayGame.Chess
             emit(GameEvent.Captured(piece, at, cause, source));
         }
 
+        /// <summary>第三阶段的技能直接消灭一枚棋子（王也行，王在第三阶段是普通棋子）。cause 见 GameEvent.Captured。</summary>
+        public void Kill(Piece piece, string cause, Piece source = null)
+        {
+            if (!piece.OnBoard) return;
+            var at = piece.Pos;
+            Board.RemovePiece(piece);
+            emit(GameEvent.Captured(piece, at, cause, source));
+        }
+
+        /// <summary>火攻（龙火）：烧掉这枚棋子；它是潮湿的就在原地爆炸。</summary>
+        public void Burn(Piece victim, Piece source)
+        {
+            bool wet = victim.IsWet;
+            var at = victim.Pos;
+            Kill(victim, "burned", source);
+            if (wet) Explode(at);
+        }
+
+        /// <summary>
+        /// 爆炸（潮湿遇火、自爆）：身边一圈的棋子各往远离中心的方向推 1 格，敌我都推，不炸死。
+        /// 落点有棋子、出界或是城堡就留在原地；落点是岩浆就烧掉（不连锁：潮湿的也不会再炸）。城堡里的棋子不受影响。
+        /// 每个棋子都往外走，落点不会互相重叠，推的顺序不影响结果。最后中心留下熔岩坑（城堡周围一圈除外）。
+        /// </summary>
+        public void Explode(Coord center)
+        {
+            emit(GameEvent.Exploded(center));
+            for (int dy = 1; dy >= -1; dy--)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                var dir = new Coord(dx, dy);
+                var from = center + dir;
+                if (!from.IsValid) continue;
+                var piece = Board.PieceAt(from);
+                if (piece == null || Board.InCastle(piece)) continue;
+                var to = from + dir;
+                if (!to.IsValid || Board.IsCastle(to) || !Board.IsEmpty(to))
+                {
+                    emit(GameEvent.KnockedBack(piece, from, from, null));
+                    continue;
+                }
+                if (Board.IsLava(to))
+                {
+                    Board.BurnInLava(piece, to);
+                    emit(GameEvent.KnockedBack(piece, from, to, null));
+                    emit(GameEvent.Captured(piece, to, "lava"));
+                    continue;
+                }
+                Board.Relocate(piece, to);
+                emit(GameEvent.KnockedBack(piece, from, to, null));
+                PromoteIfNeeded(piece);
+            }
+            if (Board.CanBecomeLavaPit(center)) AddLava(new[] { center });
+        }
+
+        /// <summary>让这些棋子潮湿 turns 个回合（城堡里的不算）。</summary>
+        public void Soak(IEnumerable<Piece> pieces, int turns)
+        {
+            var squares = new List<Coord>();
+            foreach (var p in pieces)
+            {
+                if (!p.OnBoard || Board.InCastle(p)) continue;
+                p.WetTurns = Math.Max(p.WetTurns, turns);
+                squares.Add(p.Pos);
+            }
+            emit(GameEvent.Soaked(squares));
+        }
+
         /// <summary>复活棋子。skin 为 null 时保留原来的外观。</summary>
         public void Revive(Piece piece, Coord at, string skin)
         {
@@ -165,24 +257,32 @@ namespace SaturdayGame.Chess
             emit(GameEvent.Revived(piece));
         }
 
-        /// <summary>把棋子推到另一个空格；推到岩浆格就烧掉（可以复活）。兵被推到对方底线时照常升变成后。</summary>
+        /// <summary>
+        /// 把棋子推到另一个空格（消防栓、青蛙、山崩）；推到岩浆格就烧掉，潮湿的还会在岩浆上爆炸。
+        /// 兵被推到对方底线时照常升变成后。
+        /// </summary>
         public void Push(Piece piece, Coord to, Piece source)
         {
             var from = piece.Pos;
             if (Board.IsLava(to))
             {
+                bool wet = piece.IsWet;
                 Board.BurnInLava(piece, to);
                 emit(GameEvent.Pushed(piece, from, to, source));
                 emit(GameEvent.Captured(piece, to, "lava", source));
+                if (wet) Explode(to);
                 return;
             }
             Board.Relocate(piece, to);
             emit(GameEvent.Pushed(piece, from, to, source));
-            if (piece.Type == PieceType.Pawn && to.Y == piece.Side.PromotionRank())
-            {
-                piece.Type = PieceType.Queen;
-                emit(GameEvent.Promoted(piece));
-            }
+            PromoteIfNeeded(piece);
+        }
+
+        void PromoteIfNeeded(Piece piece)
+        {
+            if (piece.Type != PieceType.Pawn || piece.Pos.Y != piece.Side.PromotionRank()) return;
+            piece.Type = PieceType.Queen;
+            emit(GameEvent.Promoted(piece));
         }
 
         public void AddLava(IReadOnlyList<Coord> squares)

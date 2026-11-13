@@ -9,7 +9,7 @@ namespace SaturdayGame.Chess
     /// 车变成消防栓和青蛙：玩家 a 列的车（按开局位置算）变消防栓、h 列的变青蛙，朋友的反过来（a 列青蛙、h 列消防栓）。
     /// 消防栓每次落地，把紧挨着它的一枚对方棋子（王也算）喷开，最多两格（HydrantSpray）。
     /// 青蛙每次落地，用舌头把直线上最近的一枚敌方棋子（王也算）拉近一格（FrogTongue）。
-    /// 走法都和车一样。第三阶段也生效，推、拉到岩浆格上的棋子会烧掉（王不会进岩浆）。
+    /// 走法都和车一样。第三阶段也生效，推、拉到岩浆格上的棋子会烧掉（王也一样）；城堡里的棋子推不动、拉不动。
     /// 同样近的目标有好几个时随机挑一个；玩家走的那一步会用预览里显示的那个（RuleContext.PreferredTargetId）。
     /// Id 沿用 fire_hydrant，场景里的回合表不用改。
     /// </summary>
@@ -74,7 +74,7 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 青蛙的舌头：沿八个方向看出去，每个方向上碰到的第一枚棋子如果是敌方的、离青蛙 2–MaxReach 格，就能把它往青蛙这边拉一格。
     /// 最近的优先；同样近的有好几枚时随机挑一枚。紧挨着的拉不动，而且会挡住这个方向。
-    /// 拉过去的那一格是岩浆就掉进去烧掉（王不会被拉进岩浆）。
+    /// 拉过去的那一格是岩浆就掉进去烧掉。城堡里的棋子拉不动。
     /// </summary>
     public static class FrogTongue
     {
@@ -101,11 +101,10 @@ namespace SaturdayGame.Chess
                 foreach (var dir in Directions)
                 {
                     var target = FirstPiece(board, frog.Pos, dir, out int at);
-                    if (target == null || at != distance || target.Side == frog.Side) continue;
+                    if (target == null || at != distance || target.Side == frog.Side || board.InCastle(target)) continue;
                     var to = target.Pos - dir;
                     if (board.IsCastle(to)) continue;
                     bool burns = board.IsLava(to);
-                    if (burns && target.Type == PieceType.King) continue;
                     options.Add(new HydrantSpray.Result { Piece = target, To = to, Burns = burns });
                 }
                 if (options.Count > 0) return options;
@@ -131,7 +130,7 @@ namespace SaturdayGame.Chess
 
     /// <summary>
     /// 消防栓喷水：找紧挨着消防栓的对方棋子（自己人不喷），沿“消防栓 → 棋子”的方向推开，最多 MaxDistance 格；路上碰到棋子、城堡或棋盘边就停在前面，
-    /// 碰到岩浆就掉进去（王不进岩浆，停在岩浆前面）。
+    /// 碰到岩浆就掉进去。城堡里的棋子喷不动。
     /// 上下左右的比斜角的近；同样近的有好几枚时随机挑一枚（一格都推不动的不算）。
     /// 和第三阶段的击飞（Knockback）是两套独立的代码，以后两边可以各改各的。
     /// </summary>
@@ -167,7 +166,7 @@ namespace SaturdayGame.Chess
                     var at = hydrant.Pos + dir;
                     if (!at.IsValid) continue;
                     var piece = board.PieceAt(at);
-                    if (piece == null || piece.Side == hydrant.Side) continue;
+                    if (piece == null || piece.Side == hydrant.Side || board.InCastle(piece)) continue;
                     var landing = Landing(board, piece, dir);
                     if (landing.HasValue) options.Add(new Result { Piece = piece, To = landing.Value, Burns = board.IsLava(landing.Value) });
                 }
@@ -187,7 +186,7 @@ namespace SaturdayGame.Chess
                 if (!next.IsValid || !board.IsEmpty(next) || board.IsCastle(next)) break;
                 if (board.IsLava(next))
                 {
-                    if (piece.Type != PieceType.King) landing = next;
+                    landing = next;
                     break;
                 }
                 landing = next;

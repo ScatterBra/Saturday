@@ -14,6 +14,17 @@ namespace SaturdayGame.Chess
         GameOver,
     }
 
+    /// <summary>第三阶段的常驻技能（技能栏上的按钮）。</summary>
+    public enum Stage3Skill
+    {
+        /// <summary>象的光束。</summary>
+        Beam,
+        /// <summary>马的火龙。</summary>
+        Dragon,
+        /// <summary>雷暴大招。</summary>
+        Thunder,
+    }
+
     /// <summary>到第 Turn 回合（玩家走之前）自动生效的规则，RuleId 见 RuleCatalog.Create。</summary>
     [Serializable]
     public struct ScheduledRule
@@ -43,15 +54,24 @@ namespace SaturdayGame.Chess
         public int StormTurn = 20;
         /// <summary>风暴后随机撒多少格岩浆。</summary>
         public int LavaSquares = 5;
-        /// <summary>第三阶段开始时弹一次技能，之后每隔这么多回合再弹一次。</summary>
+        /// <summary>第三阶段开始时弹一次卡牌，之后每隔这么多回合再弹一次。</summary>
         public int Stage3SkillEvery = 5;
-        /// <summary>第三阶段开始后的第几回合朋友放技能（例如 2 = 风暴后第 2 回合）。</summary>
-        public int[] FriendSkillTurns = { 2, 7 };
-        /// <summary>朋友放的技能 Id，见 RuleCatalog.Create。</summary>
+        /// <summary>第三阶段每次弹几张卡牌给玩家挑。</summary>
+        public int Stage3CardChoices = 2;
+        /// <summary>
+        /// 第三阶段开始后的第几回合王后放技能（例如 2 = 风暴后第 2 回合），前一回合先预告目标格子。
+        /// 列表放完后每隔 FriendSkillEvery 回合再放一次（0 = 不再放）；列表为空就从来不放。
+        /// </summary>
+        public int[] FriendSkillTurns = { 2 };
+        public int FriendSkillEvery = 4;
+        /// <summary>王后放的技能 Id，见 RuleCatalog.Create。</summary>
         public string FriendSkill = "wizard_birds";
-        /// <summary>第三阶段的地形和阵型，null 时用 Stage3Layout.Default。</summary>
+        /// <summary>象的光束、火龙用完之后要等几回合才能再用。</summary>
+        public int BeamCooldown = 3;
+        public int DragonCooldown = 3;
+        /// <summary>第三阶段的地形，null 时用 Stage3Layout.Default。</summary>
         public Stage3Layout Layout;
-        /// <summary>超过这个回合数判平局，0 表示不限。目前只给测试用。</summary>
+        /// <summary>超过这个回合数判平局，0 表示不限。只给测试用（游戏里第三阶段没有回合上限）。</summary>
         public int MaxFullMoves;
     }
 
@@ -62,8 +82,15 @@ namespace SaturdayGame.Chess
     /// 第二阶段：第 10 回合固定选卡。
     /// 第一、二阶段按正式的将军规则（不能送将，王不会被吃）：玩家被将军时可以选一个救急技能；被将死就输。
     /// 进入第三阶段（风暴）：第 20 回合，或者第 10 回合选卡之后将军了对手，或者将死了对手。
-    /// 第三阶段（城堡营救）：棋盘换成预设的地形和阵型，马进城堡就赢，不会输；朋友只守城堡，并按时间表放技能。
-    /// 风暴把双方的棋子吹散到随机位置，再随机撒几格岩浆；棋子只会被推、拉、击飞进岩浆烧掉。
+    ///
+    /// 第三阶段（攻城夺权）：
+    /// - 风暴把双方的棋子吹散，朋友的国王和王后躲进城堡，再随机撒几格岩浆。双方正常吃子，王也能被吃。
+    /// - 朋友城堡外的棋子都是守卫。守卫全灭后城门打开，玩家任意一枚棋子走进城堡就赢；玩家的棋子全没了就输。没有回合上限，不能复活。
+    /// - 玩家的常驻技能（UseSkill）：象的光束、马的火龙（各有冷却）、雷暴大招（积累条满了放一次）。放常驻技能就是这一回合的行动。
+    /// - 每隔几回合弹两张卡牌（下雨、树、山崩、自爆）：挑一张拿到手里（最多一张，手里已有的那张自动存进雷暴积累条），
+    ///   之后自己的回合里随时用，不占回合；不挑就存进雷暴积累条。
+    /// - 雷暴积累条：每消灭一个守卫涨一格，存卡涨一格，自爆多涨几格；满格数 = 开局守卫数 − 2。
+    /// - 王后按时间表放技能，前一回合先在棋盘上标出目标格子。
     ///
     /// 所有操作都会往事件队列里加事件，表现层用 DrainEvents() 取出来按顺序演出。
     /// </summary>
@@ -86,6 +113,21 @@ namespace SaturdayGame.Chess
         int nextStage3Offer;
         int friendSkillIndex;
 
+        // 第三阶段
+        RuleBase handCard;
+        /// <summary>正在放的手牌（放出去才从手里拿掉）。</summary>
+        RuleBase usingHandCard;
+        /// <summary>正在放的常驻技能（放出去就结束这一回合）。</summary>
+        Stage3Skill? usingSkill;
+        int initialGuards;
+        int bankedCharge;
+        bool thunderUsed;
+        bool gateAnnounced;
+        int beamReadyTurn;
+        int dragonReadyTurn;
+        WizardBirdsRule plannedFriendSkill;
+        int telegraphTurn = -1;
+
         public Board Board { get; }
         public Random Rng { get; }
         public Side PlayerSide => Side.White;
@@ -99,7 +141,7 @@ namespace SaturdayGame.Chess
         public IReadOnlyList<RuleBase> Offers => offers;
         /// <summary>当前这组规则卡是在什么情况下弹出的。</summary>
         public OfferKind CurrentOfferKind => offerKind;
-        /// <summary>当前这组规则卡可以跳过（救急技能和第三阶段技能可以，固定选卡不行）。</summary>
+        /// <summary>当前这组规则卡可以跳过（救急技能可以，第三阶段的卡跳过 = 存进雷暴，固定选卡也可以跳过）。</summary>
         public bool CanSkipOffers => Phase == GamePhase.ChoosingRule;
         /// <summary>ChoosingTarget 阶段等待的点选请求。</summary>
         public TargetRequest PendingTarget { get; private set; }
@@ -129,6 +171,23 @@ namespace SaturdayGame.Chess
         public bool InStage3 => Board.Stage3;
         public int Stage3StartTurn => stage3StartTurn;
         public GameSettings Settings => settings;
+
+        // ---------- 第三阶段的状态（给技能栏显示） ----------
+
+        /// <summary>手里的卡牌，没有为 null。</summary>
+        public RuleBase HandCard => handCard;
+        /// <summary>第三阶段开始时的守卫数。</summary>
+        public int InitialGuards => initialGuards;
+        /// <summary>雷暴积累条满格数。</summary>
+        public int ThunderMax => Math.Max(1, initialGuards - 2);
+        /// <summary>雷暴积累条现在的格数（不超过满格）。</summary>
+        public int ThunderCharge => Math.Min(ThunderMax, bankedCharge + Math.Max(0, initialGuards - Board.GuardCount));
+        public bool ThunderUsed => thunderUsed;
+        /// <summary>城门开了（守卫全灭）。</summary>
+        public bool GateOpen => Board.GateOpen;
+        /// <summary>王后预告要打的格子（下一回合放技能），没有预告时为空。</summary>
+        public IReadOnlyList<Coord> FriendTelegraph =>
+            plannedFriendSkill?.PlannedSquares ?? (IReadOnlyList<Coord>)Array.Empty<Coord>();
 
         public ChessGame(GameSettings settings = null)
         {
@@ -182,22 +241,18 @@ namespace SaturdayGame.Chess
             passesInARow = 0;
 
             events.Add(GameEvent.Moved(mover, move.From, move.To));
-            if (result.KnockedBack != null)
-            {
-                events.Add(GameEvent.KnockedBack(result.KnockedBack, result.KnockFrom, result.KnockTo, mover));
-                if (result.KnockedIntoLava) events.Add(GameEvent.Captured(result.KnockedBack, result.KnockTo, "lava", mover));
-            }
             if (result.Captured != null) events.Add(GameEvent.Captured(result.Captured, move.To, "captured", mover));
             if (result.Promoted) events.Add(GameEvent.Promoted(mover));
+
+            if (result.CastleTaken)
+            {
+                EndGame(PlayerSide, "The castle is yours! Long live the new ruler.");
+                return result;
+            }
+
             ctx.PreferredTargetId = effectTargetId;
             foreach (var rule in activeRules) rule.OnPieceMoved(ctx, mover, move.From);
             ctx.PreferredTargetId = null;
-
-            if (result.Rescued)
-            {
-                EndGame(PlayerSide, "You rescued the princess!");
-                return result;
-            }
 
             bool storm = false;
             string stormLine = null;
@@ -221,18 +276,100 @@ namespace SaturdayGame.Chess
 
             var rule = offers[index];
             offers = null;
+            if (offerKind == OfferKind.Stage3)
+            {
+                // 第三阶段的卡拿到手里，之后随时用；手里已有的那张存进雷暴
+                if (handCard != null)
+                {
+                    bankedCharge++;
+                    events.Add(GameEvent.Notice($"Your {handCard.Title} card charged the storm."));
+                }
+                handCard = rule;
+                events.Add(GameEvent.Notice($"{rule.Title} is in your hand. Use it any time on your turn."));
+                BeginTurn();
+                return;
+            }
             activeRules.Add(rule);
             events.Add(GameEvent.RuleActivated(rule));
-            activation = rule.Activate(ctx).GetEnumerator();
-            ContinueActivation();
+            StartActivation(rule);
         }
 
-        /// <summary>不选这一组规则卡（只有救急技能和第三阶段技能可以跳过）。</summary>
+        /// <summary>不选这一组规则卡。第三阶段不选 = 存进雷暴积累条。</summary>
         public void SkipOffers()
         {
             if (!CanSkipOffers) throw new InvalidOperationException("These rule cards cannot be skipped");
+            if (offerKind == OfferKind.Stage3)
+            {
+                bankedCharge++;
+                events.Add(GameEvent.Notice("Saved for the storm. Thunder charge +1."));
+            }
             offers = null;
             BeginTurn();
+        }
+
+        // ---------- 第三阶段：技能栏 ----------
+
+        /// <summary>常驻技能还要等几回合才能用（0 = 可以用）。雷暴：用过了返回 -1。</summary>
+        public int Cooldown(Stage3Skill skill)
+        {
+            switch (skill)
+            {
+                case Stage3Skill.Beam: return Math.Max(0, beamReadyTurn - Board.FullMove);
+                case Stage3Skill.Dragon: return Math.Max(0, dragonReadyTurn - Board.FullMove);
+                default: return thunderUsed ? -1 : 0;
+            }
+        }
+
+        /// <summary>现在（自己的回合）能不能放这个常驻技能：冷却好了、有能放的棋子和目标；雷暴还要积累条满。</summary>
+        public bool CanUseSkill(Stage3Skill skill)
+        {
+            if (!InStage3 || Phase != GamePhase.PlayerTurn || Cooldown(skill) != 0) return false;
+            if (skill == Stage3Skill.Thunder && ThunderCharge < ThunderMax) return false;
+            return CreateSkill(skill).IsAvailable(ctx);
+        }
+
+        /// <summary>放常驻技能。可能要点选目标；放出去就结束这一回合，点选时跳过就当没放。</summary>
+        public void UseSkill(Stage3Skill skill)
+        {
+            if (!CanUseSkill(skill)) throw new InvalidOperationException($"{skill} is not ready");
+            var rule = CreateSkill(skill);
+            usingSkill = skill;
+            events.Add(GameEvent.RuleActivated(rule));
+            StartActivation(rule);
+        }
+
+        /// <summary>手里的卡现在能不能用（自己的回合、局面上有效果）。</summary>
+        public bool CanUseHandCard => InStage3 && Phase == GamePhase.PlayerTurn && handCard != null && handCard.IsAvailable(ctx);
+
+        /// <summary>用手里的卡，不占回合。点选时跳过就还留在手里。</summary>
+        public void UseHandCard()
+        {
+            if (!CanUseHandCard) throw new InvalidOperationException("No usable card in hand");
+            usingHandCard = handCard;
+            events.Add(GameEvent.RuleActivated(handCard));
+            StartActivation(handCard);
+        }
+
+        public bool CanBankHandCard => InStage3 && Phase == GamePhase.PlayerTurn && handCard != null;
+
+        /// <summary>把手里的卡存进雷暴积累条（涨一格），不占回合。</summary>
+        public void BankHandCard()
+        {
+            if (!CanBankHandCard) throw new InvalidOperationException("No card in hand");
+            events.Add(GameEvent.Notice($"Your {handCard.Title} card charged the storm."));
+            handCard = null;
+            bankedCharge++;
+            BeginTurn();
+        }
+
+        static RuleBase CreateSkill(Stage3Skill skill)
+        {
+            switch (skill)
+            {
+                case Stage3Skill.Beam: return new BishopBeamSkill();
+                case Stage3Skill.Dragon: return new DragonKnightRule();
+                default: return new ThunderSkill();
+            }
         }
 
         /// <summary>回应规则的格子点选请求。传 null 表示跳过（只有允许跳过时才行）。</summary>
@@ -259,6 +396,13 @@ namespace SaturdayGame.Chess
             ContinueActivation();
         }
 
+        void StartActivation(RuleBase rule)
+        {
+            ctx.Acted = false;
+            activation = rule.Activate(ctx).GetEnumerator();
+            ContinueActivation();
+        }
+
         void ContinueActivation()
         {
             if (activation.MoveNext())
@@ -271,12 +415,54 @@ namespace SaturdayGame.Chess
             activation.Dispose();
             activation = null;
             PendingTarget = null;
+            FinishActivation();
+        }
+
+        /// <summary>规则（技能）放完了：手牌放出去才拿掉；常驻技能放出去就开始冷却、结束这一回合。</summary>
+        void FinishActivation()
+        {
+            bool acted = ctx.Acted;
+            ctx.Acted = false;
+            bankedCharge += ctx.TakeThunderCharge();
+
+            if (usingHandCard != null)
+            {
+                if (acted && handCard == usingHandCard) handCard = null;
+                usingHandCard = null;
+            }
+
+            if (usingSkill.HasValue)
+            {
+                var skill = usingSkill.Value;
+                usingSkill = null;
+                if (acted)
+                {
+                    switch (skill)
+                    {
+                        case Stage3Skill.Beam: beamReadyTurn = Board.FullMove + settings.BeamCooldown + 1; break;
+                        case Stage3Skill.Dragon: dragonReadyTurn = Board.FullMove + settings.DragonCooldown + 1; break;
+                        default: thunderUsed = true; break;
+                    }
+                    EndTurnBySkill();
+                    return;
+                }
+            }
+            BeginTurn();
+        }
+
+        /// <summary>放常驻技能占掉这一回合：和走完一步一样结束回合，轮到对方。</summary>
+        void EndTurnBySkill()
+        {
+            var side = Board.SideToMove;
+            passesInARow = 0;
+            foreach (var rule in activeRules) rule.OnTurnEnded(ctx, side);
+            Board.Pass();
             BeginTurn();
         }
 
         /// <summary>
-        /// 进入下一个可以行动的状态：该掀起风暴就掀；该弹规则卡就弹；朋友该放技能就放；
-        /// 走子方没有合法走法就跳过；双方都动不了判平局。
+        /// 进入下一个可以行动的状态：该掀起风暴就掀；该弹规则卡就弹；王后该预告、该放技能就放；
+        /// 第三阶段判输赢、开城门；走子方没有合法走法就跳过；双方都动不了判平局。
         /// </summary>
         void BeginTurn()
         {
@@ -286,6 +472,23 @@ namespace SaturdayGame.Chess
                 {
                     EndGame(null, "Turn limit reached.");
                     return;
+                }
+
+                if (InStage3)
+                {
+                    if (!HasPieces(PlayerSide))
+                    {
+                        EndGame(OpponentSide, "All your pieces are gone. The castle stays shut.");
+                        return;
+                    }
+                    if (!gateAnnounced && Board.GateOpen)
+                    {
+                        gateAnnounced = true;
+                        plannedFriendSkill = null;
+                        events.Add(GameEvent.GateOpened());
+                        events.Add(GameEvent.Dialogue(Speakers.Friend, "No guards left... Fine. The gate is open."));
+                        events.Add(GameEvent.Dialogue(Speakers.Friend, "Walk any piece into the castle and it's yours."));
+                    }
                 }
 
                 var side = Board.SideToMove;
@@ -314,15 +517,14 @@ namespace SaturdayGame.Chess
                         if (rule == null || !rule.IsAvailable(ctx)) continue;
                         activeRules.Add(rule);
                         events.Add(GameEvent.RuleActivated(rule));
-                        activation = rule.Activate(ctx).GetEnumerator();
-                        ContinueActivation();
+                        StartActivation(rule);
                         return;
                     }
 
-                    if (InStage3 && Board.FullMove >= nextStage3Offer)
+                    if (InStage3 && !Board.GateOpen && Board.FullMove >= nextStage3Offer)
                     {
                         nextStage3Offer = Board.FullMove + Math.Max(1, settings.Stage3SkillEvery);
-                        if (Offer(OfferKind.Stage3, 2, RuleCatalog.CreateSkillPool(), "Need a hand? Pick something.")) return;
+                        if (Offer(OfferKind.Stage3, 2, Stage3Cards(), "Need a hand? Pick a card.")) return;
                         continue;
                     }
 
@@ -334,11 +536,9 @@ namespace SaturdayGame.Chess
                         continue;
                     }
                 }
-                else if (InStage3 && friendSkillIndex < settings.FriendSkillTurns.Length &&
-                         Board.FullMove - stage3StartTurn >= settings.FriendSkillTurns[friendSkillIndex])
+                else if (InStage3 && !Board.GateOpen)
                 {
-                    friendSkillIndex++;
-                    CastFriendSkill();
+                    UpdateFriendSkill();
                 }
 
                 if (MoveGenerator.HasAnyMove(Board, side))
@@ -359,16 +559,56 @@ namespace SaturdayGame.Chess
                     continue;
                 }
 
-                // 没有合法走法：跳过这一回合
-                events.Add(GameEvent.TurnPassed(side));
-                if (++passesInARow >= 2)
+                // 第三阶段玩家动不了但手里有能用的牌、能放的技能：还是轮到玩家
+                if (InStage3 && side == PlayerSide && HasStage3Action())
                 {
-                    EndGame(null, "Nobody can move. I think we broke it.");
+                    Phase = GamePhase.PlayerTurn;
                     return;
+                }
+
+                // 没有合法走法：跳过这一回合（城门开了以后朋友只剩城堡里的国王、王后，每回合都跳过，不算卡死）
+                if (!(InStage3 && side == OpponentSide && Board.GateOpen))
+                {
+                    events.Add(GameEvent.TurnPassed(side));
+                    if (++passesInARow >= 2)
+                    {
+                        EndGame(null, "Nobody can move. I think we broke it.");
+                        return;
+                    }
                 }
                 Board.Pass();
                 foreach (var rule in activeRules) rule.OnTurnEnded(ctx, side);
             }
+        }
+
+        bool HasPieces(Side side)
+        {
+            foreach (var _ in Board.PiecesOf(side)) return true;
+            return false;
+        }
+
+        bool HasStage3Action()
+        {
+            var phase = Phase;
+            Phase = GamePhase.PlayerTurn; // CanUseSkill 只在玩家回合里判断
+            bool any = CanUseHandCard || CanUseSkill(Stage3Skill.Beam) || CanUseSkill(Stage3Skill.Dragon) || CanUseSkill(Stage3Skill.Thunder);
+            Phase = phase;
+            return any;
+        }
+
+        /// <summary>第三阶段的卡牌池里随机抽 Stage3CardChoices 张（能用的）。</summary>
+        List<RuleBase> Stage3Cards()
+        {
+            var pool = RuleCatalog.CreateStage3CardPool();
+            pool.RemoveAll(r => !r.IsAvailable(ctx));
+            for (int i = pool.Count - 1; i > 0; i--)
+            {
+                int j = Rng.Next(i + 1);
+                (pool[i], pool[j]) = (pool[j], pool[i]);
+            }
+            int count = Math.Max(1, settings.Stage3CardChoices);
+            if (pool.Count > count) pool.RemoveRange(count, pool.Count - count);
+            return pool;
         }
 
         /// <summary>弹出一组规则卡。没有一张能用时返回 false。</summary>
@@ -384,7 +624,7 @@ namespace SaturdayGame.Chess
             return true;
         }
 
-        /// <summary>朋友掀起风暴：铺上第三阶段的地形，双方棋子被吹散到随机位置，撒上岩浆，轮到玩家。</summary>
+        /// <summary>朋友掀起风暴：铺上第三阶段的地形，国王和王后躲进城堡，其余棋子被吹散，撒上岩浆，轮到玩家。</summary>
         void StartStorm(string line)
         {
             events.Add(GameEvent.Dialogue(Speakers.Friend, line));
@@ -395,24 +635,67 @@ namespace SaturdayGame.Chess
             stage3StartTurn = Board.FullMove;
             nextStage3Offer = Board.FullMove;
             friendSkillIndex = 0;
+            plannedFriendSkill = null;
+            telegraphTurn = -1;
             passesInARow = 0;
+            initialGuards = Board.GuardCount;
+            bankedCharge = 0;
+            thunderUsed = false;
+            gateAnnounced = false;
+            handCard = null;
+            beamReadyTurn = dragonReadyTurn = 0;
             events.Add(GameEvent.StageStarted(2));
             events.Add(GameEvent.BoardRebuilt());
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "The princess is up in that castle. Only a knight can get her out."));
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "Mind the lava. Whatever falls in is gone."));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "My king and queen are safe in the castle. Get rid of every last guard if you want in."));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "Mind the lava. Whatever falls in is gone. And no coming back this time."));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "Oh, and the storm got into your bishops and knights. Check your skills."));
         }
 
-        void CastFriendSkill()
+        /// <summary>
+        /// 王后的技能：到了放技能的前一回合先选好目标格子、标在棋盘上；下一个朋友回合真正放出去。
+        /// 预告时没有目标（例如玩家的棋子都冻住了）就跳过这一次。
+        /// </summary>
+        void UpdateFriendSkill()
         {
-            var rule = RuleCatalog.Create(settings.FriendSkill);
-            if (rule == null || !rule.IsAvailable(friendCtx)) return;
-            events.Add(GameEvent.OpponentSkill(rule));
-            foreach (var request in rule.Activate(friendCtx))
+            if (plannedFriendSkill != null)
             {
-                // 朋友的技能需要点选时自动选第一个
-                if (request.IsPieceRequest) request.PieceResult = request.PieceOptions.Count > 0 ? request.PieceOptions[0] : (int?)null;
-                else request.Result = request.Options.Count > 0 ? request.Options[0] : (Coord?)null;
+                if (Board.FullMove <= telegraphTurn) return;
+                var rule = plannedFriendSkill;
+                plannedFriendSkill = null;
+                friendSkillIndex++;
+                events.Add(GameEvent.OpponentSkill(rule));
+                foreach (var request in rule.Activate(friendCtx))
+                {
+                    // 朋友的技能需要点选时自动选第一个
+                    if (request.IsPieceRequest) request.PieceResult = request.PieceOptions.Count > 0 ? request.PieceOptions[0] : (int?)null;
+                    else request.Result = request.Options.Count > 0 ? request.Options[0] : (Coord?)null;
+                }
+                return;
             }
+
+            int castTurn = NextFriendCastTurn();
+            if (castTurn < 0 || Board.FullMove < castTurn - 1) return;
+            var skill = RuleCatalog.Create(settings.FriendSkill) as WizardBirdsRule;
+            if (skill == null || !skill.IsAvailable(friendCtx))
+            {
+                friendSkillIndex++;
+                return;
+            }
+            var squares = skill.Plan(friendCtx);
+            plannedFriendSkill = skill;
+            telegraphTurn = Board.FullMove;
+            events.Add(GameEvent.SkillTelegraphed(skill, squares));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, $"My queen is calling {skill.Title.Replace("The ", "the ")}. Next turn they hit the marked squares!"));
+        }
+
+        /// <summary>下一次王后放技能的回合（绝对回合数），不再放了返回 -1。</summary>
+        int NextFriendCastTurn()
+        {
+            var turns = settings.FriendSkillTurns ?? new int[0];
+            if (turns.Length == 0) return -1;
+            if (friendSkillIndex < turns.Length) return stage3StartTurn + turns[friendSkillIndex];
+            if (settings.FriendSkillEvery <= 0) return -1;
+            return stage3StartTurn + turns[turns.Length - 1] + settings.FriendSkillEvery * (friendSkillIndex - turns.Length + 1);
         }
 
         void EndGame(Side? winner, string text)

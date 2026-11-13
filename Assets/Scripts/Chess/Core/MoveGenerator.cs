@@ -8,10 +8,11 @@ namespace SaturdayGame.Chess
     /// 规则和地形带来的状态都在这里统一处理，AI 和玩家用的是同一套：
     /// - 冻结的子不能动。
     /// - 第三阶段：
+    ///   * 双方正常吃子，不判将军，王也是普通棋子，可以被吃。
     ///   * 高原的高度只是画面效果，所有棋子照常走。
-    ///   * 城堡挡住所有棋子；只有我方的马能跳进城堡。
-    ///   * 岩浆格谁都不能落、也不能滑过去（马可以跳过去）。棋子只会被推、拉、击飞进岩浆。
-    ///   * 对手不攻击我方的王；对手打我方棋子时要能把它击飞，否则这步不能走。
+    ///   * 城堡里的棋子（朋友的国王、王后）不能动；城堡挡住所有棋子。
+    ///     守卫全灭、城门打开后，玩家的棋子可以走进城堡（空格或吃掉里面的国王、王后），走进去就停下。
+    ///   * 岩浆格谁都不能落、也不能滑过去（马可以跳过去）。棋子只会被推、拉、炸、滑进岩浆。
     /// </summary>
     public static class MoveGenerator
     {
@@ -63,7 +64,7 @@ namespace SaturdayGame.Chess
 
         /// <summary>
         /// 第一、二阶段的将军规则：去掉吃王的走法，以及走完之后自己的王会被攻击的走法。
-        /// 第三阶段不用：朋友不攻击王，玩家的王本来就不会被将军。
+        /// 第三阶段不用：王是普通棋子。
         /// </summary>
         static void RemoveIllegal(Board board, Side side, List<Move> moves)
         {
@@ -80,7 +81,7 @@ namespace SaturdayGame.Chess
 
         static void AddMoves(Board board, Piece piece, List<Move> moves)
         {
-            if (piece.IsFrozen) return;
+            if (piece.IsFrozen || board.InCastle(piece)) return;
             var from = piece.Pos;
             switch (piece.Type)
             {
@@ -105,8 +106,8 @@ namespace SaturdayGame.Chess
             }
         }
 
-        /// <summary>落点检查结果：能不能落，以及（滑行时）要不要在这里停下。</summary>
-        enum Landing { Free, Capture, Blocked }
+        /// <summary>落点检查结果：能不能落，以及（滑行时）要不要在这里停下。Enter = 能落在空格上，但要停下（走进城堡）。</summary>
+        enum Landing { Free, Enter, Capture, Blocked }
 
         /// <summary>能不能落在 to：城堡、岩浆、占位。</summary>
         static Landing Check(Board board, Piece piece, Coord from, Coord to)
@@ -114,8 +115,8 @@ namespace SaturdayGame.Chess
             if (!to.IsValid) return Landing.Blocked;
             if (board.IsCastle(to))
             {
-                bool mayEnter = piece.Side == board.Rescuer && piece.Type == PieceType.Knight;
-                return mayEnter && board.IsEmpty(to) ? Landing.Free : Landing.Blocked;
+                if (piece.Side != board.Rescuer || !board.GateOpen) return Landing.Blocked;
+                return board.IsEmpty(to) ? Landing.Enter : Landing.Capture;
             }
             if (board.IsLava(to)) return Landing.Blocked;
             return OccupantCheck(board, piece, from, to);
@@ -128,23 +129,14 @@ namespace SaturdayGame.Chess
             return CanAttack(board, piece, target, from) ? Landing.Capture : Landing.Blocked;
         }
 
-        static bool CanAttack(Board board, Piece attacker, Piece target, Coord from)
-        {
-            if (target.Side == attacker.Side) return false;
-            if (board.Stage3 && attacker.Side != board.Rescuer && target.Side == board.Rescuer)
-            {
-                // 第三阶段对手只守城堡，不攻击我方的王；打我方棋子要能把它击飞
-                if (target.Type == PieceType.King) return false;
-                return Knockback.FindLanding(board, target, from) != null;
-            }
-            return true;
-        }
+        static bool CanAttack(Board board, Piece attacker, Piece target, Coord from) => target.Side != attacker.Side;
 
         static void AddPawnMoves(Board board, Piece pawn, Coord from, List<Move> moves)
         {
             int dir = pawn.Side.Forward();
             var one = new Coord(from.X, from.Y + dir);
             var oneCheck = Check(board, pawn, from, one);
+            if (oneCheck == Landing.Enter) moves.Add(new Move(pawn.Id, from, one));
             if (oneCheck == Landing.Free)
             {
                 moves.Add(new Move(pawn.Id, from, one));

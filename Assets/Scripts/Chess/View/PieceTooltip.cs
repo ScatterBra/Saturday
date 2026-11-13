@@ -20,13 +20,19 @@ namespace SaturdayGame.Chess.View
             public bool IsYours;
         }
 
-        /// <summary>这枚棋子要不要弹说明。</summary>
-        public static bool HasTooltip(Piece piece) =>
-            piece != null && piece.OnBoard && (!string.IsNullOrEmpty(piece.Skin) || piece.IsFrozen || piece.WasLost);
-
-        public static Info? Describe(Piece piece, Side playerSide, bool stage3)
+        /// <summary>这枚棋子要不要弹说明（第三阶段潮湿的、城堡里的、玩家的象和马也弹）。</summary>
+        public static bool HasTooltip(Piece piece, Board board = null)
         {
-            if (!HasTooltip(piece)) return null;
+            if (piece == null || !piece.OnBoard) return false;
+            if (!string.IsNullOrEmpty(piece.Skin) || piece.IsFrozen || piece.WasLost || piece.IsWet) return true;
+            if (board == null || !board.Stage3) return false;
+            if (board.InCastle(piece)) return true;
+            return piece.Side == board.Rescuer && (piece.Type == PieceType.Bishop || piece.Type == PieceType.Knight);
+        }
+
+        public static Info? Describe(Piece piece, Side playerSide, bool stage3, Board board = null)
+        {
+            if (!HasTooltip(piece, board)) return null;
             bool yours = piece.Side == playerSide;
             string type = TypeName(piece.Type);
             string moves = $"Moves like a {type.ToLowerInvariant()}.";
@@ -70,6 +76,29 @@ namespace SaturdayGame.Chess.View
                     break;
             }
 
+            if (board != null && board.InCastle(piece))
+            {
+                info.Title = piece.Type == PieceType.King ? "The King" : piece.Type == PieceType.Queen ? "The Queen" : type;
+                info.Body = board.GateOpen
+                    ? "Hiding in the castle. The gate is open: walk any piece in to take over."
+                    : piece.Type == PieceType.Queen
+                        ? "Hiding in the castle. Casts spells now and then; the marked squares get hit next turn."
+                        : "Hiding in the castle. Take out every guard to open the gate.";
+            }
+            else if (stage3 && yours && (piece.Type == PieceType.Bishop || piece.Type == PieceType.Knight))
+            {
+                string skill = piece.Type == PieceType.Bishop
+                    ? "Storm power: fires a beam along a diagonal (hits your own pieces too)."
+                    : $"Storm power: turns into a dragon and burns an enemy pawn, knight or bishop up to {DragonKnightRule.Reach} squares away.";
+                info.Body = string.IsNullOrEmpty(info.Body) ? $"{moves} {skill}" : $"{info.Body} {skill}";
+            }
+
+            if (piece.IsWet)
+            {
+                string wet = piece.WetTurns == 1 ? "1 more turn" : $"{piece.WetTurns} more turns";
+                info.Status = $"Soaked for {wet}. Fire makes it explode.";
+            }
+
             if (piece.IsFrozen)
             {
                 string turns = piece.FrozenTurns == 1 ? "1 more turn" : $"{piece.FrozenTurns} more turns";
@@ -82,13 +111,13 @@ namespace SaturdayGame.Chess.View
                             info.Title = "Tree";
                             info.Body = "A pawn that grew roots.";
                         }
-                        info.Status = $"Rooted. Can't move for {turns}.";
+                        info.Status = Join(info.Status, $"Rooted. Can't move for {turns}.");
                         break;
                     case "poop":
-                        info.Status = $"Covered in bird mess. Can't move for {turns}.";
+                        info.Status = Join(info.Status, $"Covered in bird mess. Can't move for {turns}.");
                         break;
                     default:
-                        info.Status = $"Can't move for {turns}.";
+                        info.Status = Join(info.Status, $"Can't move for {turns}.");
                         break;
                 }
             }
@@ -96,6 +125,8 @@ namespace SaturdayGame.Chess.View
         }
 
         public static string TypeName(PieceType type) => type.ToString();
+
+        static string Join(string a, string b) => string.IsNullOrEmpty(a) ? b : a + "\n" + b;
 
         static string SkinName(string skin)
         {

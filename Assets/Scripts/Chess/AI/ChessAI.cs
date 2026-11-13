@@ -8,7 +8,8 @@ namespace SaturdayGame.Chess
     /// 对方最贪心的回应会吃掉什么，选子力最划算的走法，再加一点随机噪声。
     /// 走法都是走法生成器给的合法走法，所以它不会送将，也不会吃王。
     /// AI 不知道有哪些规则，它只调用走法生成器，所以自然会遵守冻结、城堡、岩浆等状态。
-    /// 不过第三阶段的打分知道“马要进城堡”这个目标。
+    /// 第三阶段双方正常吃子、不判将军：同样看两步，王也算子力（王被吃不会直接输）；
+    /// 攻城的一方（测试里由 AI 代下）城门开了就往城堡走，能进就进。AI 不会放技能。
     /// </summary>
     public sealed class ChessAI
     {
@@ -17,7 +18,6 @@ namespace SaturdayGame.Chess
         /// <summary>评分噪声幅度（单位：兵的价值）。</summary>
         public double Noise = 0.6;
 
-        const double CastleLost = -1000;
 
         readonly Random rng;
 
@@ -59,8 +59,8 @@ namespace SaturdayGame.Chess
         }
 
         /// <summary>
-        /// 第三阶段：朋友（守城方）只守城堡——尽量让玩家的马离城堡远、把它打进岩浆，绝不放玩家下一步进城堡。
-        /// 玩家一方（测试里也由 AI 代下）：让马往城堡靠近，能进城堡就进。
+        /// 第三阶段：双方都按子力看两步。攻城方能走进城堡就进；城门开了以后离城堡越近越好。
+        /// 守城方（朋友）的守卫被吃光前不会主动送子，剩得少时更敢往前冲（离玩家的棋子近一点加分）。
         /// </summary>
         Move? ChooseStage3Move(Board board, Side side, List<Move> moves)
         {
@@ -68,7 +68,7 @@ namespace SaturdayGame.Chess
             if (rescuer)
             {
                 foreach (var move in moves)
-                    if (board.IsCastle(move.To) && board.GetPiece(move.PieceId).Type == PieceType.Knight) return move;
+                    if (board.IsCastle(move.To)) return move;
             }
 
             if (rng.NextDouble() < BlunderChance) return moves[rng.Next(moves.Count)];
@@ -78,8 +78,12 @@ namespace SaturdayGame.Chess
             foreach (var move in moves)
             {
                 var next = board.Clone();
-                var result = next.Apply(move);
-                double score = rescuer ? RescuerScore(next, side, result) : GuardScore(next, side);
+                next.Apply(move);
+                double score = ScoreAfterReply(next, side);
+                var piece = board.GetPiece(move.PieceId);
+                if (rescuer && board.GateOpen) score -= 0.5 * board.DistanceToCastle(move.To);
+                if (!rescuer && board.GuardCount <= 3) score -= 0.1 * NearestEnemy(board, move.To, side);
+                if (piece.Type == PieceType.King) score -= 0.3;
                 score += (rng.NextDouble() * 2 - 1) * Noise;
                 if (score > bestScore)
                 {
@@ -90,29 +94,10 @@ namespace SaturdayGame.Chess
             return best;
         }
 
-        static double GuardScore(Board board, Side me)
+        static int NearestEnemy(Board board, Coord c, Side me)
         {
-            foreach (var reply in MoveGenerator.Generate(board, me.Opponent()))
-                if (board.IsCastle(reply.To)) return CastleLost;
-            return 1.5 * KnightDistance(board) + Material(board, me);
-        }
-
-        static double RescuerScore(Board board, Side me, MoveResult result)
-        {
-            return 0.3 * Material(board, me) - 1.5 * KnightDistance(board);
-        }
-
-        /// <summary>
-        /// 玩家最靠近城堡的那匹马还要跳几步才能进城堡（马无视高度，只按 L 形跳数算，不管路上有没有子）；
-        /// 没有马时给一个大数。
-        /// </summary>
-        static double KnightDistance(Board board)
-        {
-            var steps = board.KnightStepsToCastle();
-
-            double best = 12;
-            foreach (var p in board.PiecesOf(board.Rescuer))
-                if (p.Type == PieceType.Knight && steps[p.Pos.Index] >= 0) best = Math.Min(best, 2 * steps[p.Pos.Index]);
+            int best = 8;
+            foreach (var p in board.PiecesOf(me.Opponent())) best = Math.Min(best, p.Pos.DistanceTo(c));
             return best;
         }
 
@@ -124,7 +109,7 @@ namespace SaturdayGame.Chess
             foreach (var reply in MoveGenerator.Generate(board, me.Opponent()))
             {
                 var target = board.PieceAt(reply.To);
-                if (target != null) worstLoss = Math.Max(worstLoss, PieceValues.Of(target.Type));
+                if (target != null) worstLoss = Math.Max(worstLoss, Value(board, target));
             }
             return material - worstLoss;
         }
@@ -153,10 +138,18 @@ namespace SaturdayGame.Chess
             foreach (var p in board.AllPieces)
             {
                 if (!p.OnBoard) continue;
-                int value = PieceValues.Of(p.Type);
+                int value = Value(board, p);
                 score += p.Side == me ? value : -value;
             }
             return score;
+        }
+
+        /// <summary>子力。第三阶段王是普通棋子，算 3；城堡里的国王、王后不算（谁也碰不到，城门开了也只是夺权的门票）。</summary>
+        static int Value(Board board, Piece p)
+        {
+            if (board.InCastle(p)) return 0;
+            if (board.Stage3 && p.Type == PieceType.King) return 3;
+            return PieceValues.Of(p.Type);
         }
     }
 }

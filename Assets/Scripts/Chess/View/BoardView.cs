@@ -27,6 +27,14 @@ namespace SaturdayGame.Chess.View
         static readonly Color LastMove = new Color(0.95f, 0.8f, 0.5f);
         static readonly Color Danger = new Color(0.9f, 0.1f, 0.1f);
         static readonly Color EffectTarget = new Color(0.75f, 0.45f, 1f);
+        /// <summary>技能预览：会打到敌人的格子、会打到自己人的格子、空格。</summary>
+        static readonly Color AffectEnemy = new Color(1f, 0.25f, 0.2f);
+        static readonly Color AffectOwn = new Color(1f, 0.85f, 0.1f);
+        static readonly Color AffectEmpty = new Color(1f, 0.6f, 0.5f);
+        /// <summary>王后预告要打的格子。</summary>
+        static readonly Color Warning = new Color(0.65f, 0.3f, 0.95f);
+        /// <summary>城门开了以后的城堡格。</summary>
+        static readonly Color GateOpenColor = new Color(0.45f, 0.95f, 0.5f);
 
         readonly Transform root;
         readonly ChessViewFactory factory;
@@ -70,6 +78,11 @@ namespace SaturdayGame.Chess.View
         readonly float hydrantSprayFps, hydrantSprayHeight, hydrantSprayOffset;
         readonly GameObject treeEffect;
         readonly float treeEffectScale;
+        readonly GameObject explosionEffect, rainEffect, thunderEffect;
+        readonly float explosionEffectScale = 0.5f, rainEffectScale = 1f, rainDuration = 2.5f, thunderEffectScale = 0.5f;
+        readonly Color beamColor = new Color(2.5f, 2.2f, 0.9f);
+        /// <summary>一直标着的格子（王后预告要打的格子），每次 Highlight 都画上。</summary>
+        readonly List<Coord> warnings = new List<Coord>();
         /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
         readonly Dictionary<int, bool> treeShown = new Dictionary<int, bool>();
         /// <summary>换新棋盘时只记下谁是树，不播特效。</summary>
@@ -118,6 +131,15 @@ namespace SaturdayGame.Chess.View
                 stormCloudOpacity = desk.stormCloudOpacity;
                 stormCloudDensity = desk.stormCloudDensity;
                 treeEffectScale = desk.treeEffectScale;
+                explosionEffect = desk.explosionEffect;
+                explosionEffectScale = desk.explosionEffectScale;
+                rainEffect = desk.rainEffect;
+                rainEffectScale = desk.rainEffectScale;
+                rainDuration = desk.rainDuration;
+                thunderEffect = desk.thunderEffect;
+                thunderEffectScale = desk.thunderEffectScale;
+                beamColor = desk.beamColor;
+                factory.WetTint = desk.wetTint;
             }
 
             // 桌面（backdrop）：顶面在 y = -0.405，在 0.4 厚的棋盘模型底下，比相机能看到的范围大很多，宽屏也不会露边
@@ -267,9 +289,10 @@ namespace SaturdayGame.Chess.View
             castleLabel = null;
             if (castleCount > 0)
             {
-                var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Princess", title: true);
+                var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Castle", title: true);
                 label.color = new Color(1f, 0.85f, 0.95f);
                 castleLabel = label.gameObject;
+                RefreshCastleLabel();
             }
 
             RebuildStormCloud();
@@ -440,6 +463,30 @@ namespace SaturdayGame.Chess.View
             mesh.RecalculateBounds();
             mesh.RecalculateTangents();
             return mesh;
+        }
+
+        /// <summary>城堡上方的字：城门关着写 Castle，开了写 Gate open!</summary>
+        public void RefreshCastleLabel()
+        {
+            if (castleLabel == null || board == null) return;
+            var label = castleLabel.GetComponent<TextMesh>();
+            if (label == null) return;
+            bool open = board.GateOpen;
+            label.text = open ? "Gate open!" : "Castle";
+            label.color = open ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.85f, 0.95f);
+        }
+
+        /// <summary>新出现的岩浆格（例如爆炸留下的熔岩坑）也放上特效。</summary>
+        public void AddLavaEffects(IEnumerable<Coord> squares)
+        {
+            if (lavaEffect == null || squares == null) return;
+            foreach (var c in squares)
+            {
+                var fx = ParticleFx.Spawn(lavaEffect, root, PiecePosition(c) + Vector3.up * lavaEffectLift, lavaEffectScale, Random.Range(0f, 360f));
+                fx.name = $"Lava Effect {c}";
+                ParticleFx.Warm(fx, Random.Range(0.5f, 1.5f));
+                lavaEffects.Add(fx);
+            }
         }
 
         /// <summary>每格岩浆上放一份特效（ChessDesk.lavaEffect），旧的先清掉。</summary>
@@ -631,8 +678,9 @@ namespace SaturdayGame.Chess.View
         /// <param name="effect">
         /// 消防栓、青蛙的预览：会被喷开、拉过来的棋子在 From，落到 To；Burns = 落进岩浆（To 标红）。
         /// </param>
+        /// <param name="affected">技能预览：会被打到的格子（敌人红、自己人黄、空格淡红）。</param>
         public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null,
-            (Coord From, Coord To, bool Burns)? effect = null)
+            (Coord From, Coord To, bool Burns)? effect = null, IEnumerable<Coord> affected = null)
         {
             var colors = new Color[64];
             var marks = new Color[64]; // 有棋盘图时的色块，alpha = 0 表示不显示
@@ -659,13 +707,28 @@ namespace SaturdayGame.Chess.View
                 foreach (var c in pickOptions)
                     Mark(colors, marks, c.Index, PickTarget, 1f, 0.55f);
             if (danger.HasValue) Mark(colors, marks, danger.Value.Index, Danger, 1f, 0.6f);
+            foreach (var c in warnings) Mark(colors, marks, c.Index, Warning, 0.7f, 0.5f);
+            if (affected != null)
+                foreach (var c in affected)
+                {
+                    var occupant = board?.PieceAt(c);
+                    var color = occupant == null ? AffectEmpty : occupant.Side == board.Rescuer ? AffectOwn : AffectEnemy;
+                    Mark(colors, marks, c.Index, color, 0.85f, occupant == null ? 0.4f : 0.7f);
+                }
+            bool gateOpen = board != null && board.GateOpen;
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
                 if (board != null && board.IsCastle(c))
                 {
-                    colors[i] = CastleStone;
+                    colors[i] = gateOpen ? Color.Lerp(CastleStone, GateOpenColor, 0.6f) : CastleStone;
                     marks[i] = Color.clear;
+                    if (pickOptions != null)
+                        foreach (var o in pickOptions)
+                            if (o == c) colors[i] = Color.Lerp(colors[i], PickTarget, 0.6f);
+                    if (moves != null)
+                        foreach (var m in moves)
+                            if (m.To == c) colors[i] = Color.Lerp(colors[i], MoveTarget, 0.7f);
                 }
                 if (board != null && board.IsLava(c))
                 {
@@ -694,6 +757,13 @@ namespace SaturdayGame.Chess.View
             }
         }
 
+        /// <summary>一直标着的格子（王后预告要打的格子），下次 Highlight 时生效。</summary>
+        public void SetWarnings(IEnumerable<Coord> squares)
+        {
+            warnings.Clear();
+            if (squares != null) warnings.AddRange(squares);
+        }
+
         /// <summary>没有棋盘图时把格子颜色往 color 混 blend；有棋盘图时在格子上盖一层 alpha 为 overlayAlpha 的色块。</summary>
         void Mark(Color[] colors, Color[] marks, int index, Color color, float blend, float overlayAlpha)
         {
@@ -702,6 +772,84 @@ namespace SaturdayGame.Chess.View
         }
 
         // ---------- 演出 ----------
+
+        /// <summary>潮湿的棋子遇火爆炸、自爆：在 at 播一次爆炸特效。</summary>
+        public void PlayExplosion(Coord at)
+        {
+            if (explosionEffect == null) return;
+            var fx = ParticleFx.Spawn(explosionEffect, root, PiecePosition(at) + Vector3.up * 0.3f, explosionEffectScale, Random.Range(0f, 360f));
+            fx.name = "Explosion Effect";
+            // SmallExplosion 的冲击波扭曲球太大，盖住一大片棋盘，关掉
+            var shockwave = fx.transform.Find("Shockwave");
+            if (shockwave != null) shockwave.gameObject.SetActive(false);
+            ParticleFx.PlayOnce(fx);
+        }
+
+        /// <summary>下雨：在棋盘上空播一段雨，duration 秒后停。</summary>
+        public void PlayRain()
+        {
+            if (rainEffect == null) return;
+            float top = 0f;
+            if (board != null)
+                for (int i = 0; i < 64; i++) top = Mathf.Max(top, TopOf(Coord.FromIndex(i)));
+            var fx = ParticleFx.Spawn(rainEffect, root, Vector3.up * (top + 4f), rainEffectScale);
+            fx.name = "Rain Effect";
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var shape = ps.shape;
+                if (shape.enabled && shape.shapeType == ParticleSystemShapeType.Box) shape.scale = new Vector3(9f, 0.1f, 9f) / Mathf.Max(0.01f, rainEffectScale);
+                ps.Play(false);
+            }
+            // 循环的雨下 rainDuration 秒后停止发射，已经落下的雨点落完再删
+            fx.AddComponent<StopAfter>().seconds = Mathf.Max(0.5f, rainDuration);
+            Object.Destroy(fx, Mathf.Max(0.5f, rainDuration) + 3f);
+        }
+
+        /// <summary>象的光束：一根发光的细条从 from 打到 to，duration 秒内变细消失。</summary>
+        public IEnumerator AnimateBeam(Coord from, Coord to, float duration)
+        {
+            var start = PiecePosition(from) + Vector3.up * 0.45f;
+            var end = PiecePosition(to) + Vector3.up * 0.45f;
+            var beam = factory.Primitive(PrimitiveType.Cube, root, (start + end) / 2, new Vector3(0.12f, 0.12f, (end - start).magnitude + 0.5f));
+            beam.name = "Bishop Beam";
+            beam.transform.localRotation = Quaternion.LookRotation(end - start);
+            factory.SetColor(beam, beamColor);
+            var renderer = beam.GetComponent<Renderer>();
+            if (renderer != null) renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, duration))
+            {
+                float w = 0.18f * (1f - t * t);
+                beam.transform.localScale = new Vector3(w, w, beam.transform.localScale.z);
+                yield return null;
+            }
+            ViewUtil.Destroy(beam);
+        }
+
+        /// <summary>雷暴：范围里的格子闪白光，每格播一次特效。</summary>
+        public IEnumerator AnimateThunder(IReadOnlyList<Coord> area, float duration)
+        {
+            var flashes = new List<GameObject>();
+            foreach (var c in area)
+            {
+                var flash = factory.Primitive(PrimitiveType.Cube, root, PiecePosition(c) + Vector3.up * 0.02f, new Vector3(0.96f, 0.03f, 0.96f));
+                flash.name = "Thunder Flash";
+                factory.SetColor(flash, new Color(1.6f, 1.6f, 2.2f));
+                flashes.Add(flash);
+                if (thunderEffect != null)
+                {
+                    var fx = ParticleFx.Spawn(thunderEffect, root, PiecePosition(c) + Vector3.up * 0.3f, thunderEffectScale, Random.Range(0f, 360f));
+                    fx.name = "Thunder Effect";
+                    ParticleFx.PlayOnce(fx);
+                }
+            }
+            for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, duration))
+            {
+                bool on = Mathf.Repeat(t * 6f, 1f) < 0.6f;
+                foreach (var flash in flashes) flash.SetActive(on && t < 0.85f);
+                yield return null;
+            }
+            foreach (var flash in flashes) ViewUtil.Destroy(flash);
+        }
 
         public IEnumerator AnimateMove(int id, Coord from, Coord to, float duration)
         {
@@ -718,7 +866,7 @@ namespace SaturdayGame.Chess.View
             view.SetPosition(end);
         }
 
-        /// <summary>被击飞：高高地抛出去，落到 to（掉进岩浆的话由随后的 Captured 事件烧掉）。</summary>
+        /// <summary>被爆炸炸开：抛出去落到 to（掉进岩浆的话由随后的 Captured 事件烧掉）；to 就是原地时只是被震得跳一下。</summary>
         public IEnumerator AnimateKnockback(int id, Coord to, float duration)
         {
             if (!pieces.TryGetValue(id, out var view)) yield break;

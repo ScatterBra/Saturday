@@ -29,6 +29,8 @@ namespace SaturdayGame.Chess.View
 
         /// <summary>棋盘相机（喷水这类要正对相机的动画用）。</summary>
         public readonly Camera Camera;
+        /// <summary>潮湿的棋子染上的颜色（ChessDesk.wetTint）。</summary>
+        public Color WetTint = new Color(0.6f, 0.78f, 1f);
 
         /// <summary>3D 模型是否投影子。</summary>
         public readonly bool Shadows;

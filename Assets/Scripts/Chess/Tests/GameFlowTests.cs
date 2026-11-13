@@ -60,6 +60,7 @@ namespace SaturdayGame.Chess.Tests
                     case GamePhase.PlayerTurn:
                     case GamePhase.OpponentTurn:
                     {
+                        if (Game.Phase == GamePhase.PlayerTurn && Game.InStage3 && TryStage3Action(Game.LegalMoves().Count == 0)) break;
                         var move = ai.ChooseMove(Game.Board);
                         Assert.IsTrue(move.HasValue, "BeginTurn should never leave a side to move without moves");
                         Game.PlayMove(move.Value);
@@ -67,6 +68,19 @@ namespace SaturdayGame.Chess.Tests
                     }
                 }
                 Events.AddRange(Game.DrainEvents());
+            }
+
+            /// <summary>第三阶段：偶尔用手里的卡、放常驻技能（动不了的时候一定放）。放了返回 true。</summary>
+            bool TryStage3Action(bool must)
+            {
+                var actions = new List<Action>();
+                if (Game.CanUseHandCard) actions.Add(Game.UseHandCard);
+                if (Game.CanBankHandCard && pick.Next(4) == 0) actions.Add(Game.BankHandCard);
+                foreach (Stage3Skill skill in Enum.GetValues(typeof(Stage3Skill)))
+                    if (Game.CanUseSkill(skill)) actions.Add(() => Game.UseSkill(skill));
+                if (actions.Count == 0 || (!must && pick.Next(3) != 0)) return false;
+                actions[pick.Next(actions.Count)]();
+                return true;
             }
 
             public void PlayToEnd()
@@ -305,7 +319,7 @@ namespace SaturdayGame.Chess.Tests
         {
             var pools = Enumerable.Range(0, RuleCatalog.StageCount).Select(s => RuleCatalog.CreatePool(s).Select(r => r.Id).ToArray()).ToArray();
             var activated = new Dictionary<string, int>();
-            int games = 0, stage3 = 0, burned = 0, knockbacks = 0, rescues = 0, emergencies = 0, friendSkills = 0, pushes = 0;
+            int games = 0, stage3 = 0, burned = 0, explosions = 0, castles = 0, losses = 0, emergencies = 0, friendSkills = 0, pushes = 0;
             const string a = "auto";
 
             foreach (var b in pools[1])
@@ -328,28 +342,28 @@ namespace SaturdayGame.Chess.Tests
                             activated[e.Rule.Id] = activated.TryGetValue(e.Rule.Id, out var n) ? n + 1 : 1;
                         if (e.Type == GameEventType.Captured && e.Text == "burned")
                             CollectionAssert.Contains(Revivable, auto.Game.Board.GetPiece(e.PieceId).Type);
-                        if (e.Type == GameEventType.KnockedBack) knockbacks++;
+                        if (e.Type == GameEventType.Exploded) explosions++;
                         if (e.Type == GameEventType.Pushed) pushes++;
                         if (e.Type == GameEventType.Captured && e.Text == "lava") burned++;
                         if (e.Type == GameEventType.OpponentSkill) friendSkills++;
                         if (e.Type == GameEventType.RulesOffered && e.OfferKind == OfferKind.Emergency) emergencies++;
                     }
                     if (auto.Game.InStage3) stage3++;
-                    if (auto.Game.Winner == Side.White) rescues++;
+                    if (auto.Game.Winner == Side.White) castles++;
+                    if (auto.Game.Winner == Side.Black && auto.Game.InStage3) losses++;
                     games++;
                 }
             }
 
-            TestContext.WriteLine($"{games} games, {stage3} reached stage 3, {burned} pieces burned in lava, " +
-                                  $"{rescues} rescued the princess, {knockbacks} knockbacks, {pushes} hydrant pushes, {emergencies} emergency offers, {friendSkills} friend skills");
+            TestContext.WriteLine($"{games} games, {stage3} reached stage 3, {burned} pieces burned in lava, {explosions} explosions, " +
+                                  $"{castles} took the castle, {losses} lost in stage 3, {pushes} hydrant pushes, {emergencies} emergency offers, {friendSkills} friend skills");
             foreach (var kv in activated.OrderBy(kv => kv.Key)) TestContext.WriteLine($"  {kv.Key}: {kv.Value}");
             foreach (var id in pools.SelectMany(p => p).Concat(new GameSettings().OpeningRules.Select(r => r.RuleId)))
                 Assert.IsTrue(activated.ContainsKey(id), $"rule {id} was never activated");
             Assert.Greater(pushes, 0, "hydrants should push pieces around");
             Assert.Greater(stage3, games / 2, "most games should reach stage 3");
             Assert.Greater(burned, 0, "pieces should end up in the lava now and then");
-            Assert.Greater(rescues, games / 2, "most games should end with a rescue");
-            Assert.Greater(knockbacks, 0, "the friend should knock pieces back");
+            Assert.Greater(castles, 0, "some games should end with the castle taken");
             Assert.Greater(emergencies, 0, "being in check should offer emergency skills");
             Assert.Greater(friendSkills, 0, "the friend should cast its scheduled skills");
         }
@@ -372,20 +386,27 @@ namespace SaturdayGame.Chess.Tests
                 Assert.IsTrue(p.OnBoard, $"{p} on {c} should be on the board");
                 Assert.AreEqual(c, p.Pos, $"{p} square mismatch");
                 Assert.IsFalse(board.IsLava(c), $"{p} is standing on lava");
-                if (board.IsCastle(c)) Assert.AreEqual(GamePhase.GameOver, game.Phase, $"{p} is in the castle but the game goes on");
+                if (board.IsCastle(c) && p.Side == game.PlayerSide)
+                    Assert.AreEqual(GamePhase.GameOver, game.Phase, $"{p} is in the castle but the game goes on");
             }
 
             foreach (var p in board.AllPieces)
             {
                 Assert.That(p.FrozenTurns, Is.InRange(0, 4), $"{p} frozen turns");
+                Assert.That(p.WetTurns, Is.InRange(0, RainRule.WetTurns), $"{p} wet turns");
+                if (!game.InStage3) Assert.AreEqual(0, p.WetTurns, "nothing is wet before the storm");
                 if (p.Type == PieceType.King) Assert.IsFalse(p.IsFrozen, "kings are never frozen");
                 if (p.OnBoard) Assert.AreSame(p, board.PieceAt(p.Pos), $"{p} missing from its square");
             }
 
             if (game.Phase != GamePhase.GameOver)
             {
-                Assert.IsNotNull(board.King(game.PlayerSide), "the player's king is always on the board");
-                if (!game.InStage3) Assert.IsNotNull(board.King(game.OpponentSide));
+                if (!game.InStage3)
+                {
+                    Assert.IsNotNull(board.King(game.PlayerSide), "the player's king is always on the board before the storm");
+                    Assert.IsNotNull(board.King(game.OpponentSide));
+                }
+                else Assert.Greater(board.PiecesOf(game.PlayerSide).Count(), 0, "the player still has pieces while the game goes on");
             }
             if (game.Phase == GamePhase.ChoosingRule) Assert.Greater(game.Offers.Count, 0);
             if (game.Phase == GamePhase.ChoosingTarget)
@@ -393,7 +414,7 @@ namespace SaturdayGame.Chess.Tests
                 var r = game.PendingTarget;
                 Assert.Greater(r.IsPieceRequest ? r.PieceOptions.Count : r.Options.Count, 0);
             }
-            if (game.Phase == GamePhase.PlayerTurn || game.Phase == GamePhase.OpponentTurn)
+            if (game.Phase == GamePhase.OpponentTurn || (game.Phase == GamePhase.PlayerTurn && !game.InStage3))
                 Assert.Greater(game.LegalMoves().Count, 0);
         }
     }

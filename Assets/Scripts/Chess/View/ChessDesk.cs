@@ -70,6 +70,26 @@ namespace SaturdayGame.Chess.View
         [Tooltip("树特效的整体缩放")]
         public float treeEffectScale = 0.4f;
 
+        [Header("Stage 3 skills")]
+        [Tooltip("潮湿的棋子遇火爆炸、自爆时在爆炸中心播一次的特效（例如 ParticlePack 的 SmallExplosion），留空就不播")]
+        public GameObject explosionEffect;
+        [Tooltip("爆炸特效的整体缩放")]
+        public float explosionEffectScale = 0.5f;
+        [Tooltip("下雨技能：在棋盘上空播一段的特效（例如 ParticlePack 的 RainEffect），留空就不播")]
+        public GameObject rainEffect;
+        [Tooltip("下雨特效的整体缩放")]
+        public float rainEffectScale = 0.5f;
+        [Tooltip("下雨特效播多久（秒）")]
+        public float rainDuration = 2.5f;
+        [Tooltip("雷暴大招：4 × 4 范围里每一格播一次的特效（例如 ParticlePack 的 ElectricalSparks），留空就只闪光")]
+        public GameObject thunderEffect;
+        [Tooltip("雷暴特效的整体缩放")]
+        public float thunderEffectScale = 0.5f;
+        [Tooltip("象的光束颜色（HDR，越亮越刺眼）")]
+        [ColorUsage(false, true)] public Color beamColor = new Color(2.5f, 2.2f, 0.9f);
+        [Tooltip("潮湿的棋子染上的颜色")]
+        public Color wetTint = new Color(0.6f, 0.78f, 1f);
+
         [Tooltip("规则卡底图，每次弹卡随机挑（同一组卡不重复），张数不限")]
         public Sprite[] ruleCards = new Sprite[0];
 

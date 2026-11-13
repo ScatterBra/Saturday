@@ -39,6 +39,16 @@ namespace SaturdayGame.Chess.View
         public Sfx burn = new Sfx();
         [Tooltip("相机转到新视角（中间视角、第三阶段视角）")]
         public Sfx cameraChange = new Sfx();
+        [Tooltip("第三阶段：潮湿的棋子遇火爆炸、自爆")]
+        public Sfx explosion = new Sfx();
+        [Tooltip("第三阶段：下雨")]
+        public Sfx rain = new Sfx();
+        [Tooltip("第三阶段：象的光束")]
+        public Sfx beam = new Sfx();
+        [Tooltip("第三阶段：雷暴大招")]
+        public Sfx thunder = new Sfx();
+        [Tooltip("第三阶段：城门打开")]
+        public Sfx gate = new Sfx();
 
         public void Play(Sfx sfx)
         {

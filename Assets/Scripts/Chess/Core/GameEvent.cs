@@ -6,7 +6,10 @@ namespace SaturdayGame.Chess
     {
         /// <summary>棋子移动。</summary>
         Moved,
-        /// <summary>棋子被吃、被规则消灭，或被击飞进岩浆。Text 是原因（captured / burned / lava）。</summary>
+        /// <summary>
+        /// 棋子被吃、被规则消灭，或掉进岩浆。Text 是原因：captured（被吃）、burned（龙火）、lava（掉进岩浆）、
+        /// beam（象的光束）、thunder（雷暴）、blast（自爆）。
+        /// </summary>
         Captured,
         Promoted,
         /// <summary>被吃的棋子回到棋盘。</summary>
@@ -27,13 +30,26 @@ namespace SaturdayGame.Chess
         Storm,
         /// <summary>第三阶段：风暴过后棋盘换成新的地形和阵型，表现层整体重建。</summary>
         BoardRebuilt,
-        /// <summary>第三阶段：棋子走进岩浆献祭。</summary>
-        /// <summary>第三阶段：我方棋子被击飞（From → To）。</summary>
+        /// <summary>第三阶段：棋子被爆炸炸开（From → To）；To == From 表示被挡住，撞一下留在原地。</summary>
         KnockedBack,
         /// <summary>对手放了一个技能（Rule）。</summary>
         OpponentSkill,
-        /// <summary>棋子被规则推开（From → To），例如被消防栓喷开。SourcePieceId 是推它的棋子。</summary>
+        /// <summary>棋子被规则推开（From → To），例如被消防栓喷开、山崩滑下去。SourcePieceId 是推它的棋子（山崩为 -1）。</summary>
         Pushed,
+        /// <summary>第三阶段：潮湿的棋子遇火爆炸，To 是爆炸中心。</summary>
+        Exploded,
+        /// <summary>第三阶段：守卫全灭，城门打开。</summary>
+        GateOpened,
+        /// <summary>第三阶段：王后下一回合要放技能（Rule），Squares 是会被打到的格子。</summary>
+        SkillTelegraphed,
+        /// <summary>第三阶段：象放出光束，From 是象的位置，To 是光束打到的最后一格。</summary>
+        Beam,
+        /// <summary>第三阶段：雷暴劈下来，Squares 是 4 × 4 的范围。</summary>
+        Thunder,
+        /// <summary>第三阶段：下雨，Squares 是变潮湿的棋子所在的格子。</summary>
+        Soaked,
+        /// <summary>一句不用点击就自己消失的提示（例如“卡牌存进了雷暴”）。</summary>
+        Notice,
     }
 
     /// <summary>规则卡是在什么情况下弹出的。</summary>
@@ -141,6 +157,24 @@ namespace SaturdayGame.Chess
                 Type = GameEventType.Pushed, PieceId = piece.Id, From = from, To = to, Side = piece.Side,
                 SourcePieceId = source?.Id ?? -1,
             };
+
+        public static GameEvent Exploded(Coord at) => new GameEvent { Type = GameEventType.Exploded, To = at };
+
+        public static GameEvent GateOpened() => new GameEvent { Type = GameEventType.GateOpened };
+
+        public static GameEvent SkillTelegraphed(RuleBase rule, IReadOnlyList<Coord> squares) =>
+            new GameEvent { Type = GameEventType.SkillTelegraphed, Rule = rule, Squares = squares };
+
+        public static GameEvent Beam(Piece bishop, Coord from, Coord to) =>
+            new GameEvent { Type = GameEventType.Beam, PieceId = bishop.Id, SourcePieceId = bishop.Id, From = from, To = to, Side = bishop.Side };
+
+        public static GameEvent Thunder(IReadOnlyList<Coord> squares) =>
+            new GameEvent { Type = GameEventType.Thunder, Squares = squares };
+
+        public static GameEvent Soaked(IReadOnlyList<Coord> squares) =>
+            new GameEvent { Type = GameEventType.Soaked, Squares = squares };
+
+        public static GameEvent Notice(string text) => new GameEvent { Type = GameEventType.Notice, Text = text };
 
         public static GameEvent OpponentSkill(RuleBase rule) =>
             new GameEvent { Type = GameEventType.OpponentSkill, Rule = rule, Stage = rule.Stage };
