@@ -341,6 +341,28 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
+        public void PieceSkills_ClickedOnAPiece_SkipThePickAPieceStep()
+        {
+            var board = Setup(Flat, new[] { "Ke1", "Bc1", "Bf1", "pg2", "kh8" });
+            var ctx = Context(board, 1);
+            ctx.Caster = board.PieceAt(C("f1")).Id;
+            var requests = Run(new BishopBeamSkill(), ctx, "g2");
+            Assert.AreEqual(1, requests.Count, "no 'which bishop' step");
+            Assert.AreEqual(C("f1"), requests[0].Origin, "the lines are shown from the bishop, like its moves");
+            Assert.IsNull(board.PieceAt(C("g2")));
+
+            board = Setup(Flat, new[] { "Ke1", "Nb1", "Ng1", "pc3", "ph3", "kh8" });
+            ctx = Context(board, 1);
+            ctx.Caster = board.PieceAt(C("g1")).Id;
+            requests = Run(new DragonKnightRule(), ctx, "h3");
+            Assert.AreEqual(1, requests.Count, "no 'which knight' step");
+            CollectionAssert.AreEquivalent(new[] { C("h3") }, requests[0].Options, "only what this knight can reach");
+            Assert.AreEqual(C("g1"), requests[0].Origin);
+            Assert.IsNull(board.PieceAt(C("h3")));
+            Assert.IsNotNull(board.PieceAt(C("c3")));
+        }
+
+        [Test]
         public void TheBeam_SkippingDoesNothing_FrozenBishopsCantFire()
         {
             var board = Setup(Flat, new[] { "Ke1", "Bc1", "pe3", "kh8" });
@@ -447,7 +469,7 @@ namespace SaturdayGame.Chess.Tests
         // ---------- 一整局 ----------
 
         [Test]
-        public void Stage3Cards_GoIntoYourHand_SkippingChargesTheStorm()
+        public void Stage3Cards_AreUsedRightAway_SkippingChargesTheStorm()
         {
             var game = Stage3Game(2);
             Assert.AreEqual(GamePhase.ChoosingRule, game.Phase);
@@ -456,13 +478,7 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsTrue(game.Offers.All(r => r.Id != "crayon_revival"), "no reviving in stage 3");
             var card = game.Offers[0];
             game.ChooseRule(0);
-            Assert.AreSame(card, game.HandCard);
-            Assert.AreEqual(GamePhase.PlayerTurn, game.Phase, "picking a card doesn't use your turn");
-
-            game.BankHandCard();
-            Assert.IsNull(game.HandCard);
-            Assert.AreEqual(1, game.ThunderCharge);
-            Assert.AreEqual(GamePhase.PlayerTurn, game.Phase);
+            Assert.AreEqual(card.Id, game.DrainEvents().First(e => e.Type == GameEventType.RuleActivated).Rule.Id, "the card is used right away");
 
             game = Stage3Game(2);
             game.SkipOffers();
@@ -470,7 +486,7 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void UsingAHandCard_DoesNotTakeYourTurn()
+        public void UsingACard_DoesNotTakeYourTurn_CancellingGoesBackToTheCards()
         {
             var game = Stage3Game(4);
             int rain = game.Offers.ToList().FindIndex(r => r.Id == "rain");
@@ -480,11 +496,23 @@ namespace SaturdayGame.Chess.Tests
                 rain = game.Offers.ToList().FindIndex(r => r.Id == "rain");
             }
             game.ChooseRule(rain);
-            Assert.IsTrue(game.CanUseHandCard);
-            game.UseHandCard();
-            Assert.IsNull(game.HandCard);
-            Assert.AreEqual(GamePhase.PlayerTurn, game.Phase);
+            Assert.AreEqual(GamePhase.PlayerTurn, game.Phase, "a card doesn't use your turn");
             Assert.IsTrue(game.Board.PiecesOf(Side.White).All(p => p.IsWet));
+
+            // 要选目标的卡（自爆）：选目标时取消，回到这组卡
+            for (int seed = 1; ; seed++)
+            {
+                game = Stage3Game(seed);
+                int boom = game.Offers.ToList().FindIndex(r => r.Id == "self_destruct");
+                if (boom < 0) continue;
+                var offered = game.Offers.Select(r => r.Id).ToList();
+                game.ChooseRule(boom);
+                Assert.AreEqual(GamePhase.ChoosingTarget, game.Phase);
+                game.ResolveTarget(null);
+                Assert.AreEqual(GamePhase.ChoosingRule, game.Phase, "cancelled: back to the same cards");
+                CollectionAssert.AreEqual(offered, game.Offers.Select(r => r.Id).ToList());
+                break;
+            }
         }
 
         [Test]

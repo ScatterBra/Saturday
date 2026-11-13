@@ -153,8 +153,7 @@ namespace SaturdayGame.Chess.View
             hud.SkipClicked += Skip;
             hud.LostPieceClicked += id => ResolvePiece(id);
             hud.SkillClicked += UseSkill;
-            hud.HandClicked += UseHandCard;
-            hud.BankClicked += BankHandCard;
+            hud.PieceSkillClicked += OnPieceSkillClicked;
             hud.PlayAgainClicked += NewGame;
             hud.BackClicked += () => MinigameSession.Finish(game.Winner == game.PlayerSide ? "won" : game.Winner == null ? "draw" : "lost");
             NewGame();
@@ -233,6 +232,8 @@ namespace SaturdayGame.Chess.View
             previewSquare = null;
             preview = null;
             lastMove = null;
+            castingPiece = null;
+            selectAfterEvents = null;
             board.SetWarnings(null);
             board.Bind(game.Board);
             ApplyStageLighting(game.Board.Stage3);
@@ -256,6 +257,7 @@ namespace SaturdayGame.Chess.View
             if (game == null) return;
             UpdateOrbit();
             UpdateTooltip();
+            UpdatePieceSkillButton();
             if (busy) return;
             if (game.Phase == GamePhase.OpponentTurn)
             {
@@ -362,8 +364,16 @@ namespace SaturdayGame.Chess.View
             if (busy) return;
             if (game.Phase == GamePhase.ChoosingTarget)
             {
-                if (game.PendingTarget.IsPieceRequest) return;
-                if (game.PendingTarget.Options.Contains(coord)) ResolveTarget(coord);
+                var request = game.PendingTarget;
+                if (request.IsPieceRequest) return;
+                if (request.Options.Contains(coord)) ResolveTarget(coord);
+                else if (request.Origin.HasValue && request.AllowSkip && game.InStage3)
+                {
+                    // 像下棋一样：点别处就取消（第三阶段的技能取消了不算用过）；点的是自己的棋子就顺手选中它
+                    var other = game.Board.PieceAt(coord);
+                    selectAfterEvents = other != null && other.Side == game.PlayerSide ? other : null;
+                    ResolveTarget(null);
+                }
                 return;
             }
             if (game.Phase != GamePhase.PlayerTurn) return;
@@ -428,21 +438,61 @@ namespace SaturdayGame.Chess.View
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
-        /// <summary>第三阶段技能栏：用手里的卡。</summary>
-        public void UseHandCard()
+        /// <summary>第三阶段：放这枚棋子（象、马）身上的技能，不用再选棋子。</summary>
+        public void UsePieceSkill(Piece piece)
         {
-            if (busy || !game.CanUseHandCard) return;
+            var skill = ChessGame.PieceSkill(piece);
+            if (busy || skill == null || !game.CanUseSkill(skill.Value, piece)) return;
             Deselect();
-            game.UseHandCard();
+            castingPiece = piece;
+            game.UseSkill(skill.Value, piece);
             StartCoroutine(PlayEvents(game.DrainEvents()));
         }
 
-        /// <summary>第三阶段技能栏：把手里的卡存进雷暴积累条。</summary>
-        public void BankHandCard()
+        /// <summary>点了棋子头顶的技能图标：没在放就开始放；正在选目标就取消，回到这枚棋子的走法。</summary>
+        void OnPieceSkillClicked()
         {
-            if (busy || !game.CanBankHandCard) return;
-            game.BankHandCard();
-            StartCoroutine(PlayEvents(game.DrainEvents()));
+            if (busy) return;
+            if (castingPiece != null && game.Phase == GamePhase.ChoosingTarget)
+            {
+                if (!game.PendingTarget.AllowSkip) return;
+                selectAfterEvents = castingPiece;
+                ResolveTarget(null);
+                return;
+            }
+            if (selected != null) UsePieceSkill(selected);
+        }
+
+        /// <summary>
+        /// 第三阶段选中象或马时，在它头顶弹出技能图标（冷却中、够不着时变灰并写原因）；
+        /// 放技能选目标时图标亮着，写“Click to cancel”。演出中、相机在转时收起来。
+        /// </summary>
+        void UpdatePieceSkillButton()
+        {
+            var piece = castingPiece != null && game.Phase == GamePhase.ChoosingTarget ? castingPiece
+                : game.Phase == GamePhase.PlayerTurn ? selected : null;
+            var skill = piece != null && game.InStage3 && piece.Side == game.PlayerSide && piece.OnBoard ? ChessGame.PieceSkill(piece) : null;
+            if (busy || cameraTurning || skill == null || !board.TryGetPieceTop(piece.Id, out var top))
+            {
+                hud.HidePieceSkill();
+                return;
+            }
+            var screen = boardCamera.WorldToScreenPoint(top);
+            if (screen.z <= 0f)
+            {
+                hud.HidePieceSkill();
+                return;
+            }
+            bool active = piece == castingPiece;
+            int cooldown = game.Cooldown(skill.Value);
+            bool usable = active || game.CanUseSkill(skill.Value, piece);
+            string detail = active ? "Click to cancel"
+                : piece.IsFrozen ? "Frozen"
+                : cooldown > 0 ? (cooldown == 1 ? "Ready next turn" : $"Ready in {cooldown} turns")
+                : usable ? "Takes your turn"
+                : "Nothing in reach";
+            var icon = desk == null ? null : skill == Stage3Skill.Beam ? desk.beamIcon : desk.dragonIcon;
+            hud.ShowPieceSkill(screen, icon, skill == Stage3Skill.Beam ? "Beam" : "Dragon", detail, usable, active);
         }
 
         /// <summary>在规则书下方的被吃区里点选了一枚棋子（复活技能）。</summary>
@@ -527,12 +577,26 @@ namespace SaturdayGame.Chess.View
         }
 
         Coord? skillPreviewSquare;
+        /// <summary>取消像走法一样显示的技能时点到的自己的棋子，事件播完后选中它。</summary>
+        Piece selectAfterEvents;
+        /// <summary>正在放头顶技能的棋子（选目标时它的图标亮着）；不在选目标了就清掉。</summary>
+        Piece castingPiece;
+
+        /// <summary>点选格子时的高亮：有 Origin 的（象的光束）像下棋一样显示，其余照普通点选显示。</summary>
+        void HighlightRequest(TargetRequest request, IEnumerable<Coord> affected = null)
+        {
+            if (request.Origin.HasValue)
+                board.Highlight(request.Origin, null, null, lastMove, null, null, null, request.Options);
+            else
+                board.Highlight(null, null, request.Options, lastMove, null, null, affected);
+        }
 
         /// <summary>点选技能目标时（光束的方向、雷暴的范围、自爆的棋子）：鼠标停在哪个可选格子上，就标出会打到哪些格子。</summary>
         void UpdateSkillPreview(Vector2 mousePosition)
         {
             var request = game.Phase == GamePhase.ChoosingTarget ? game.PendingTarget : null;
-            if (request == null || request.IsPieceRequest || request.Affected == null)
+            // 像走法一样显示的（象的光束）不随鼠标变，和下棋时一样
+            if (request == null || request.IsPieceRequest || request.Affected == null || request.Origin.HasValue)
             {
                 skillPreviewSquare = null;
                 return;
@@ -541,7 +605,7 @@ namespace SaturdayGame.Chess.View
             if (board.TryGetCoord(boardCamera.ScreenPointToRay(mousePosition), out var c) && request.Options.Contains(c)) hovered = c;
             if (hovered == skillPreviewSquare) return;
             skillPreviewSquare = hovered;
-            board.Highlight(null, null, request.Options, lastMove, null, null, hovered.HasValue ? request.Affected(hovered.Value) : null);
+            HighlightRequest(request, hovered.HasValue ? request.Affected(hovered.Value) : null);
         }
 
         /// <summary>玩家被将军时王所在的格子（标红）。</summary>
@@ -760,7 +824,7 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.TargetRequested:
                         hud.SetSkipLabel("Skip");
                         if (e.Request.IsPieceRequest) yield return ReturnToFront(); // 要在规则书的阵亡区里点
-                        if (!e.Request.IsPieceRequest) board.Highlight(null, null, e.Request.Options, lastMove);
+                        if (!e.Request.IsPieceRequest) HighlightRequest(e.Request);
                         hud.ShowSkip(e.Request.AllowSkip);
                         break;
                     case GameEventType.Dialogue:
@@ -787,12 +851,16 @@ namespace SaturdayGame.Chess.View
             board.SetCloudRain(game.InStage3 && game.Board.AllPieces.Any(p => p.OnBoard && p.IsWet));
             skillPreviewSquare = null;
             if (game.Phase == GamePhase.ChoosingTarget && !pickingPiece)
-                board.Highlight(null, null, game.PendingTarget.Options, lastMove);
+                HighlightRequest(game.PendingTarget);
             else
                 board.Highlight(null, null, null, lastMove, DangerSquare());
             UpdateStatus();
             busy = false;
             RefreshSkillBar();
+            if (game.Phase != GamePhase.ChoosingTarget) castingPiece = null;
+            var toSelect = selectAfterEvents;
+            selectAfterEvents = null;
+            if (toSelect != null && toSelect.OnBoard && toSelect.Side == game.PlayerSide && game.Phase == GamePhase.PlayerTurn) Select(toSelect);
         }
 
         /// <summary>第三阶段左下角的技能栏：冷却、手里的卡、雷暴积累条。不是第三阶段就收起来。</summary>
@@ -801,18 +869,9 @@ namespace SaturdayGame.Chess.View
             bool show = game.InStage3 && game.Phase != GamePhase.GameOver;
             if (!show)
             {
-                hud.SetSkillBar(false, default, default, default, false, default, 0, 0);
+                hud.SetSkillBar(false, default, 0, 0);
                 return;
             }
-            var beam = SkillSlotFor(Stage3Skill.Beam, "Bishop Beam", PieceType.Bishop, "No bishops left");
-            var dragon = SkillSlotFor(Stage3Skill.Dragon, "Dragon Fire", PieceType.Knight, "No knights left");
-            var card = game.HandCard;
-            var hand = new ChessHud.SkillSlot
-            {
-                Title = card != null ? card.Title : "No card",
-                Detail = card == null ? "A new card every few turns" : game.CanUseHandCard ? "Click to use (free)" : "Can't use it right now",
-                Interactable = game.CanUseHandCard && !busy,
-            };
             int charge = game.ThunderCharge, max = game.ThunderMax;
             bool thunderReady = game.CanUseSkill(Stage3Skill.Thunder) && !busy;
             var thunder = new ChessHud.SkillSlot
@@ -822,22 +881,7 @@ namespace SaturdayGame.Chess.View
                 Interactable = thunderReady,
                 Glow = thunderReady,
             };
-            hud.SetSkillBar(true, beam, dragon, hand, game.CanBankHandCard && !busy, thunder, charge, max);
-        }
-
-        ChessHud.SkillSlot SkillSlotFor(Stage3Skill skill, string title, PieceType type, string none)
-        {
-            bool any = game.Board.PiecesOf(game.PlayerSide).Any(p => p.Type == type);
-            int cooldown = game.Cooldown(skill);
-            bool usable = game.CanUseSkill(skill);
-            bool ready = usable && !busy;
-            string detail;
-            if (!any) detail = none;
-            else if (cooldown > 0) detail = cooldown == 1 ? "Ready next turn" : $"Ready in {cooldown} turns";
-            else if (usable) detail = "Ready - takes your turn";
-            else if (game.Phase == GamePhase.PlayerTurn && !busy) detail = "Nothing in reach";
-            else detail = "Ready";
-            return new ChessHud.SkillSlot { Title = title, Detail = detail, Interactable = ready, Glow = ready };
+            hud.SetSkillBar(true, thunder, charge, max);
         }
 
         void UpdateStatus()
@@ -878,9 +922,7 @@ namespace SaturdayGame.Chess.View
             {
                 string hint;
                 if (game.InStage3)
-                    hint = game.HandCard != null
-                        ? $"In your hand: <b>{game.HandCard.Title}</b>\n{game.HandCard.Description}"
-                        : "Storm the castle! A new card shows up every few turns.";
+                    hint = "Storm the castle! A new card shows up every few turns.";
                 else if (game.NextRuleTurn > 0) hint = $"A new rule appears on turn {game.NextRuleTurn}.";
                 else hint = "No more new rules... but something is brewing.";
                 hud.SetNewHint(hint);

@@ -71,6 +71,10 @@ namespace SaturdayGame.Chess.View
         public float treeEffectScale = 0.4f;
 
         [Header("Stage 3 skills")]
+        [Tooltip("象的技能（光束）图标：第三阶段点象时在它头顶弹出。留空就用文字按钮")]
+        public Sprite beamIcon;
+        [Tooltip("马的技能（火龙）图标：第三阶段点马时在它头顶弹出。留空就用文字按钮")]
+        public Sprite dragonIcon;
         [Tooltip("潮湿的棋子遇火爆炸、自爆时在爆炸中心播一次的特效（例如 ParticlePack 的 SmallExplosion），留空就不播")]
         public GameObject explosionEffect;
         [Tooltip("爆炸特效的整体缩放")]

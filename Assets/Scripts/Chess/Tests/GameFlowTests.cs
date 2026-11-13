@@ -70,12 +70,10 @@ namespace SaturdayGame.Chess.Tests
                 Events.AddRange(Game.DrainEvents());
             }
 
-            /// <summary>第三阶段：偶尔用手里的卡、放常驻技能（动不了的时候一定放）。放了返回 true。</summary>
+            /// <summary>第三阶段：偶尔放常驻技能（动不了的时候一定放）。放了返回 true。</summary>
             bool TryStage3Action(bool must)
             {
                 var actions = new List<Action>();
-                if (Game.CanUseHandCard) actions.Add(Game.UseHandCard);
-                if (Game.CanBankHandCard && pick.Next(4) == 0) actions.Add(Game.BankHandCard);
                 foreach (Stage3Skill skill in Enum.GetValues(typeof(Stage3Skill)))
                     if (Game.CanUseSkill(skill)) actions.Add(() => Game.UseSkill(skill));
                 if (actions.Count == 0 || (!must && pick.Next(3) != 0)) return false;

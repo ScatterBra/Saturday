@@ -67,9 +67,10 @@ namespace SaturdayGame.Chess
             var victims = Targets(ctx, dragon);
             var pickVictim = new TargetRequest
             {
-                Prompt = "Pick what the dragon burns, or skip.",
+                Prompt = ctx.Board.Stage3 ? "Click a red enemy to burn it. Click elsewhere to cancel." : "Pick what the dragon burns, or skip.",
                 Options = victims.ConvertAll(v => v.Pos),
                 AllowSkip = true,
+                Origin = dragon.Pos,
             };
             yield return pickVictim;
             if (!pickVictim.Result.HasValue) yield break;
@@ -90,7 +91,7 @@ namespace SaturdayGame.Chess
         {
             var list = new List<Piece>();
             foreach (var knight in ctx.Visible(ctx.Player, PieceType.Knight))
-                if (!knight.IsFrozen && Targets(ctx, knight).Count > 0) list.Add(knight);
+                if (!knight.IsFrozen && (!ctx.Caster.HasValue || knight.Id == ctx.Caster.Value) && Targets(ctx, knight).Count > 0) list.Add(knight);
             return list;
         }
 

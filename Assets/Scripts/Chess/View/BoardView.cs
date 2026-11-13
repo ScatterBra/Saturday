@@ -31,6 +31,8 @@ namespace SaturdayGame.Chess.View
         static readonly Color AffectEnemy = new Color(1f, 0.25f, 0.2f);
         static readonly Color AffectOwn = new Color(1f, 0.85f, 0.1f);
         static readonly Color AffectEmpty = new Color(1f, 0.6f, 0.5f);
+        /// <summary>像走法一样显示的技能目标（象的光束）里自己人的格子：会被一起打掉。</summary>
+        static readonly Color FriendlyFire = new Color(1f, 0.5f, 0.1f);
         /// <summary>王后预告要打的格子。</summary>
         static readonly Color Warning = new Color(0.65f, 0.3f, 0.95f);
         /// <summary>城门开了以后的城堡格。</summary>
@@ -199,6 +201,23 @@ namespace SaturdayGame.Chess.View
             renderer.sprite = sprite;
             renderer.sortingOrder = sortingOrder;
             return renderer;
+        }
+
+        /// <summary>棋子模型头顶的世界坐标（技能图标弹在这里）。找不到这枚棋子时返回 false。</summary>
+        public bool TryGetPieceTop(int pieceId, out Vector3 world)
+        {
+            world = default;
+            if (!pieces.TryGetValue(pieceId, out var view) || view.Root == null) return false;
+            var renderers = view.Root.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+            {
+                world = view.Root.transform.position;
+                return true;
+            }
+            var bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            world = new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+            return true;
         }
 
         /// <summary>棋子站在这个格子上时的位置（考虑高原高度）。</summary>
@@ -703,8 +722,9 @@ namespace SaturdayGame.Chess.View
         /// 消防栓、青蛙的预览：会被喷开、拉过来的棋子在 From，落到 To；Burns = 落进岩浆（To 标红）。
         /// </param>
         /// <param name="affected">技能预览：会被打到的格子（敌人红、自己人黄、空格淡红）。</param>
+        /// <param name="moveLike">像走法一样显示的技能目标（象的光束）：空格绿、敌人红、自己人橙。</param>
         public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null,
-            (Coord From, Coord To, bool Burns)? effect = null, IEnumerable<Coord> affected = null)
+            (Coord From, Coord To, bool Burns)? effect = null, IEnumerable<Coord> affected = null, IEnumerable<Coord> moveLike = null)
         {
             var colors = new Color[64];
             var marks = new Color[64]; // 有棋盘图时的色块，alpha = 0 表示不显示
@@ -730,6 +750,13 @@ namespace SaturdayGame.Chess.View
             if (pickOptions != null)
                 foreach (var c in pickOptions)
                     Mark(colors, marks, c.Index, PickTarget, 1f, 0.55f);
+            if (moveLike != null)
+                foreach (var c in moveLike)
+                {
+                    var occupant = board?.PieceAt(c);
+                    var color = occupant == null ? MoveTarget : occupant.Side == board.Rescuer ? FriendlyFire : CaptureTarget;
+                    Mark(colors, marks, c.Index, color, 1f, 0.55f);
+                }
             if (danger.HasValue) Mark(colors, marks, danger.Value.Index, Danger, 1f, 0.6f);
             foreach (var c in warnings) Mark(colors, marks, c.Index, Warning, 0.7f, 0.5f);
             if (affected != null)

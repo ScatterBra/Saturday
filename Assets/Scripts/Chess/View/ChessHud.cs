@@ -41,9 +41,9 @@ namespace SaturdayGame.Chess.View
         /// <summary>第三阶段技能栏：点了常驻技能（光束、火龙、雷暴）。</summary>
         public event Action<Stage3Skill> SkillClicked;
         /// <summary>第三阶段技能栏：点了手里的卡（用掉）。</summary>
-        public event Action HandClicked;
         /// <summary>第三阶段技能栏：把手里的卡存进雷暴。</summary>
-        public event Action BankClicked;
+        /// <summary>第三阶段：点了棋子头顶弹出的技能图标。</summary>
+        public event Action PieceSkillClicked;
 
         /// <summary>技能栏上一个按钮的样子。</summary>
         public struct SkillSlot
@@ -83,8 +83,13 @@ namespace SaturdayGame.Chess.View
         /// <summary>风暴之后：规则书换成第三阶段的规则。</summary>
         bool stage3;
         GameObject skillBar;
-        Button beamButton, dragonButton, handButton, bankButton, thunderButton;
-        Text beamTitle, beamDetail, dragonTitle, dragonDetail, handTitle, handDetail, thunderTitle, thunderDetail;
+        Button thunderButton;
+        Text thunderTitle, thunderDetail;
+        // 棋子头顶的技能图标
+        RectTransform pieceSkillRoot;
+        Button pieceSkillButton;
+        Image pieceSkillIcon;
+        Text pieceSkillWord, pieceSkillDetail;
         RectTransform thunderFill;
         PieceArt art;
         ChessDesk desk;
@@ -218,6 +223,7 @@ namespace SaturdayGame.Chess.View
             gameOverRoot.SetActive(false);
 
             BuildSkillBar(root);
+            BuildPieceSkill(root);
             BuildTooltip(root);
 
             // 风暴：盖住整个画面的沙尘，透明度由控制器控制
@@ -237,6 +243,7 @@ namespace SaturdayGame.Chess.View
             HideCaption();
             ShowSkip(false);
             skillBar.SetActive(false);
+            HidePieceSkill();
             gameOverRoot.SetActive(false);
         }
 
@@ -250,7 +257,7 @@ namespace SaturdayGame.Chess.View
             switch (kind)
             {
                 case OfferKind.Emergency: newHintText.text = "Check! Pick a skill, or skip:"; break;
-                case OfferKind.Stage3: newHintText.text = "Pick a card for your hand:"; break;
+                case OfferKind.Stage3: newHintText.text = "Pick a card - it works right away and doesn't use your turn:"; break;
                 default: newHintText.text = "Pick a house rule:"; break;
             }
             var looks = ShuffledCardSprites();
@@ -334,15 +341,11 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>刷新第三阶段的技能栏（visible = false 时收起来）。charge / max 是雷暴积累条。</summary>
-        public void SetSkillBar(bool visible, SkillSlot beam, SkillSlot dragon, SkillSlot hand, bool canBank, SkillSlot thunder, int charge, int max)
+        public void SetSkillBar(bool visible, SkillSlot thunder, int charge, int max)
         {
             skillBar.SetActive(visible);
             if (!visible) return;
-            Apply(beamButton, beamTitle, beamDetail, beam);
-            Apply(dragonButton, dragonTitle, dragonDetail, dragon);
-            Apply(handButton, handTitle, handDetail, hand);
             Apply(thunderButton, thunderTitle, thunderDetail, thunder);
-            bankButton.gameObject.SetActive(canBank);
             thunderFill.anchorMax = new Vector2(max > 0 ? Mathf.Clamp01((float)charge / max) : 0f, 1f);
         }
 
@@ -356,6 +359,32 @@ namespace SaturdayGame.Chess.View
                 : slot.Glow ? new Color(0.85f, 0.55f, 0.15f, 0.95f) : new Color(0.3f, 0.24f, 0.2f, 0.92f);
             title.color = slot.Interactable ? Color.white : new Color(1f, 1f, 1f, 0.45f);
             detail.color = slot.Interactable ? new Color(1f, 0.92f, 0.75f) : new Color(1f, 1f, 1f, 0.35f);
+        }
+
+        /// <summary>
+        /// 在棋子头顶（screenPosition 是它头顶的屏幕像素坐标）弹出技能图标。
+        /// icon 为 null 时按钮上写 word；detail 是图标下面的小字（冷却、取消……）；active = 正在选这个技能的目标。
+        /// </summary>
+        public void ShowPieceSkill(Vector2 screenPosition, Sprite icon, string word, string detail, bool interactable, bool active)
+        {
+            var canvasRect = (RectTransform)transform;
+            float scale = canvasRect.lossyScale.x > 0f ? canvasRect.lossyScale.x : 1f;
+            pieceSkillRoot.anchoredPosition = screenPosition / scale + new Vector2(0f, 10f);
+            pieceSkillIcon.sprite = icon;
+            pieceSkillIcon.enabled = icon != null;
+            pieceSkillIcon.color = interactable ? Color.white : new Color(1f, 1f, 1f, 0.4f);
+            pieceSkillWord.text = icon != null ? "" : word;
+            pieceSkillWord.color = interactable ? Color.white : new Color(1f, 1f, 1f, 0.45f);
+            pieceSkillDetail.text = detail ?? "";
+            pieceSkillButton.interactable = interactable;
+            pieceSkillButton.GetComponent<Image>().color = active ? new Color(1f, 0.82f, 0.3f, 0.98f)
+                : interactable ? new Color(0.85f, 0.5f, 0.12f, 0.95f) : new Color(0.25f, 0.22f, 0.2f, 0.8f);
+            pieceSkillRoot.gameObject.SetActive(true);
+        }
+
+        public void HidePieceSkill()
+        {
+            if (pieceSkillRoot != null) pieceSkillRoot.gameObject.SetActive(false);
         }
 
         /// <summary>风暴沙尘的浓度，0 = 看不见，1 = 完全盖住画面。</summary>
@@ -436,7 +465,8 @@ namespace SaturdayGame.Chess.View
                 sb.Append("  • no check, no coming back, kings can be taken\n");
                 sb.Append("  • nobody can step on lava; whatever falls in is gone\n");
                 sb.Append("  • wet + fire = boom (blasts neighbours away)\n");
-                sb.Append("  • beam, dragon and thunder take your turn; cards don't\n");
+                sb.Append("  • click a bishop or knight to use its skill\n");
+                sb.Append("  • skills and thunder take your turn; cards don't\n");
             }
             foreach (var rule in ruleBook)
             {
@@ -448,28 +478,17 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>
-        /// 第三阶段的技能栏：屏幕左下角一列按钮，从上到下是象的光束、火龙、手里的卡（右边一个小按钮存进雷暴）、雷暴积累条。
+        /// 第三阶段的技能栏：屏幕左下角，只放不属于哪枚棋子的雷暴大招（带积累条）。卡牌点了就马上用，不进技能栏。
+        /// 象的光束、马的火龙点棋子时在棋子头顶弹出（BuildPieceSkill）。
         /// </summary>
         void BuildSkillBar(RectTransform root)
         {
             const float width = 330f, step = 62f;
-            var bar = Rect(root, "Skill Bar", Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(16, 16), new Vector2(width, 4 * step + 30));
+            var bar = Rect(root, "Skill Bar", Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(16, 16), new Vector2(width, step + 30));
             skillBar = bar.gameObject;
             var heading = Label(bar, "Heading", "Skills", 22, FontStyle.Bold, TextAnchor.LowerLeft, new Vector2(4, 0), new Vector2(-8, 28));
             heading.color = Color.white;
             float y = -30;
-            beamButton = SkillButton(bar, "Beam", y, width, () => SkillClicked?.Invoke(Stage3Skill.Beam), out beamTitle, out beamDetail);
-            y -= step;
-            dragonButton = SkillButton(bar, "Dragon", y, width, () => SkillClicked?.Invoke(Stage3Skill.Dragon), out dragonTitle, out dragonDetail);
-            y -= step;
-            handButton = SkillButton(bar, "Hand", y, width - 88, () => HandClicked?.Invoke(), out handTitle, out handDetail);
-            bankButton = SkillButton(bar, "Bank", y, 82, () => BankClicked?.Invoke(), out var bankTitle, out var bankDetail);
-            ((RectTransform)bankButton.transform).anchoredPosition = new Vector2(width - 82, y);
-            bankTitle.text = "Save";
-            bankTitle.alignment = TextAnchor.MiddleCenter;
-            bankDetail.text = "+1 storm";
-            bankDetail.alignment = TextAnchor.MiddleCenter;
-            y -= step;
             thunderButton = SkillButton(bar, "Thunder", y, width, () => SkillClicked?.Invoke(Stage3Skill.Thunder), out thunderTitle, out thunderDetail);
             // 积累条：按钮底部一条细长的进度
             var track = Panel((RectTransform)thunderButton.transform, "Track", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 6), new Vector2(-24, 8), new Color(0, 0, 0, 0.45f));
@@ -477,6 +496,39 @@ namespace SaturdayGame.Chess.View
             thunderFill = Panel(track, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero, new Color(0.55f, 0.75f, 1f));
             thunderFill.GetComponent<Image>().raycastTarget = false;
             skillBar.SetActive(false);
+        }
+
+        /// <summary>棋子头顶的技能图标：一个方形按钮（有图标放图标，没有就写字），下面一行小字。</summary>
+        void BuildPieceSkill(RectTransform root)
+        {
+            const float size = 60f;
+            pieceSkillRoot = Rect(root, "Piece Skill", Vector2.zero, Vector2.zero, new Vector2(0.5f, 0f), Vector2.zero, new Vector2(200, size + 24));
+            var buttonRect = Panel(pieceSkillRoot, "Button", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(size, size), new Color(0.85f, 0.5f, 0.12f, 0.95f));
+            var outline = buttonRect.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.12f, 0.08f, 0.05f, 0.9f);
+            outline.effectDistance = new Vector2(2, -2);
+            pieceSkillButton = buttonRect.gameObject.AddComponent<Button>();
+            pieceSkillButton.onClick.AddListener(() => PieceSkillClicked?.Invoke());
+            var iconRect = Rect(buttonRect, "Icon", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-10, -10));
+            pieceSkillIcon = iconRect.gameObject.AddComponent<Image>();
+            pieceSkillIcon.preserveAspect = true;
+            pieceSkillIcon.raycastTarget = false;
+            pieceSkillWord = Label(buttonRect, "Word", "", 15, FontStyle.Bold, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(-6, -6), stretch: true);
+            pieceSkillWord.raycastTarget = false;
+            pieceSkillDetail = Label(pieceSkillRoot, "Detail", "", 16, FontStyle.Bold, TextAnchor.LowerCenter, Vector2.zero, Vector2.zero);
+            var detailRect = pieceSkillDetail.rectTransform;
+            detailRect.anchorMin = new Vector2(0f, 0f);
+            detailRect.anchorMax = new Vector2(1f, 0f);
+            detailRect.pivot = new Vector2(0.5f, 0f);
+            detailRect.anchoredPosition = Vector2.zero;
+            detailRect.sizeDelta = new Vector2(0f, 22f);
+            pieceSkillDetail.color = Color.white;
+            pieceSkillDetail.raycastTarget = false;
+            pieceSkillDetail.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var shadow = pieceSkillDetail.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            shadow.effectDistance = new Vector2(2, -2);
+            pieceSkillRoot.gameObject.SetActive(false);
         }
 
         Button SkillButton(RectTransform parent, string name, float y, float width, Action onClick, out Text title, out Text detail)

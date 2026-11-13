@@ -46,10 +46,11 @@ namespace SaturdayGame.Chess
             foreach (var dir in Diagonals) options.AddRange(Path(ctx.Board, bishop.Pos, dir));
             var pickLine = new TargetRequest
             {
-                Prompt = "Pick a diagonal for the beam (it hits your pieces too), or skip.",
+                Prompt = "Click a square on a diagonal to fire (it hits your pieces too). Click elsewhere to cancel.",
                 Options = options,
                 AllowSkip = true,
                 Affected = c => LineThrough(ctx.Board, bishop.Pos, c),
+                Origin = bishop.Pos,
             };
             yield return pickLine;
             if (!pickLine.Result.HasValue) yield break;
@@ -74,6 +75,7 @@ namespace SaturdayGame.Chess
             foreach (var b in ctx.Visible(ctx.Player, PieceType.Bishop))
             {
                 if (b.IsFrozen) continue;
+                if (ctx.Caster.HasValue && b.Id != ctx.Caster.Value) continue;
                 foreach (var dir in Diagonals)
                     if (Path(ctx.Board, b.Pos, dir).Count > 0)
                     {

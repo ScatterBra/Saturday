@@ -87,6 +87,12 @@ namespace SaturdayGame.Chess
         /// </summary>
         public Func<Coord, IReadOnlyList<Coord>> Affected;
 
+        /// <summary>
+        /// 点选格子时像下棋一样显示：Origin 上的棋子标成选中，可选格子按走法上色（空格绿、敌人红、自己人橙），
+        /// 点可选格子以外的地方就取消（像下棋时点空白处取消选中）。为 null 时照普通点选显示。
+        /// </summary>
+        public Coord? Origin;
+
         public bool IsPieceRequest => PieceOptions != null;
     }
 
@@ -124,6 +130,12 @@ namespace SaturdayGame.Chess
         /// 手里的卡放出去才算用掉。由 ChessGame 在每次放技能前清零。
         /// </summary>
         public bool Acted;
+
+        /// <summary>
+        /// 放技能的棋子 Id（第三阶段点了象、马头顶的技能图标）：技能只用这枚棋子，跳过“选哪个象 / 马”那一步。
+        /// 为 null 时照常让玩家挑。
+        /// </summary>
+        public int? Caster;
 
         /// <summary>技能额外给雷暴积累条加的格数（例如自爆），ChessGame 用 TakeThunderCharge 取走。</summary>
         int thunderCharge;

@@ -87,9 +87,9 @@ namespace SaturdayGame.Chess
     /// - 风暴把双方的棋子吹散，朋友的国王和王后躲进城堡，再随机撒几格岩浆。双方正常吃子，王也能被吃。
     /// - 朋友城堡外的棋子都是守卫。守卫全灭后城门打开，玩家任意一枚棋子走进城堡就赢；玩家的棋子全没了就输。没有回合上限，不能复活。
     /// - 玩家的常驻技能（UseSkill）：象的光束、马的火龙（各有冷却）、雷暴大招（积累条满了放一次）。放常驻技能就是这一回合的行动。
-    /// - 每隔几回合弹两张卡牌（下雨、树、山崩、自爆）：挑一张拿到手里（最多一张，手里已有的那张自动存进雷暴积累条），
-    ///   之后自己的回合里随时用，不占回合；不挑就存进雷暴积累条。
-    /// - 雷暴积累条：每消灭一个守卫涨一格，存卡涨一格，自爆多涨几格；满格数 = 开局守卫数 − 2。
+    /// - 每隔几回合弹两张卡牌（下雨、树、山崩、自爆）：点哪张就马上用哪张，不占回合（选目标时取消就回到选卡）；
+    ///   不挑就存进雷暴积累条。
+    /// - 雷暴积累条：每消灭一个守卫涨一格，不挑卡涨一格，自爆多涨几格；满格数 = 开局守卫数 − 2。
     /// - 王后按时间表放技能，前一回合先在棋盘上标出目标格子。
     ///
     /// 所有操作都会往事件队列里加事件，表现层用 DrainEvents() 取出来按顺序演出。
@@ -114,9 +114,9 @@ namespace SaturdayGame.Chess
         int friendSkillIndex;
 
         // 第三阶段
-        RuleBase handCard;
-        /// <summary>正在放的手牌（放出去才从手里拿掉）。</summary>
-        RuleBase usingHandCard;
+        /// <summary>正在用的卡和它所在的那组卡：选目标时取消就回到这组卡重新挑。</summary>
+        RuleBase usingCard;
+        List<RuleBase> usingCardOffers;
         /// <summary>正在放的常驻技能（放出去就结束这一回合）。</summary>
         Stage3Skill? usingSkill;
         int initialGuards;
@@ -174,8 +174,6 @@ namespace SaturdayGame.Chess
 
         // ---------- 第三阶段的状态（给技能栏显示） ----------
 
-        /// <summary>手里的卡牌，没有为 null。</summary>
-        public RuleBase HandCard => handCard;
         /// <summary>第三阶段开始时的守卫数。</summary>
         public int InitialGuards => initialGuards;
         /// <summary>雷暴积累条满格数。</summary>
@@ -275,20 +273,17 @@ namespace SaturdayGame.Chess
             if (index < 0 || index >= offers.Count) throw new ArgumentOutOfRangeException(nameof(index));
 
             var rule = offers[index];
-            offers = null;
             if (offerKind == OfferKind.Stage3)
             {
-                // 第三阶段的卡拿到手里，之后随时用；手里已有的那张存进雷暴
-                if (handCard != null)
-                {
-                    bankedCharge++;
-                    events.Add(GameEvent.Notice($"Your {handCard.Title} card charged the storm."));
-                }
-                handCard = rule;
-                events.Add(GameEvent.Notice($"{rule.Title} is in your hand. Use it any time on your turn."));
-                BeginTurn();
+                // 第三阶段的卡点了就马上用，不占回合；选目标时取消就回到这组卡
+                usingCardOffers = offers;
+                usingCard = rule;
+                offers = null;
+                events.Add(GameEvent.RuleActivated(rule));
+                StartActivation(rule);
                 return;
             }
+            offers = null;
             activeRules.Add(rule);
             events.Add(GameEvent.RuleActivated(rule));
             StartActivation(rule);
@@ -328,38 +323,37 @@ namespace SaturdayGame.Chess
             return CreateSkill(skill).IsAvailable(ctx);
         }
 
-        /// <summary>放常驻技能。可能要点选目标；放出去就结束这一回合，点选时跳过就当没放。</summary>
-        public void UseSkill(Stage3Skill skill)
+        /// <summary>棋子身上绑的第三阶段技能：象 → 光束，马 → 火龙；别的棋子没有。</summary>
+        public static Stage3Skill? PieceSkill(Piece piece)
         {
-            if (!CanUseSkill(skill)) throw new InvalidOperationException($"{skill} is not ready");
+            if (piece == null) return null;
+            if (piece.Type == PieceType.Bishop) return Stage3Skill.Beam;
+            if (piece.Type == PieceType.Knight) return Stage3Skill.Dragon;
+            return null;
+        }
+
+        /// <summary>这枚棋子现在能不能放它身上的技能（caster 为 null 时同 CanUseSkill(skill)）。</summary>
+        public bool CanUseSkill(Stage3Skill skill, Piece caster)
+        {
+            if (caster == null) return CanUseSkill(skill);
+            if (caster.Side != PlayerSide || !caster.OnBoard || PieceSkill(caster) != skill) return false;
+            ctx.Caster = caster.Id;
+            try { return CanUseSkill(skill); }
+            finally { ctx.Caster = null; }
+        }
+
+        /// <summary>
+        /// 放常驻技能。可能要点选目标；放出去就结束这一回合，点选时跳过就当没放。
+        /// caster：点的是哪枚棋子身上的技能（象、马），给了就不用再选棋子。
+        /// </summary>
+        public void UseSkill(Stage3Skill skill, Piece caster = null)
+        {
+            if (!CanUseSkill(skill, caster)) throw new InvalidOperationException($"{skill} is not ready");
             var rule = CreateSkill(skill);
             usingSkill = skill;
+            ctx.Caster = caster?.Id;
             events.Add(GameEvent.RuleActivated(rule));
             StartActivation(rule);
-        }
-
-        /// <summary>手里的卡现在能不能用（自己的回合、局面上有效果）。</summary>
-        public bool CanUseHandCard => InStage3 && Phase == GamePhase.PlayerTurn && handCard != null && handCard.IsAvailable(ctx);
-
-        /// <summary>用手里的卡，不占回合。点选时跳过就还留在手里。</summary>
-        public void UseHandCard()
-        {
-            if (!CanUseHandCard) throw new InvalidOperationException("No usable card in hand");
-            usingHandCard = handCard;
-            events.Add(GameEvent.RuleActivated(handCard));
-            StartActivation(handCard);
-        }
-
-        public bool CanBankHandCard => InStage3 && Phase == GamePhase.PlayerTurn && handCard != null;
-
-        /// <summary>把手里的卡存进雷暴积累条（涨一格），不占回合。</summary>
-        public void BankHandCard()
-        {
-            if (!CanBankHandCard) throw new InvalidOperationException("No card in hand");
-            events.Add(GameEvent.Notice($"Your {handCard.Title} card charged the storm."));
-            handCard = null;
-            bankedCharge++;
-            BeginTurn();
         }
 
         static RuleBase CreateSkill(Stage3Skill skill)
@@ -423,12 +417,23 @@ namespace SaturdayGame.Chess
         {
             bool acted = ctx.Acted;
             ctx.Acted = false;
+            ctx.Caster = null;
             bankedCharge += ctx.TakeThunderCharge();
 
-            if (usingHandCard != null)
+            if (usingCard != null)
             {
-                if (acted && handCard == usingHandCard) handCard = null;
-                usingHandCard = null;
+                var cardOffers = usingCardOffers;
+                usingCard = null;
+                usingCardOffers = null;
+                if (!acted && cardOffers != null)
+                {
+                    // 选目标时取消了：卡没用掉，回到这组卡重新挑（或者不挑，存进雷暴）
+                    offers = cardOffers;
+                    offerKind = OfferKind.Stage3;
+                    events.Add(GameEvent.RulesOffered(2, OfferKind.Stage3, offers));
+                    Phase = GamePhase.ChoosingRule;
+                    return;
+                }
             }
 
             if (usingSkill.HasValue)
@@ -591,7 +596,7 @@ namespace SaturdayGame.Chess
         {
             var phase = Phase;
             Phase = GamePhase.PlayerTurn; // CanUseSkill 只在玩家回合里判断
-            bool any = CanUseHandCard || CanUseSkill(Stage3Skill.Beam) || CanUseSkill(Stage3Skill.Dragon) || CanUseSkill(Stage3Skill.Thunder);
+            bool any = CanUseSkill(Stage3Skill.Beam) || CanUseSkill(Stage3Skill.Dragon) || CanUseSkill(Stage3Skill.Thunder);
             Phase = phase;
             return any;
         }
@@ -642,7 +647,8 @@ namespace SaturdayGame.Chess
             bankedCharge = 0;
             thunderUsed = false;
             gateAnnounced = false;
-            handCard = null;
+            usingCard = null;
+            usingCardOffers = null;
             beamReadyTurn = dragonReadyTurn = 0;
             events.Add(GameEvent.StageStarted(2));
             events.Add(GameEvent.BoardRebuilt());
