@@ -636,6 +636,7 @@ namespace SaturdayGame.Chess.View
                         break;
                     case GameEventType.Soaked:
                         PlaySound(s => s.rain.clips.Length > 0 ? s.rain : s.hydrant);
+                        board.SetCloudRain(true);
                         board.PlayRain();
                         board.SyncAll();
                         yield return new WaitForSeconds(effectDuration * 2);
@@ -782,6 +783,8 @@ namespace SaturdayGame.Chess.View
             hud.SetLostPieces(game.Board.CapturedOf(game.PlayerSide), pickingPiece ? game.PendingTarget.PieceOptions.ToList() : null);
             board.SetWarnings(game.FriendTelegraph);
             board.RefreshCastleLabel();
+            // 雷雨云只在有棋子潮湿时下雨
+            board.SetCloudRain(game.InStage3 && game.Board.AllPieces.Any(p => p.OnBoard && p.IsWet));
             skillPreviewSquare = null;
             if (game.Phase == GamePhase.ChoosingTarget && !pickingPiece)
                 board.Highlight(null, null, game.PendingTarget.Options, lastMove);

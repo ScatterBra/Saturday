@@ -75,7 +75,7 @@ namespace SaturdayGame.Chess.View
         public GameObject explosionEffect;
         [Tooltip("爆炸特效的整体缩放")]
         public float explosionEffectScale = 0.5f;
-        [Tooltip("下雨技能：在棋盘上空播一段的特效（例如 ParticlePack 的 RainEffect），留空就不播")]
+        [Tooltip("下雨技能：在棋盘上空额外播一段的特效（例如 ParticlePack 的 RainEffect），留空就不播。雷雨云自己的雨平时关着，有棋子潮湿时才下")]
         public GameObject rainEffect;
         [Tooltip("下雨特效的整体缩放")]
         public float rainEffectScale = 0.5f;
@@ -85,7 +85,13 @@ namespace SaturdayGame.Chess.View
         public GameObject thunderEffect;
         [Tooltip("雷暴特效的整体缩放")]
         public float thunderEffectScale = 0.5f;
-        [Tooltip("象的光束颜色（HDR，越亮越刺眼）")]
+        [Tooltip("象的光束：沿斜线一路裂开的特效（例如 ParticlePack 的 EarthShatter），留空就用一根发光的细条")]
+        public GameObject beamEffect;
+        [Tooltip("光束特效的整体缩放")]
+        public float beamEffectScale = 0.35f;
+        [Tooltip("光束特效从象走到斜线尽头用多久（秒）")]
+        public float beamEffectTravel = 0.6f;
+        [Tooltip("没有光束特效时，发光细条的颜色（HDR，越亮越刺眼）")]
         [ColorUsage(false, true)] public Color beamColor = new Color(2.5f, 2.2f, 0.9f);
         [Tooltip("潮湿的棋子染上的颜色")]
         public Color wetTint = new Color(0.6f, 0.78f, 1f);

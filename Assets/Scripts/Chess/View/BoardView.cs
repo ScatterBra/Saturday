@@ -81,6 +81,10 @@ namespace SaturdayGame.Chess.View
         readonly GameObject explosionEffect, rainEffect, thunderEffect;
         readonly float explosionEffectScale = 0.5f, rainEffectScale = 1f, rainDuration = 2.5f, thunderEffectScale = 0.5f;
         readonly Color beamColor = new Color(2.5f, 2.2f, 0.9f);
+        readonly GameObject beamEffect;
+        readonly float beamEffectScale = 0.35f, beamEffectTravel = 0.6f;
+        /// <summary>雷雨云里的雨（平时关着，有棋子潮湿时才下）。</summary>
+        ParticleSystem cloudRain;
         /// <summary>一直标着的格子（王后预告要打的格子），每次 Highlight 都画上。</summary>
         readonly List<Coord> warnings = new List<Coord>();
         /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
@@ -139,6 +143,9 @@ namespace SaturdayGame.Chess.View
                 thunderEffect = desk.thunderEffect;
                 thunderEffectScale = desk.thunderEffectScale;
                 beamColor = desk.beamColor;
+                beamEffect = desk.beamEffect;
+                beamEffectScale = desk.beamEffectScale;
+                beamEffectTravel = desk.beamEffectTravel;
                 factory.WetTint = desk.wetTint;
             }
 
@@ -356,6 +363,23 @@ namespace SaturdayGame.Chess.View
             // 风暴散去时云已经聚好了
             ParticleFx.Warm(fx, 3f);
             stormCloudInstance = fx;
+            // 云自带的雨平时不下，用了下雨技能（有棋子潮湿）才下
+            cloudRain = null;
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+                if (ps.name == "Rain") cloudRain = ps;
+            raining = false;
+            if (cloudRain != null) cloudRain.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        bool raining;
+
+        /// <summary>雷雨云下不下雨（有棋子潮湿时下）。没有云或者云里没有雨就什么都不做。</summary>
+        public void SetCloudRain(bool on)
+        {
+            if (cloudRain == null || on == raining) return;
+            raining = on;
+            if (on) cloudRain.Play(true);
+            else cloudRain.Stop(true, ParticleSystemStopBehavior.StopEmitting);
         }
 
         /// <summary>
@@ -805,9 +829,50 @@ namespace SaturdayGame.Chess.View
             Object.Destroy(fx, Mathf.Max(0.5f, rainDuration) + 3f);
         }
 
-        /// <summary>象的光束：一根发光的细条从 from 打到 to，duration 秒内变细消失。</summary>
+        /// <summary>
+        /// 象的光束：配了 beamEffect（EarthShatter）时，从象脚下沿斜线一路裂到 to；
+        /// 没配就是一根发光的细条从 from 打到 to，duration 秒内变细消失。
+        /// </summary>
         public IEnumerator AnimateBeam(Coord from, Coord to, float duration)
         {
+            if (beamEffect != null)
+            {
+                float travel = Mathf.Max(0.1f, beamEffectTravel);
+                var fx = ParticleFx.Spawn(beamEffect, root, PiecePosition(from), beamEffectScale);
+                fx.name = "Bishop Beam";
+                // EarthShatter：一颗“头”粒子往前冲，石刺、裂缝、火球都是它的子发射器，沿着它走过的路冒出来。
+                // 头自己带的速度会往旁边偏，这里让头跟着物体走（本地空间、不自己动），
+                // 再把物体沿斜线（贴着地面，高地上抬高）从象挪到尽头；朝向取水平方向，石刺保持竖直
+                var flat = SquareCenter(to) - SquareCenter(from);
+                fx.transform.localRotation = Quaternion.LookRotation(flat.normalized);
+                var head = fx.GetComponent<ParticleSystem>();
+                if (head != null)
+                {
+                    var main = head.main;
+                    main.simulationSpace = ParticleSystemSimulationSpace.Local;
+                    main.startSpeed = 0f;
+                    main.startLifetime = travel + 0.1f;
+                    var velocity = head.velocityOverLifetime;
+                    velocity.enabled = false;
+                }
+                ParticleFx.PlayOnce(fx);
+                for (float t = 0; t < travel; t += Time.deltaTime)
+                {
+                    float u = t / travel;
+                    var c = new Coord(from.X + Mathf.RoundToInt((to.X - from.X) * u), from.Y + Mathf.RoundToInt((to.Y - from.Y) * u));
+                    var p = Vector3.Lerp(SquareCenter(from), SquareCenter(to), u);
+                    p.y = TopOf(c.IsValid ? c : to);
+                    if (fx != null) fx.transform.localPosition = p;
+                    yield return null;
+                }
+                if (fx != null)
+                {
+                    fx.transform.localPosition = PiecePosition(to);
+                    // 到头了就不再冒新的石刺，已经冒出来的自己落下消失
+                    foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true)) ps.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+                }
+                yield break;
+            }
             var start = PiecePosition(from) + Vector3.up * 0.45f;
             var end = PiecePosition(to) + Vector3.up * 0.45f;
             var beam = factory.Primitive(PrimitiveType.Cube, root, (start + end) / 2, new Vector3(0.12f, 0.12f, (end - start).magnitude + 0.5f));
