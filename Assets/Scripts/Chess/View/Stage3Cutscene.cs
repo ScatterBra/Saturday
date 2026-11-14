@@ -12,8 +12,8 @@ namespace SaturdayGame.Chess.View
     ///   镜头 0：像一枚棋子的视角，手持晃动着从 b1 滑到 f1，沙尘暴卷进来。
     ///   镜头 1：贴着棋盘对准朋友的王，王身上放特效，镜头往上摇看天空，乌云聚起来、天变暗。
     ///   镜头 2：战地记者视角，站在 a1 外面手持拍摄：第一颗陨石突然砸在眼前，镜头剧烈晃动；再一颗一颗追着剩下的陨石砸下来。
-    ///          每颗砸出一个岩浆坑；第一颗的冲击波把棋子吹到第三阶段的位置。
-    ///   镜头 3：山一层一层升起来，棋子跟着升。
+    ///          每颗砸出一个岩浆坑。然后硬切到云下绕圈的直升机拍剩下的；棋子不动，趁切镜头直接换到第三阶段的位置。
+    ///   镜头 3：棋子视角站在 e2（手持），山一层一层升起来、棋子跟着升；升完后放大变焦看向城堡。
     ///   镜头 4：王和王后跑上山、逃进城堡。
     ///   最后镜头平滑回到第三阶段的游戏视角。
     ///
@@ -67,6 +67,8 @@ namespace SaturdayGame.Chess.View
         public Vector3 dustStormPosition = new Vector3(0f, 0.3f, 0.5f);
         [Tooltip("镜头开始后第几秒出现沙尘暴")]
         public float dustStormAt = 2f;
+        [Tooltip("沙尘暴里夹着飞的石头（特效里的 RockDebris）。不勾就只有风沙")]
+        public bool dustStormRocks;
 
         [Header("Shot 1: king casts, camera tilts up, clouds form")]
         [Tooltip("王身上放的特效（PlasmaExplosionEffect）")]
@@ -108,7 +110,7 @@ namespace SaturdayGame.Chess.View
         [Tooltip("几颗陨石。先砸岩浆格（每颗砸出一个岩浆坑），岩浆格不够就砸空地（只爆炸）；陨石不够时剩下的岩浆格由小火球溅过去")]
         public int meteorCount = 5;
         [Tooltip("每颗陨石在这个镜头开始后第几秒落地（不够就按最后一个间隔往后排）。第一颗要快：镜头一开始没看见它，它就突然砸下来")]
-        public float[] meteorLandTimes = { 1f, 3.4f, 5f, 6.2f, 7.6f };
+        public float[] meteorLandTimes = { 1f, 3.6f, 5.8f, 7.4f, 9f };
         [Tooltip("每颗陨石从天上落到地面用多久")]
         public float meteorFallDuration = 1.8f;
         [Tooltip("越落越快：1 = 匀速，越大最后越快")]
@@ -129,6 +131,19 @@ namespace SaturdayGame.Chess.View
         public float trackLinger = 0.35f;
         [Tooltip("手持晃动的倍数（战地记者：比别的镜头晃得厉害）")]
         public float shot2Handheld = 1.6f;
+        [Tooltip("战地记者机位拍前几颗陨石，之后切到直升机机位")]
+        public int reporterMeteors = 2;
+        [Tooltip("第一颗砸下来后相机没拿稳：猛地往地面压下去再抬起来。整个过程多久")]
+        public float slamDuration = 1.1f;
+        [Tooltip("压下去用了整个过程的多少（越小压得越猛，剩下的时间慢慢抬起来）")]
+        [Range(0.05f, 0.9f)] public float slamAttack = 0.18f;
+        [Tooltip("最多往下压多少度、歪多少度、往下沉多少")]
+        public float slamPitch = 18f;
+        public float slamRoll = 5f;
+        public float slamDrop = 0.08f;
+        [Tooltip("抬起来以后追第二颗时放大变焦：视野角变到多少（越小放得越大）、用多久")]
+        [Range(5f, 90f)] public float reporterZoomFov = 22f;
+        public float reporterZoomDuration = 1.4f;
         [Tooltip("砸到棋盘时的爆炸（BigExplosion）")]
         public GameObject impactEffect;
         public float impactScale = 0.45f;
@@ -140,8 +155,26 @@ namespace SaturdayGame.Chess.View
         [Tooltip("后面每颗砸下来时镜头震多厉害、震多久")]
         public float impactShake = 0.18f;
         public float impactShakeDuration = 0.7f;
-        [Tooltip("棋子被冲击波吹到新位置用多久")]
-        public float scatterDuration = 0.9f;
+
+        [Header("Shot 2b: helicopter circling below the clouds")]
+        [Tooltip("绕棋盘中心转的半径、离棋盘多高（要比云低，云大约在 5 左右）")]
+        public float heliRadius = 6.5f;
+        public float heliHeight = 3.2f;
+        [Tooltip("从哪个角度开始绕（0 = 玩家正后方，正数往右）、每秒转多少度（负数反着绕）")]
+        public float heliStartAngle = -40f;
+        public float heliSpeed = 18f;
+        [Tooltip("直升机机位的视野角")]
+        [Range(10f, 90f)] public float heliFieldOfView = 45f;
+        [Tooltip("镜头看陨石还是看棋盘中心：1 = 盯着陨石，0 = 只看棋盘中心")]
+        [Range(0f, 1f)] public float heliTrackWeight = 0.5f;
+        [Tooltip("镜头最多抬到看这个高度（陨石还在高处时不跟上去，棋盘一直在画面里，陨石从画面上方砸进来）")]
+        public float heliLookMaxHeight = 1.5f;
+        [Tooltip("镜头跟着转的平滑时间（直升机上的镜头转得比手持慢）")]
+        public float heliTrackSmooth = 0.5f;
+        [Tooltip("机身往转弯里面倾斜多少度")]
+        public float heliBank = 6f;
+        [Tooltip("手持晃动的倍数（直升机：轻一点）")]
+        public float heliHandheld = 0.5f;
         [Tooltip("溅到其他岩浆格的小火球（FireBall），留空就直接冒出岩浆")]
         public GameObject splashEffect;
         public float splashScale = 0.12f;
@@ -163,13 +196,21 @@ namespace SaturdayGame.Chess.View
         public float riseDustScale = 0.25f;
         [Tooltip("每升一级最多在几格上冒尘土")]
         public int riseDustPerLevel = 5;
-        public float riseShake = 0.06f;
-        [Tooltip("相机从山的哪个方向看过去（会自动归一化）：x 右、y 上、z 前（负数 = 玩家这边）")]
-        public Vector3 shot3Direction = new Vector3(1f, 0.6f, -1.2f);
-        [Tooltip("相机离山多远：开始和结束（慢慢推近）")]
-        public Vector2 shot3Distance = new Vector2(8f, 6.5f);
-        [Tooltip("升完后停多久")]
-        public float shot3Hold = 0.6f;
+        [Tooltip("每升一级镜头震多厉害")]
+        public float riseShake = 0.1f;
+        [Tooltip("相机站在哪一格（e2 = (4, 1)），棋子视角")]
+        public Vector2Int shot3Square = new Vector2Int(4, 1);
+        [Tooltip("相机相对这一格中心的位置：x 左右、y 高度（棋子眼睛）、z 前后")]
+        public Vector3 shot3Offset = new Vector3(0f, 0.45f, 0f);
+        [Tooltip("把站在相机这一格上的棋子先藏起来（不然相机在它身体里面），镜头结束再出来")]
+        public bool hidePieceAtCamera = true;
+        [Tooltip("手持晃动的倍数")]
+        public float shot3Handheld = 1f;
+        [Tooltip("山升完后放大变焦看向城堡：视野角变到多少（越小放得越大）、用多久")]
+        [Range(5f, 90f)] public float shot3ZoomFov = 18f;
+        public float shot3ZoomDuration = 1.5f;
+        [Tooltip("放大到城堡后停多久")]
+        public float shot3Hold = 0.8f;
 
         [Header("Shot 4: king and queen flee to the castle")]
         [Tooltip("每跳一格用多久")]
@@ -206,6 +247,9 @@ namespace SaturdayGame.Chess.View
         bool skipped;
         float shakeAmount, shakeUntil, shakeDuration;
         float handheldSeed;
+        /// <summary>棋子贴图、文字朝着它摆（DeskCameraFit.ViewReference）。过场里跟着过场相机转，演完还原。</summary>
+        Transform viewReference;
+        Quaternion viewReferenceRotation;
         readonly List<GameObject> temporary = new List<GameObject>();
         readonly List<Canvas> hiddenCanvases = new List<Canvas>();
         AudioSource musicSource;
@@ -220,6 +264,8 @@ namespace SaturdayGame.Chess.View
             skipped = false;
             shakeUntil = 0f;
             handheldSeed = UnityEngine.Random.Range(0f, 100f);
+            viewReference = ctx.CameraFit != null ? ctx.CameraFit.ViewReference : null;
+            if (viewReference != null) viewReferenceRotation = viewReference.rotation;
             PlayMusic();
             HideHud(true);
             if (ctx.CameraFit != null) ctx.CameraFit.enabled = false;
@@ -305,6 +351,11 @@ namespace SaturdayGame.Chess.View
         {
             var fx = ParticleFx.Spawn(dustStorm, ctx.Board.Root, dustStormPosition, dustStormScale);
             fx.name = "Cutscene Dust Storm";
+            if (!dustStormRocks)
+            {
+                var rocks = fx.transform.Find("RockDebris");
+                if (rocks != null) rocks.gameObject.SetActive(false);
+            }
             // 原特效是预热好的（一出现就满屏），关掉预热，沙尘从无到有卷起来
             foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
             {
@@ -400,9 +451,11 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>
-        /// 战地记者视角：相机站在 a1 外面（棋子的高度），手持晃动。
-        /// 第一颗陨石突然砸在眼前，镜头剧烈晃动；然后镜头抬头去追第二颗、第三颗……一路跟着它们砸下来。
-        /// 第一颗砸中时冲击波把棋子吹到第三阶段的位置。每颗砸在一格岩浆上，砸出岩浆坑。
+        /// 两个机位：
+        /// A. 战地记者：站在 a1 外面（棋子的高度），手持。第一颗陨石突然砸在眼前，镜头剧烈晃动、猛地往地面压再抬起来，
+        ///    然后抬头追第二颗，边追边放大变焦。
+        /// B. 硬切到直升机：在云下面绕着棋盘转圈，边转边拍剩下的陨石，最后看着一片火海。
+        /// 每颗砸在一格岩浆上，砸出岩浆坑。棋子在画面里一直不动，切到直升机的那一瞬间直接换到第三阶段的位置。
         /// </summary>
         IEnumerator ShotMeteor(Board board, List<Piece> royals, HashSet<int> royalIds, Dictionary<int, Coord> temp)
         {
@@ -418,6 +471,10 @@ namespace SaturdayGame.Chess.View
             float lastLand = meteors[meteors.Count - 1].Land;
             float total = lastLand + shot2Hold;
             bool scattered = false;
+            // 记者机位拍前 reporterCount 颗，追的最后一颗落地、停一会儿后切到直升机
+            int reporterCount = Mathf.Clamp(reporterMeteors, 1, meteors.Count);
+            float cutTime = reporterCount < meteors.Count ? meteors[reporterCount - 1].Land + trackLinger : float.MaxValue;
+            bool heliStarted = false;
 
             for (float t = 0; t < total; t += Time.deltaTime)
             {
@@ -437,11 +494,6 @@ namespace SaturdayGame.Chess.View
                     ctx.Board.Highlight(null, null, null, null);
                     if (i == 0) Shake(firstImpactShake, firstImpactShakeDuration);
                     else Shake(impactShake, impactShakeDuration);
-                    if (!scattered)
-                    {
-                        scattered = true;
-                        ScatterPieces(board, royals, royalIds, temp);
-                    }
                     // 最后一颗砸完，陨石没砸到的岩浆格由小火球溅过去
                     if (i == meteors.Count - 1)
                     {
@@ -454,27 +506,98 @@ namespace SaturdayGame.Chess.View
                     }
                 }
 
-                // 镜头：第一颗砸完后停一下，然后一颗一颗追；追的那颗落地后在落点上停一会儿再去追下一颗
-                Vector3 target;
-                if (t < meteors[0].Land + trackLinger) target = Vector3.Lerp(boardCenter, firstEnd, 0.75f);
+                if (t < cutTime)
+                {
+                    // ---- 机位 A：战地记者（a1 外面，手持） ----
+                    // 第一颗砸完 + 相机被震得压下去再抬起来之后，才去追下一颗；追第二颗时放大变焦
+                    Vector3 target;
+                    float slamEnd = meteors[0].Land + slamDuration;
+                    if (t < slamEnd) target = Vector3.Lerp(boardCenter, firstEnd, 0.75f);
+                    else
+                    {
+                        var next = meteors.Find(m => m != meteors[0] && t < m.Land + trackLinger);
+                        target = next == null ? boardCenter : TrackPoint(next, t);
+                        // 不切直升机（陨石全由记者机位拍）时：全砸完后云也要淡下来
+                        if (next == null && t > lastLand)
+                            ctx.Board.SetStormCloudOpacity(Mathf.Lerp(cloudOpacity, cloudOpacityAfterImpact, (t - lastLand) / Mathf.Max(0.01f, shot2Hold)));
+                    }
+                    look = Vector3.SmoothDamp(look, target, ref lookVelocity, trackSmooth);
+
+                    // 没拿稳：猛地往下压（很快），再慢慢抬起来
+                    float slam = Slam(t - meteors[0].Land);
+                    var rotation = LookRotation(look - camPos) * Quaternion.Euler(slam * slamPitch, 0f, slam * slamRoll);
+                    SetHandheldCamera(camPos + Vector3.down * slam * slamDrop, rotation, shot2Handheld);
+
+                    float zoom = Mathf.SmoothStep(0f, 1f, (t - slamEnd) / Mathf.Max(0.05f, reporterZoomDuration));
+                    ctx.Camera.fieldOfView = Mathf.Lerp(fieldOfView, reporterZoomFov, zoom);
+                }
                 else
                 {
-                    var next = meteors.Find(m => t < m.Land + trackLinger && m != meteors[0]);
-                    if (next == null)
+                    // ---- 机位 B：直升机在云下面绕着棋盘转圈 ----
+                    float since = t - cutTime;
+                    float angle = (heliStartAngle + heliSpeed * since) * Mathf.Deg2Rad;
+                    var heliPos = new Vector3(Mathf.Sin(angle) * heliRadius, heliHeight, -Mathf.Cos(angle) * heliRadius);
+
+                    var next = meteors.Find(m => meteors.IndexOf(m) >= reporterCount && t < m.Land + trackLinger);
+                    Vector3 target;
+                    if (next != null)
                     {
-                        // 全砸完了：慢慢转回棋盘中间看着一片火海，云也淡下来
+                        target = Vector3.Lerp(boardCenter, TrackPoint(next, t), heliTrackWeight);
+                        target.y = Mathf.Min(target.y, heliLookMaxHeight);
+                    }
+                    else
+                    {
+                        // 全砸完了：看着棋盘中间的一片火海，云慢慢淡下来
+                        target = boardCenter;
                         float u = Mathf.Clamp01((t - lastLand - trackLinger) / Mathf.Max(0.01f, shot2Hold));
-                        target = Vector3.Lerp(meteors[meteors.Count - 1].End + Vector3.up * 0.3f, boardCenter, Mathf.SmoothStep(0f, 1f, u));
                         ctx.Board.SetStormCloudOpacity(Mathf.Lerp(cloudOpacity, cloudOpacityAfterImpact, u));
                     }
-                    else if (next.Landed) target = next.End + Vector3.up * 0.3f;
-                    // 还没出现的陨石：先往它要来的天上看（像记者听见声音先抬头）
-                    else target = next.Position(Mathf.Max(t, next.Land - meteorFallDuration * 0.85f), meteorFallDuration, fallAcceleration);
+                    if (!heliStarted)
+                    {
+                        // 硬切：镜头直接对好，不从上一个机位转过来。
+                        // 棋子趁着切镜头直接换到第三阶段的位置（画面里不跳、不飞）
+                        heliStarted = true;
+                        if (!scattered)
+                        {
+                            scattered = true;
+                            PlacePiecesForStage3(board, royals, royalIds, temp);
+                        }
+                        look = target;
+                        lookVelocity = Vector3.zero;
+                        ctx.Camera.fieldOfView = heliFieldOfView;
+                    }
+                    look = Vector3.SmoothDamp(look, target, ref lookVelocity, heliTrackSmooth);
+                    // 机身往转弯里面倾斜：顺时针转（heliSpeed > 0）往右倾
+                    var bank = Quaternion.Euler(0f, 0f, -Mathf.Sign(heliSpeed) * heliBank);
+                    SetHandheldCamera(heliPos, LookRotation(look - heliPos) * bank, heliHandheld);
                 }
-                look = Vector3.SmoothDamp(look, target, ref lookVelocity, trackSmooth);
-                SetHandheldCamera(camPos, LookRotation(look - camPos), shot2Handheld);
                 yield return null;
             }
+            // 没切直升机（陨石全由记者机位拍）：镜头 2 结束、切到镜头 3 时再换位置
+            if (!scattered) PlacePiecesForStage3(board, royals, royalIds, temp);
+        }
+
+        /// <summary>镜头追一颗陨石时看哪里：还没出现就先往它要来的天上看（像听见声音先抬头），在落就看它，落地了看落点。</summary>
+        Vector3 TrackPoint(Meteor m, float t)
+        {
+            if (m.Landed) return m.End + Vector3.up * 0.3f;
+            return m.Position(Mathf.Max(t, m.Land - meteorFallDuration * 0.85f), meteorFallDuration, fallAcceleration);
+        }
+
+        /// <summary>
+        /// 相机被震得往下压的程度（0–1）：since = 第一颗落地后过了多久。
+        /// 前 slamAttack 那一小段猛地压到底，剩下的时间慢慢抬回来。
+        /// </summary>
+        float Slam(float since)
+        {
+            if (since < 0f || since >= slamDuration) return 0f;
+            float u = since / Mathf.Max(0.01f, slamDuration);
+            if (u < slamAttack)
+            {
+                float k = u / slamAttack;
+                return 1f - (1f - k) * (1f - k);
+            }
+            return 1f - Mathf.SmoothStep(0f, 1f, (u - slamAttack) / (1f - slamAttack));
         }
 
         /// <summary>
@@ -503,13 +626,20 @@ namespace SaturdayGame.Chess.View
 
             Vector3 Direction(Coord c) => (BoardView.SquareCenter(c) - camPos).normalized;
             var forward = (boardCenter - camPos).normalized;
+            // 记者机位拍的那几颗砸下来时棋子还在风暴前的位置：尽量挑现在没有棋子站着的格子，
+            // 不然岩浆坑会出现在一枚还站着的棋子底下
+            var occupied = new bool[64];
+            foreach (var piece in board.AllPieces)
+                if (piece.OnBoard && ctx.Board.TryGetPieceView(piece.Id, out var view) && view.gameObject.activeSelf)
+                    occupied[ToCoord(view.localPosition).Index] = true;
+            float Occupied(Coord c) => occupied[c.Index] ? 2f : 0f;
             // 第一颗：在镜头正前方、不要太近
             int first = 0;
             float best = float.MinValue;
             for (int i = 0; i < targets.Count; i++)
             {
                 float distance = (BoardView.SquareCenter(targets[i]) - camPos).magnitude;
-                float score = Vector3.Dot(Direction(targets[i]), forward) - (distance < 2.5f ? 1f : 0f);
+                float score = Vector3.Dot(Direction(targets[i]), forward) - (distance < 2.5f ? 1f : 0f) - Occupied(targets[i]);
                 if (score > best) { best = score; first = i; }
             }
             (targets[0], targets[first]) = (targets[first], targets[0]);
@@ -520,7 +650,7 @@ namespace SaturdayGame.Chess.View
                 float least = float.MaxValue;
                 for (int i = 1; i < targets.Count; i++)
                 {
-                    float dot = Vector3.Dot(Direction(targets[i]), Direction(targets[0]));
+                    float dot = Vector3.Dot(Direction(targets[i]), Direction(targets[0])) + Occupied(targets[i]);
                     if (dot < least) { least = dot; second = i; }
                 }
                 (targets[1], targets[second]) = (targets[second], targets[1]);
@@ -631,22 +761,18 @@ namespace SaturdayGame.Chess.View
             temporary.Add(fx);
         }
 
-        /// <summary>第一颗陨石的冲击波：所有棋子被吹到第三阶段的位置，王和王后先待在附近的空格。</summary>
-        void ScatterPieces(Board board, List<Piece> royals, HashSet<int> royalIds, Dictionary<int, Coord> temp)
+        /// <summary>
+        /// 切镜头的那一瞬间把所有棋子直接摆到第三阶段的位置（画面里看不到它们移动）。
+        /// 王和王后先待在风暴前位置附近的空格，镜头 4 再逃进城堡。补回来的王后在这时出现。
+        /// </summary>
+        void PlacePiecesForStage3(Board board, List<Piece> royals, HashSet<int> royalIds, Dictionary<int, Coord> temp)
         {
             PlaceRoyals(board, royals, temp);
             foreach (var piece in board.AllPieces)
             {
                 if (!piece.OnBoard || !ctx.Board.TryGetPieceView(piece.Id, out var view)) continue;
-                var to = royalIds.Contains(piece.Id) ? temp[piece.Id] : piece.Pos;
-                if (!view.gameObject.activeSelf)
-                {
-                    // 风暴里新冒出来的棋子（补回来的王后）：直接出现在它的位置
-                    view.gameObject.SetActive(true);
-                    view.localPosition = ctx.Board.PiecePosition(to);
-                    continue;
-                }
-                StartCoroutine(ctx.Board.AnimateKnockback(piece.Id, to, scatterDuration));
+                view.gameObject.SetActive(true);
+                view.localPosition = ctx.Board.PiecePosition(royalIds.Contains(piece.Id) ? temp[piece.Id] : piece.Pos);
             }
         }
 
@@ -724,32 +850,62 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 镜头 3 ----------
 
+        /// <summary>
+        /// 棋子视角站在 e2，手持晃动：看着山一层一层升起来（每升一级镜头震一下），
+        /// 升完后镜头转向城堡、放大变焦。
+        /// </summary>
         IEnumerator ShotMountains(Board board, List<Piece> royals, HashSet<int> royalIds, Dictionary<int, Coord> temp)
         {
+            // 镜头 2 里变过焦、换过直升机的视野角，这里回到过场的默认值
+            ctx.Camera.fieldOfView = fieldOfView;
             int maxLevel = ctx.Board.MaxTerrainLevel;
             var raised = new List<Coord>();
-            Vector3 sum = Vector3.zero;
+            Vector3 sum = Vector3.zero, castleSum = Vector3.zero;
+            int castleCount = 0;
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
+                if (board.IsCastle(c))
+                {
+                    castleSum += BoardView.SquareCenter(c) + Vector3.up * board.Height(c) * BoardView.LevelHeight;
+                    castleCount++;
+                }
                 if (board.Height(c) <= 0) continue;
                 raised.Add(c);
                 sum += BoardView.SquareCenter(c);
             }
             if (raised.Count == 0 || maxLevel <= 0) yield break;
-            var look = sum / raised.Count + Vector3.up * (maxLevel * BoardView.LevelHeight * 0.5f);
-            var direction = shot3Direction.sqrMagnitude > 0.0001f ? shot3Direction.normalized : new Vector3(1f, 0.6f, -1.2f).normalized;
-            float totalTime = maxLevel * (risePerLevel + levelPause) + shot3Hold;
-            float elapsed = 0f;
+            var mountain = sum / raised.Count;
+            // 城堡顶面中间再往上一点（站在上面的棋子大概的高度）；没有城堡就看山的最高处
+            var castle = castleCount > 0 ? castleSum / castleCount + Vector3.up * 0.4f : mountain + Vector3.up * (maxLevel * BoardView.LevelHeight);
 
-            void Frame()
+            var square = new Coord(shot3Square.x, shot3Square.y);
+            // 相机站的那一格上要是有棋子，先藏起来（相机就在它的位置上）
+            var hidden = new List<Transform>();
+            if (hidePieceAtCamera)
+                foreach (var piece in board.AllPieces)
+                    if (piece.OnBoard && ctx.Board.TryGetPieceView(piece.Id, out var view) && view.gameObject.activeSelf &&
+                        ToCoord(view.localPosition) == square)
+                    {
+                        view.gameObject.SetActive(false);
+                        hidden.Add(view);
+                    }
+
+            float rise = 0f;
+            var look = mountain;
+            var lookVelocity = Vector3.zero;
+            void Frame(Vector3 target)
             {
-                float u = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, totalTime));
-                var camPos = look + direction * Mathf.Lerp(shot3Distance.x, shot3Distance.y, Mathf.SmoothStep(0f, 1f, u));
-                SetCamera(camPos, LookRotation(look - camPos));
+                // 相机跟着脚下的格子（e2 要是也在升，相机一起升）
+                var camPos = ctx.Board.PiecePosition(square) + shot3Offset;
+                look = Vector3.SmoothDamp(look, target, ref lookVelocity, 0.25f);
+                SetHandheldCamera(camPos, LookRotation(look - camPos), shot3Handheld);
                 foreach (var royal in royals)
                     if (ctx.Board.TryGetPieceView(royal.Id, out var view)) view.localPosition = ctx.Board.PiecePosition(temp[royal.Id]);
             }
+            // 升的时候看着山的半腰，山越高看得越高
+            Vector3 MountainLook() => mountain + Vector3.up * (rise * BoardView.LevelHeight * 0.6f);
+            look = MountainLook();
 
             for (int level = 0; level < maxLevel; level++)
             {
@@ -773,32 +929,44 @@ namespace SaturdayGame.Chess.View
                 for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, risePerLevel))
                 {
                     // 先快后慢，像被顶上来再停住
-                    float k = 1f - (1f - t) * (1f - t);
-                    ctx.Board.SetTerrainRise(level + k, royalIds);
-                    elapsed += Time.deltaTime;
-                    Frame();
+                    rise = level + (1f - (1f - t) * (1f - t));
+                    ctx.Board.SetTerrainRise(rise, royalIds);
+                    Frame(MountainLook());
                     yield return null;
                 }
-                ctx.Board.SetTerrainRise(level + 1, royalIds);
+                rise = level + 1;
+                ctx.Board.SetTerrainRise(rise, royalIds);
                 for (float t = 0; t < levelPause; t += Time.deltaTime)
                 {
-                    elapsed += Time.deltaTime;
-                    Frame();
+                    Frame(MountainLook());
                     yield return null;
                 }
             }
-            for (float t = 0; t < shot3Hold; t += Time.deltaTime)
+
+            // 升完：镜头转向城堡，同时放大变焦
+            for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, shot3ZoomDuration))
             {
-                elapsed += Time.deltaTime;
-                Frame();
+                float k = Mathf.SmoothStep(0f, 1f, t);
+                ctx.Camera.fieldOfView = Mathf.Lerp(fieldOfView, shot3ZoomFov, k);
+                Frame(Vector3.Lerp(MountainLook(), castle, k));
                 yield return null;
             }
+            ctx.Camera.fieldOfView = shot3ZoomFov;
+            for (float t = 0; t < shot3Hold; t += Time.deltaTime)
+            {
+                Frame(castle);
+                yield return null;
+            }
+            foreach (var view in hidden)
+                if (view != null) view.gameObject.SetActive(true);
         }
 
         // ---------- 镜头 4 ----------
 
         IEnumerator ShotEscape(Board board, List<Piece> royals, Dictionary<int, Coord> temp)
         {
+            // 镜头 3 最后放大看城堡，这里回到默认视野角
+            ctx.Camera.fieldOfView = fieldOfView;
             if (royals.Count == 0) yield break;
             var views = new List<Transform>();
             int stillRunning = 0;
@@ -963,6 +1131,8 @@ namespace SaturdayGame.Chess.View
                 rotation *= Quaternion.Euler((Mathf.PerlinNoise(time, 3f) - 0.5f) * degrees, (Mathf.PerlinNoise(3f, time) - 0.5f) * degrees, (Mathf.PerlinNoise(time, 7f) - 0.5f) * degrees);
             }
             ctx.Camera.transform.SetPositionAndRotation(root.TransformPoint(position), root.rotation * rotation);
+            // 文字、贴图平时朝着游戏视角摆；过场里改成朝着过场相机，从背面拍也不会是反的字
+            if (viewReference != null) viewReference.rotation = ctx.Camera.transform.rotation;
         }
 
         static Quaternion LookRotation(Vector3 localDirection) =>
@@ -1032,6 +1202,8 @@ namespace SaturdayGame.Chess.View
                 if (go != null) Destroy(go);
             temporary.Clear();
             shakeUntil = 0f;
+            // 文字、贴图回到朝着游戏视角（之后补建的棋子模型也按它摆正面）
+            if (viewReference != null) viewReference.rotation = viewReferenceRotation;
         }
 
         /// <summary>跳过时有的棋子还在被吹飞的半路上（歪着、缩着），摆正。</summary>
