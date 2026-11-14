@@ -13,8 +13,8 @@ namespace SaturdayGame.Chess.View
     ///   镜头 1：贴着棋盘对准朋友的王，王身上放特效，镜头往上摇看天空，乌云聚起来、天变暗。
     ///   镜头 2：战地记者视角，站在 a1 外面手持拍摄：第一颗陨石突然砸在眼前，镜头剧烈晃动；再一颗一颗追着剩下的陨石砸下来。
     ///          每颗砸出一个岩浆坑。然后硬切到云下绕圈的直升机拍剩下的；棋子不动，趁切镜头直接换到第三阶段的位置。
-    ///   镜头 3：棋子视角站在 e2（手持），山一层一层升起来、棋子跟着升；升完后放大变焦看向城堡。
-    ///   镜头 4：王和王后跑上山、逃进城堡。
+    ///   镜头 3：棋子视角站在 e2（手持），山一层一层升起来、棋子跟着升；升完后镜头跟着王和王后跳上山、逃进城堡，
+    ///          最后放大变焦看向城堡。
     ///   最后镜头平滑回到第三阶段的游戏视角。
     ///
     /// 逻辑层在过场开始前就把第三阶段定好了（地形、岩浆、棋子位置），过场只负责一步一步演出来，
@@ -42,7 +42,40 @@ namespace SaturdayGame.Chess.View
         [Tooltip("过场开始时播放（stage3.wav）。跳过过场不会停")]
         public AudioClip music;
         [Range(0f, 1f)] public float musicVolume = 1f;
-        public bool loopMusic;
+        [Tooltip("过场开始后几秒才开始播")]
+        public float musicDelay = 2f;
+        [Tooltip("一直循环（开新局时才停）")]
+        public bool loopMusic = true;
+
+        [Header("Sound effects (volume above 1 = amplify the clip; too high distorts)")]
+        [Tooltip("镜头 1：沙尘暴出现时开始播，镜头结束后淡出。原文件很小声（比音乐小 26 dB），要放大")]
+        public AudioClip sandstormSound;
+        [Range(0f, 10f)] public float sandstormVolume = 8f;
+        [Tooltip("沙尘暴声音在镜头 1 结束后多久淡出完")]
+        public float sandstormFadeOut = 1.5f;
+        [Tooltip("镜头 2：王身上的等离子特效出现时播")]
+        public AudioClip plasmaSound;
+        [Range(0f, 10f)] public float plasmaVolume = 1f;
+        [Tooltip("镜头 2：镜头往上摇、乌云开始聚时播。低沉的雷声容易被音乐盖住，要放大（超过的部分会被平滑压住，太大才会听得出被压扁）")]
+        public AudioClip thunderSound;
+        [Range(0f, 10f)] public float thunderVolume = 3f;
+        [Tooltip("镜头 3：陨石砸下来的破空声，几个轮流用")]
+        public AudioClip[] fallingSounds = new AudioClip[0];
+        [Tooltip("每个破空声里第几秒是“砸到地上”的那一刻（和 Falling Sounds 一一对应）：声音提前这么久开始播，陨石落地那一帧立刻截断。一般填声音最响的地方")]
+        public float[] fallingImpactTimes = new float[0];
+        [Tooltip("破空声里“砸到地上”那一刻对准落地前多久（中间留一小段再接爆炸声；0 = 和爆炸同时）")]
+        public float fallingGap = 0.35f;
+        [Tooltip("勾上：破空声到“砸到地上”那一刻立刻截断。不勾：让它自然播完（尾巴会叠在爆炸声下面）")]
+        public bool cutFallingSound;
+        [Range(0f, 10f)] public float fallingVolume = 1f;
+        [Tooltip("镜头 3：陨石落地的爆炸声，几个轮流用")]
+        public AudioClip[] explosionSounds = new AudioClip[0];
+        [Range(0f, 10f)] public float explosionVolume = 1f;
+        [Tooltip("镜头 4：山每升一级播一次")]
+        public AudioClip earthCrackSound;
+        [Range(0f, 10f)] public float earthCrackVolume = 1f;
+        [Tooltip("重复播的声音（破空、爆炸、土地破碎）每次随机变调多少，听起来不会一模一样")]
+        [Range(0f, 0.3f)] public float soundPitchJitter = 0.06f;
 
         [Header("Shot 0: piece's-eye view sliding along rank 1, dust storm rolls in")]
         [Tooltip("关掉就跳过这个镜头，从镜头 1 开始")]
@@ -201,7 +234,7 @@ namespace SaturdayGame.Chess.View
         [Tooltip("相机站在哪一格（e2 = (4, 1)），棋子视角")]
         public Vector2Int shot3Square = new Vector2Int(4, 1);
         [Tooltip("相机相对这一格中心的位置：x 左右、y 高度（棋子眼睛）、z 前后")]
-        public Vector3 shot3Offset = new Vector3(0f, 0.45f, 0f);
+        public Vector3 shot3Offset = new Vector3(0f, 0.75f, 0f);
         [Tooltip("把站在相机这一格上的棋子先藏起来（不然相机在它身体里面），镜头结束再出来")]
         public bool hidePieceAtCamera = true;
         [Tooltip("手持晃动的倍数")]
@@ -211,20 +244,12 @@ namespace SaturdayGame.Chess.View
         public float shot3ZoomDuration = 1.5f;
         [Tooltip("放大到城堡后停多久")]
         public float shot3Hold = 0.8f;
-
-        [Header("Shot 4: king and queen flee to the castle")]
-        [Tooltip("每跳一格用多久")]
+        [Tooltip("山升完后王和王后逃进城堡（镜头还在 e2，转过去跟着）：每跳一格用多久")]
         public float hopDuration = 0.28f;
         [Tooltip("每跳一格跳多高（往上爬时再加上高度差）")]
         public float hopHeight = 0.35f;
         [Tooltip("王后比王晚出发多久")]
         public float queenDelay = 0.15f;
-        [Tooltip("相机跟在两枚棋子的哪里：x 右、y 上、z 前（负数 = 玩家这边）")]
-        public Vector3 shot4Offset = new Vector3(2.2f, 1.4f, -3.2f);
-        [Tooltip("相机跟上去的平滑时间")]
-        public float shot4Smooth = 0.35f;
-        [Tooltip("逃进城堡后停多久")]
-        public float shot4Hold = 0.8f;
 
         /// <summary>过场需要的外部东西，由 ChessGameController 传进来。</summary>
         public struct Context
@@ -321,7 +346,6 @@ namespace SaturdayGame.Chess.View
             yield return ShotKing(king);
             yield return ShotMeteor(board, royals, royalIds, temp);
             yield return ShotMountains(board, royals, royalIds, temp);
-            yield return ShotEscape(board, royals, temp);
             running = false;
         }
 
@@ -334,17 +358,25 @@ namespace SaturdayGame.Chess.View
             var to = BoardView.SquareCenter(new Coord(introTo.x, introTo.y)) + new Vector3(0f, introHeight, -introBack);
             var baseRotation = Quaternion.Euler(introPitch, 0f, 0f);
             GameObject storm = null;
+            AudioSource stormSound = null;
+            bool stormStarted = false;
             float duration = Mathf.Max(0.1f, introDuration);
             for (float t = 0; t < duration; t += Time.deltaTime)
             {
-                if (storm == null && dustStorm != null && t >= dustStormAt) storm = SpawnDustStorm();
+                if (!stormStarted && t >= dustStormAt)
+                {
+                    stormStarted = true;
+                    if (dustStorm != null) storm = SpawnDustStorm();
+                    stormSound = PlaySound(sandstormSound, sandstormVolume);
+                }
                 float k = Mathf.SmoothStep(0f, 1f, t / duration);
                 SetHandheldCamera(Vector3.Lerp(from, to, k), baseRotation, introHandheld);
                 yield return null;
             }
-            // 沙尘暴不再卷新的沙子，已经卷起来的慢慢散掉（镜头 1 开始时还看得到一点）
+            // 沙尘暴不再卷新的沙子，已经卷起来的慢慢散掉（镜头 1 开始时还看得到一点）；声音一起淡出
             if (storm != null)
                 foreach (var ps in storm.GetComponentsInChildren<ParticleSystem>()) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            if (stormSound != null) StartCoroutine(FadeOut(stormSound, sandstormFadeOut));
         }
 
         GameObject SpawnDustStorm()
@@ -408,6 +440,7 @@ namespace SaturdayGame.Chess.View
                 ParticleFx.PlayOnce(fx);
                 temporary.Add(fx);
             }
+            PlaySound(plasmaSound, plasmaVolume);
             for (float t = 0; t < kingEffectHold; t += Time.deltaTime)
             {
                 SetHandheldCamera(camPos, startRotation, shot1Handheld);
@@ -417,6 +450,7 @@ namespace SaturdayGame.Chess.View
             // 往上摇：水平方向不变，俯仰角从看着王转到仰头看天；同时乌云聚起来、天变暗
             ctx.Board.FormStormCloud();
             ctx.Board.SetStormCloudOpacity(0f);
+            PlaySound(thunderSound, thunderVolume);
             var forward = startRotation * Vector3.forward;
             float yaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
             float startPitch = Mathf.Asin(Mathf.Clamp(-forward.y, -1f, 1f)) * Mathf.Rad2Deg;
@@ -443,6 +477,11 @@ namespace SaturdayGame.Chess.View
             public float Land;
             public GameObject Trail;
             public bool Landed;
+            /// <summary>破空声：用哪个、音高多少、在镜头里第几秒开始播（让声音里“砸到地上”那一刻正好对上落地）。</summary>
+            public AudioClip Whoosh;
+            public float WhooshPitch = 1f, WhooshStart;
+            public AudioSource WhooshSource;
+            public bool WhooshStarted;
             public Vector3 Position(float time, float fall, float acceleration)
             {
                 float u = Mathf.Clamp01((time - (Land - fall)) / Mathf.Max(0.05f, fall));
@@ -476,6 +515,19 @@ namespace SaturdayGame.Chess.View
             float cutTime = reporterCount < meteors.Count ? meteors[reporterCount - 1].Land + trackLinger : float.MaxValue;
             bool heliStarted = false;
 
+            // 每颗陨石的破空声：几个声音轮流用；音高变了声音播得快慢也变，开始时间按变过的速度算
+            for (int i = 0; i < meteors.Count; i++)
+            {
+                var m = meteors[i];
+                m.Whoosh = Pick(fallingSounds, i);
+                if (m.Whoosh == null) continue;
+                int k = i % fallingSounds.Length;
+                float impactAt = fallingImpactTimes != null && k < fallingImpactTimes.Length ? fallingImpactTimes[k] : m.Whoosh.length;
+                m.WhooshPitch = RandomPitch();
+                // 声音里“砸到地上”那一刻对准落地前 fallingGap 秒（那一刻截断），留一段安静再爆炸
+                m.WhooshStart = m.Land - Mathf.Max(0f, fallingGap) - impactAt / m.WhooshPitch;
+            }
+
             for (float t = 0; t < total; t += Time.deltaTime)
             {
                 // 陨石：到时间就出现，按轨迹往下砸，落地就爆炸
@@ -485,9 +537,22 @@ namespace SaturdayGame.Chess.View
                     if (m.Landed) continue;
                     if (t >= m.Land - meteorFallDuration && m.Trail == null) m.Trail = SpawnMeteorTrail(m.Position(t, meteorFallDuration, fallAcceleration));
                     if (m.Trail != null) m.Trail.transform.localPosition = m.Position(t, meteorFallDuration, fallAcceleration);
+                    // 破空声该开始了（要是本该在镜头开始前就开始，就从声音中间接着播）
+                    if (m.Whoosh != null && !m.WhooshStarted && t >= m.WhooshStart)
+                    {
+                        m.WhooshStarted = true;
+                        m.WhooshSource = PlaySound(m.Whoosh, fallingVolume, m.WhooshPitch, (t - m.WhooshStart) * m.WhooshPitch);
+                    }
+                    // 要截断的话：落地前 fallingGap 秒破空声立刻停，安静一下；不截断就让它自己播完
+                    if (cutFallingSound && m.WhooshSource != null && t >= m.Land - fallingGap)
+                    {
+                        m.WhooshSource.Stop();
+                        m.WhooshSource = null;
+                    }
                     if (t < m.Land) continue;
 
                     m.Landed = true;
+                    PlaySound(Pick(explosionSounds, i), explosionVolume, RandomPitch());
                     StopTrail(m.Trail);
                     Explode(m.End);
                     if (board.IsLava(m.Target)) ctx.Board.RevealLava(m.Target);
@@ -884,8 +949,8 @@ namespace SaturdayGame.Chess.View
             var hidden = new List<Transform>();
             if (hidePieceAtCamera)
                 foreach (var piece in board.AllPieces)
-                    if (piece.OnBoard && ctx.Board.TryGetPieceView(piece.Id, out var view) && view.gameObject.activeSelf &&
-                        ToCoord(view.localPosition) == square)
+                    if (piece.OnBoard && !royalIds.Contains(piece.Id) && ctx.Board.TryGetPieceView(piece.Id, out var view) &&
+                        view.gameObject.activeSelf && ToCoord(view.localPosition) == square)
                     {
                         view.gameObject.SetActive(false);
                         hidden.Add(view);
@@ -894,12 +959,15 @@ namespace SaturdayGame.Chess.View
             float rise = 0f;
             var look = mountain;
             var lookVelocity = Vector3.zero;
+            // 王和王后开始逃以前，跟着脚下的格子一起升；开始逃以后由 Run 摆
+            bool royalsRunning = false;
             void Frame(Vector3 target)
             {
                 // 相机跟着脚下的格子（e2 要是也在升，相机一起升）
                 var camPos = ctx.Board.PiecePosition(square) + shot3Offset;
                 look = Vector3.SmoothDamp(look, target, ref lookVelocity, 0.25f);
                 SetHandheldCamera(camPos, LookRotation(look - camPos), shot3Handheld);
+                if (royalsRunning) return;
                 foreach (var royal in royals)
                     if (ctx.Board.TryGetPieceView(royal.Id, out var view)) view.localPosition = ctx.Board.PiecePosition(temp[royal.Id]);
             }
@@ -926,6 +994,7 @@ namespace SaturdayGame.Chess.View
                     }
                 }
                 Shake(riseShake, risePerLevel);
+                PlaySound(earthCrackSound, earthCrackVolume, RandomPitch());
                 for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, risePerLevel))
                 {
                     // 先快后慢，像被顶上来再停住
@@ -943,12 +1012,37 @@ namespace SaturdayGame.Chess.View
                 }
             }
 
-            // 升完：镜头转向城堡，同时放大变焦
+            // 升完：王和王后从山脚跳上山、逃进城堡，镜头还在 e2，转过去跟着它们
+            var runners = new List<Transform>();
+            int stillRunning = 0;
+            for (int i = 0; i < royals.Count; i++)
+            {
+                if (!ctx.Board.TryGetPieceView(royals[i].Id, out var view)) continue;
+                runners.Add(view);
+                var path = FindPath(board, temp[royals[i].Id], royals[i].Pos);
+                stillRunning++;
+                StartCoroutine(Run(view, path, i * queenDelay, () => stillRunning--));
+            }
+            royalsRunning = true;
+            Vector3 RunnersLook()
+            {
+                var m = Vector3.zero;
+                foreach (var v in runners) m += v.localPosition;
+                return m / runners.Count + Vector3.up * 0.4f;
+            }
+            for (float wait = 0f; runners.Count > 0 && stillRunning > 0 && wait < 20f; wait += Time.deltaTime)
+            {
+                Frame(RunnersLook());
+                yield return null;
+            }
+
+            // 逃进城堡了：镜头转向城堡，同时放大变焦
+            var from = runners.Count > 0 ? RunnersLook() : MountainLook();
             for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, shot3ZoomDuration))
             {
                 float k = Mathf.SmoothStep(0f, 1f, t);
                 ctx.Camera.fieldOfView = Mathf.Lerp(fieldOfView, shot3ZoomFov, k);
-                Frame(Vector3.Lerp(MountainLook(), castle, k));
+                Frame(Vector3.Lerp(from, castle, k));
                 yield return null;
             }
             ctx.Camera.fieldOfView = shot3ZoomFov;
@@ -959,47 +1053,6 @@ namespace SaturdayGame.Chess.View
             }
             foreach (var view in hidden)
                 if (view != null) view.gameObject.SetActive(true);
-        }
-
-        // ---------- 镜头 4 ----------
-
-        IEnumerator ShotEscape(Board board, List<Piece> royals, Dictionary<int, Coord> temp)
-        {
-            // 镜头 3 最后放大看城堡，这里回到默认视野角
-            ctx.Camera.fieldOfView = fieldOfView;
-            if (royals.Count == 0) yield break;
-            var views = new List<Transform>();
-            int stillRunning = 0;
-            for (int i = 0; i < royals.Count; i++)
-            {
-                if (!ctx.Board.TryGetPieceView(royals[i].Id, out var view)) continue;
-                views.Add(view);
-                var path = FindPath(board, temp[royals[i].Id], royals[i].Pos);
-                stillRunning++;
-                StartCoroutine(Run(view, path, i * queenDelay, () => stillRunning--));
-            }
-            if (views.Count == 0) yield break;
-
-            Vector3 Middle()
-            {
-                var m = Vector3.zero;
-                foreach (var v in views) m += v.localPosition;
-                return m / views.Count;
-            }
-            var look = Middle() + Vector3.up * 0.5f;
-            var camPos = look + shot4Offset;
-            var velocity = Vector3.zero;
-            var lookVelocity = Vector3.zero;
-            float hold = 0f;
-            while (hold < shot4Hold)
-            {
-                var targetLook = Middle() + Vector3.up * 0.5f;
-                look = Vector3.SmoothDamp(look, targetLook, ref lookVelocity, shot4Smooth);
-                camPos = Vector3.SmoothDamp(camPos, targetLook + shot4Offset, ref velocity, shot4Smooth);
-                SetCamera(camPos, LookRotation(look - camPos));
-                if (stillRunning <= 0) hold += Time.deltaTime;
-                yield return null;
-            }
         }
 
         IEnumerator Run(Transform view, List<Coord> path, float delay, Action done)
@@ -1166,7 +1219,100 @@ namespace SaturdayGame.Chess.View
             musicSource.clip = music;
             musicSource.loop = loopMusic;
             musicSource.volume = musicVolume;
-            musicSource.Play();
+            // 按真实时间延后（不受游戏速度影响）；跳过过场也照样到时间开始播
+            musicSource.PlayDelayed(Mathf.Max(0f, musicDelay));
+        }
+
+        /// <summary>
+        /// 播一个过场音效（不跟着位置变化的 2D 声音）。startAt = 从声音的第几秒开始播（声音应该在过场开始前就已经开始了的情况）。
+        /// 跳过过场时跟别的临时物体一起删掉，所以会立刻停。返回 null 表示没配声音。
+        /// </summary>
+        AudioSource PlaySound(AudioClip clip, float volume, float pitch = 1f, float startAt = 0f)
+        {
+            if (clip == null || volume <= 0f) return null;
+            pitch = Mathf.Max(0.1f, pitch);
+            // AudioSource 的音量最大只有 1：要更大声就播一份放大过的副本
+            if (volume > 1f)
+            {
+                clip = Amplified(clip, volume);
+                volume = 1f;
+            }
+            var go = new GameObject("Cutscene Sound " + clip.name);
+            go.transform.SetParent(transform, false);
+            temporary.Add(go);
+            var source = go.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+            source.clip = clip;
+            source.volume = volume;
+            source.pitch = pitch;
+            source.time = Mathf.Clamp(startAt, 0f, Mathf.Max(0f, clip.length - 0.01f));
+            source.Play();
+            Destroy(go, Mathf.Max(0.1f, (clip.length - source.time) / source.pitch + 0.1f));
+            return source;
+        }
+
+        /// <summary>放大过的声音副本（原声音 + 倍数），同样的倍数只做一次。</summary>
+        readonly Dictionary<(AudioClip, float), AudioClip> amplified = new Dictionary<(AudioClip, float), AudioClip>();
+
+        /// <summary>
+        /// 把声音放大 gain 倍（在内存里做一份副本，不改原文件）。超过最大值的地方会被削平（破音）。
+        /// 原声音要能读出波形（导入设置 Load Type = Decompress On Load，wav 默认就是）；读不出就用原声音。
+        /// </summary>
+        AudioClip Amplified(AudioClip clip, float gain)
+        {
+            gain = Mathf.Round(gain * 100f) / 100f;
+            if (amplified.TryGetValue((clip, gain), out var copy) && copy != null) return copy;
+            var data = new float[clip.samples * clip.channels];
+            if (!clip.GetData(data, 0)) return clip;
+            for (int i = 0; i < data.Length; i++) data[i] = SoftLimit(data[i] * gain);
+            copy = AudioClip.Create($"{clip.name} x{gain}", clip.samples, clip.channels, clip.frequency, false);
+            copy.SetData(data, 0);
+            amplified[(clip, gain)] = copy;
+            return copy;
+        }
+
+        /// <summary>
+        /// 软限幅：0.7 以下原样不变，超过的部分平滑地压进 0.7–1 之间（不会直接削平成刺耳的破音）。
+        /// 所以声音可以放得比“刚好不破音”再大一些，只是最响的地方会被压扁一点。
+        /// </summary>
+        static float SoftLimit(float v)
+        {
+            const float knee = 0.7f;
+            float a = Mathf.Abs(v);
+            if (a <= knee) return v;
+            float over = (a - knee) / (1f - knee);
+            return Mathf.Sign(v) * (knee + (1f - knee) * (float)System.Math.Tanh(over));
+        }
+
+        void OnDestroy()
+        {
+            foreach (var copy in amplified.Values)
+                if (copy != null) Destroy(copy);
+            amplified.Clear();
+        }
+
+        /// <summary>重复播的声音每次随机一点音高（1 ± soundPitchJitter）。</summary>
+        float RandomPitch() => 1f + UnityEngine.Random.Range(-soundPitchJitter, soundPitchJitter);
+
+        /// <summary>第 i 个声音（轮流用），列表空的就返回 null。</summary>
+        static AudioClip Pick(AudioClip[] clips, int i)
+        {
+            if (clips == null || clips.Length == 0) return null;
+            return clips[((i % clips.Length) + clips.Length) % clips.Length];
+        }
+
+        /// <summary>声音在 duration 秒内淡到没有，然后停掉。</summary>
+        IEnumerator FadeOut(AudioSource source, float duration)
+        {
+            if (source == null) yield break;
+            float start = source.volume;
+            for (float t = 0; t < 1f && source != null; t += Time.deltaTime / Mathf.Max(0.05f, duration))
+            {
+                source.volume = start * (1f - t);
+                yield return null;
+            }
+            if (source != null) source.Stop();
         }
 
         /// <summary>开新局时停掉第三阶段的音乐。</summary>
