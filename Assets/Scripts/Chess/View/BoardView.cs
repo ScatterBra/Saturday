@@ -44,6 +44,19 @@ namespace SaturdayGame.Chess.View
         /// <summary>升起的地块用贴图方块叠出来时，最上面那块方块的渲染器（顶面上色用）；平地和城堡为 null。</summary>
         readonly MeshRenderer[] terrainTops = new MeshRenderer[64];
         readonly List<GameObject> terrainBlocks = new List<GameObject>();
+        /// <summary>每一格的贴图方块，从上往下（升起动画按格子挪它们）。</summary>
+        readonly List<GameObject>[] blocksBySquare = new List<GameObject>[64];
+
+        // ---------- 第三阶段的分步显示（开场过场用） ----------
+        // 逻辑层一进第三阶段，地形、岩浆、棋子样子就都定好了；画面上要等演出一步一步露出来。
+        /// <summary>画面上已经开始演第三阶段了（棋子换 3D、显示地形）。逻辑进了第三阶段但还没演到时为 false，画面照旧。</summary>
+        bool stage3Shown;
+        /// <summary>开场过场还在进行：云还没形成，部分岩浆还没砸出来，山还没升完。</summary>
+        bool revealing;
+        /// <summary>还没露出来的岩浆格（格子编号）。</summary>
+        readonly HashSet<int> hiddenLava = new HashSet<int>();
+        /// <summary>山现在升到第几级（画面上每格高度 = min(实际高度, 这个值)）；平时是无穷大。</summary>
+        float terrainRise = float.PositiveInfinity;
         readonly Texture2D[] raisedSideTextures;
         readonly Texture2D raisedSkullTexture;
         readonly float raisedSkullChance;
@@ -63,11 +76,14 @@ namespace SaturdayGame.Chess.View
         readonly float lavaEffectScale;
         readonly float lavaEffectLift;
         readonly List<GameObject> lavaEffects = new List<GameObject>();
+        readonly List<Coord> lavaEffectSquares = new List<Coord>();
         readonly GameObject stormCloud;
         readonly float stormCloudClearance, stormCloudSize, stormCloudPuffScale, stormCloudOpacity, stormCloudDensity;
         GameObject stormCloudInstance;
         /// <summary>调淡了的云材质（每次生成一份副本，云删掉时一起删）。</summary>
         Material stormCloudMaterial;
+        /// <summary>云材质原来的不透明度（prefab 里的值），SetStormCloudOpacity 在它上面乘。</summary>
+        float stormCloudBaseAlpha = 1f;
         readonly Material dissolveMaterial;
         readonly float dissolveDuration;
         readonly GameObject dissolveParticles;
@@ -223,7 +239,128 @@ namespace SaturdayGame.Chess.View
         /// <summary>棋子站在这个格子上时的位置（考虑高原高度）。</summary>
         public Vector3 PiecePosition(Coord c) => SquareCenter(c) + Vector3.up * TopOf(c);
 
-        float TopOf(Coord c) => board != null ? board.Height(c) * LevelHeight : 0f;
+        /// <summary>这一格现在画面上的高度（山还在升的时候比实际矮）。</summary>
+        float TopOf(Coord c) => Stage3 ? Mathf.Min(board.Height(c), terrainRise) * LevelHeight : 0f;
+
+        /// <summary>这一格升完以后的高度。</summary>
+        float FullTop(Coord c) => Stage3 ? board.Height(c) * LevelHeight : 0f;
+
+        bool LavaShown(Coord c) => Stage3 && board.IsLava(c) && !hiddenLava.Contains(c.Index);
+
+        bool CastleShown(Coord c) => Stage3 && board.IsCastle(c);
+
+        public Transform Root => root;
+        public Board Board => board;
+
+        /// <summary>地形最高几级（城堡 = Stage3Layout.CastleHeight）。</summary>
+        public int MaxTerrainLevel
+        {
+            get
+            {
+                int max = 0;
+                if (board != null)
+                    for (int i = 0; i < 64; i++) max = Mathf.Max(max, board.Height(Coord.FromIndex(i)));
+                return max;
+            }
+        }
+
+        /// <summary>棋子的显示物体（没有就返回 false）。</summary>
+        public bool TryGetPieceView(int pieceId, out Transform view)
+        {
+            view = pieces.TryGetValue(pieceId, out var v) && v.Root != null ? v.Root.transform : null;
+            return view != null;
+        }
+
+        /// <summary>
+        /// 开场过场开始：棋子换成第三阶段的样子（留在原地），地形方块按最终高度建好但先沉在棋盘下面，
+        /// 岩浆全部先藏起来，云先不出。新出现的棋子（例如补回来的王后）先建好、藏起来，由过场摆出来。
+        /// </summary>
+        public void BeginStage3Reveal()
+        {
+            if (board == null) return;
+            stage3Shown = true;
+            revealing = true;
+            terrainRise = 0f;
+            hiddenLava.Clear();
+            for (int i = 0; i < 64; i++)
+                if (board.IsLava(Coord.FromIndex(i))) hiddenLava.Add(i);
+            RebuildTerrain();
+            quietTrees = true;
+            try
+            {
+                foreach (var piece in board.AllPieces)
+                {
+                    if (!piece.OnBoard) continue;
+                    if (!pieces.TryGetValue(piece.Id, out var view))
+                    {
+                        view = Create(piece);
+                        view.Root.SetActive(false);
+                    }
+                    Refresh(view, piece);
+                }
+            }
+            finally { quietTrees = false; }
+            Highlight(null, null, null, null);
+        }
+
+        /// <summary>露出一格岩浆（陨石砸出来、火球溅过去），火从小烧起来。</summary>
+        public void RevealLava(Coord c, float warm = 0.2f)
+        {
+            if (!hiddenLava.Remove(c.Index)) return;
+            SpawnLavaEffect(c, warm);
+        }
+
+        /// <summary>山升到第 levels 级（可以是小数）。keepPieces 里的棋子由调用的人自己摆，其余棋子跟着脚下的格子升。</summary>
+        public void SetTerrainRise(float levels, ICollection<int> keepPieces = null)
+        {
+            terrainRise = Mathf.Max(0f, levels);
+            ApplyTerrainHeights();
+            foreach (var pair in pieces)
+            {
+                if (keepPieces != null && keepPieces.Contains(pair.Key)) continue;
+                var piece = board.GetPiece(pair.Key);
+                if (piece.OnBoard && pair.Value.Root.activeSelf) pair.Value.SetPosition(PiecePosition(piece.Pos));
+            }
+        }
+
+        /// <summary>开场过场里让雷雨云出现（不快进，云从无到有）。已经有云就什么都不做。返回云物体。</summary>
+        public GameObject FormStormCloud()
+        {
+            EnsureStormCloud(false);
+            return stormCloudInstance;
+        }
+
+        /// <summary>云的不透明度（0–1，乘在 prefab 原来的值上）。</summary>
+        public void SetStormCloudOpacity(float opacity)
+        {
+            if (stormCloudMaterial == null) return;
+            var tint = stormCloudMaterial.GetColor("_BaseColor");
+            tint.a = stormCloudBaseAlpha * Mathf.Clamp01(opacity);
+            stormCloudMaterial.SetColor("_BaseColor", tint);
+        }
+
+        /// <summary>
+        /// 第三阶段全部摆好：山升满、岩浆全露、云聚好。开场过场演完（或被跳过）时调用；
+        /// 没有过场时风暴沙尘盖着画面直接调用。之后再 SyncAll 把棋子摆到逻辑位置。
+        /// </summary>
+        public void FinishStage3Reveal()
+        {
+            bool wasRevealing = stage3Shown && revealing;
+            stage3Shown = board != null && board.Stage3;
+            revealing = false;
+            terrainRise = float.PositiveInfinity;
+            if (!wasRevealing)
+            {
+                hiddenLava.Clear();
+                RebuildTerrain();
+                return;
+            }
+            foreach (int i in new List<int>(hiddenLava)) RevealLava(Coord.FromIndex(i), Random.Range(2f, 6f));
+            ApplyTerrainHeights();
+            EnsureStormCloud(true);
+            SetStormCloudOpacity(stormCloudOpacity);
+            Highlight(null, null, null, null);
+        }
 
         /// <summary>屏幕射线落在哪个格子上（升起的格子按它的顶面算）。</summary>
         public bool TryGetCoord(Ray ray, out Coord coord)
@@ -281,6 +418,10 @@ namespace SaturdayGame.Chess.View
             treeShown.Clear();
             treeVanished = false;
             board = newBoard;
+            stage3Shown = newBoard != null && newBoard.Stage3;
+            revealing = false;
+            hiddenLava.Clear();
+            terrainRise = float.PositiveInfinity;
             RebuildTerrain();
             quietTrees = true;
             try { SyncAll(); }
@@ -291,8 +432,49 @@ namespace SaturdayGame.Chess.View
         /// <summary>按棋盘的高度和城堡重新摆格子（第三阶段风暴之后调用）。</summary>
         public void RebuildTerrain()
         {
-            Vector3 castleSum = Vector3.zero;
-            int castleCount = 0;
+            RebuildTerrainBlocks();
+            RebuildLavaEffects();
+
+            if (castleLabel != null) ViewUtil.Destroy(castleLabel);
+            castleLabel = null;
+            if (CastleLabelPosition(false, out var labelPosition))
+            {
+                var label = factory.Label(root, labelPosition, 0.05f, "Castle", title: true);
+                label.color = new Color(1f, 0.85f, 0.95f);
+                castleLabel = label.gameObject;
+                RefreshCastleLabel();
+            }
+
+            ApplyTerrainHeights();
+
+            // 开场过场里云由过场叫出来（FormStormCloud），这里先不建
+            if (revealing) { if (!Stage3) DestroyStormCloud(); }
+            else
+            {
+                DestroyStormCloud();
+                EnsureStormCloud(true);
+            }
+        }
+
+        /// <summary>城堡字样的位置：城堡格顶面的中点往上 0.8。full = 按升完的高度算。没有城堡时返回 false。</summary>
+        bool CastleLabelPosition(bool full, out Vector3 position)
+        {
+            Vector3 sum = Vector3.zero;
+            int count = 0;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                if (!CastleShown(c)) continue;
+                sum += SquareCenter(c) + Vector3.up * (full ? FullTop(c) : TopOf(c));
+                count++;
+            }
+            position = count > 0 ? sum / count + Vector3.up * 0.8f : Vector3.zero;
+            return count > 0;
+        }
+
+        /// <summary>按现在画面上的高度（TopOf）摆格子、贴图方块、色块、岩浆特效和城堡字样。</summary>
+        void ApplyTerrainHeights()
+        {
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
@@ -301,44 +483,40 @@ namespace SaturdayGame.Chess.View
                 squares[i].transform.localPosition = SquareCenter(c) + Vector3.up * (top - thickness / 2);
                 squares[i].transform.localScale = new Vector3(1f, thickness, 1f);
                 if (overlays != null) overlays[i].transform.localPosition = SquareCenter(c) + Vector3.up * (top + 0.004f);
-                if (board != null && board.IsCastle(c))
-                {
-                    castleSum += SquareCenter(c) + Vector3.up * top;
-                    castleCount++;
-                }
+                var blocks = blocksBySquare[i];
+                if (blocks != null)
+                    for (int layer = 0; layer < blocks.Count; layer++)
+                        blocks[layer].transform.localPosition = SquareCenter(c) + Vector3.up * (top - layer);
             }
+            for (int k = 0; k < lavaEffects.Count; k++)
+                if (lavaEffects[k] != null) lavaEffects[k].transform.localPosition = PiecePosition(lavaEffectSquares[k]) + Vector3.up * lavaEffectLift;
+            if (castleLabel != null && CastleLabelPosition(false, out var labelPosition)) castleLabel.transform.localPosition = labelPosition;
+        }
 
-            RebuildTerrainBlocks();
-            RebuildLavaEffects();
-
-            if (castleLabel != null) ViewUtil.Destroy(castleLabel);
-            castleLabel = null;
-            if (castleCount > 0)
-            {
-                var label = factory.Label(root, castleSum / castleCount + Vector3.up * 0.8f, 0.05f, "Castle", title: true);
-                label.color = new Color(1f, 0.85f, 0.95f);
-                castleLabel = label.gameObject;
-                RefreshCastleLabel();
-            }
-
-            RebuildStormCloud();
+        void DestroyStormCloud()
+        {
+            if (stormCloudInstance != null) ViewUtil.Destroy(stormCloudInstance);
+            if (stormCloudMaterial != null) ViewUtil.Destroy(stormCloudMaterial);
+            stormCloudInstance = null;
+            stormCloudMaterial = null;
+            cloudRain = null;
+            raining = false;
         }
 
         /// <summary>
         /// 第三阶段在棋盘上空放一团雷雨云（ChessDesk.stormCloud）：铺满整个棋盘，比城堡和 Princess 字样高，比相机低。
         /// 原特效只有 2.4 × 1 格大，这里把发射范围拉到 stormCloudSize 见方，粒子放大、数量按面积加。
         /// </summary>
-        void RebuildStormCloud()
+        /// <param name="warm">快进一段，一出现就是聚好的云；false = 云从无到有慢慢聚起来（开场过场）。</param>
+        void EnsureStormCloud(bool warm)
         {
-            if (stormCloudInstance != null) ViewUtil.Destroy(stormCloudInstance);
-            if (stormCloudMaterial != null) ViewUtil.Destroy(stormCloudMaterial);
-            stormCloudInstance = null;
-            stormCloudMaterial = null;
-            if (stormCloud == null || board == null || !board.Stage3) return;
+            if (stormCloudInstance != null) return;
+            if (stormCloud == null || !Stage3) return;
 
+            // 按山升完的高度放云，山还在升的时候云也不用挪
             float highest = 0f;
-            for (int i = 0; i < 64; i++) highest = Mathf.Max(highest, TopOf(Coord.FromIndex(i)));
-            if (castleLabel != null) highest = Mathf.Max(highest, castleLabel.transform.localPosition.y + 0.3f);
+            for (int i = 0; i < 64; i++) highest = Mathf.Max(highest, FullTop(Coord.FromIndex(i)));
+            if (CastleLabelPosition(true, out var labelPosition)) highest = Mathf.Max(highest, labelPosition.y + 0.3f);
 
             var fx = ParticleFx.Spawn(stormCloud, root, new Vector3(0f, highest + stormCloudClearance, 0f), 1f);
             fx.name = "Storm Cloud";
@@ -364,6 +542,7 @@ namespace SaturdayGame.Chess.View
                     {
                         stormCloudMaterial = new Material(renderer.sharedMaterial);
                         var tint = stormCloudMaterial.GetColor("_BaseColor");
+                        stormCloudBaseAlpha = tint.a;
                         tint.a *= stormCloudOpacity;
                         stormCloudMaterial.SetColor("_BaseColor", tint);
                         renderer.sharedMaterial = stormCloudMaterial;
@@ -379,8 +558,16 @@ namespace SaturdayGame.Chess.View
                     main.maxParticles = Mathf.Max(main.maxParticles, Mathf.CeilToInt(main.maxParticles * Mathf.Min(more, 10f)));
                 }
             }
-            // 风暴散去时云已经聚好了
-            ParticleFx.Warm(fx, 3f);
+            // 风暴散去时云已经聚好了；开场过场里不快进，云慢慢聚起来
+            if (warm) ParticleFx.Warm(fx, 3f);
+            else
+                foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    var main = ps.main;
+                    main.prewarm = false;
+                    ps.Clear(false);
+                    ps.Play(false);
+                }
             stormCloudInstance = fx;
             // 云自带的雨平时不下，用了下雨技能（有棋子潮湿）才下
             cloudRain = null;
@@ -411,18 +598,24 @@ namespace SaturdayGame.Chess.View
         {
             foreach (var block in terrainBlocks) ViewUtil.Destroy(block);
             terrainBlocks.Clear();
-            for (int i = 0; i < 64; i++) terrainTops[i] = null;
+            for (int i = 0; i < 64; i++)
+            {
+                terrainTops[i] = null;
+                blocksBySquare[i] = null;
+            }
             bool textured = raisedSideTextures != null && raisedSideTextures.Length > 0 && raisedSideTextures[0] != null;
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
-                bool raised = board != null && board.Height(c) > 0 && !board.IsCastle(c);
+                bool raised = Stage3 && board.Height(c) > 0 && !board.IsCastle(c);
                 squares[i].SetActive(!(textured && raised));
                 if (!textured || !raised) continue;
                 EnsureBlockAssets(squares[i].GetComponent<MeshRenderer>().sharedMaterial);
 
-                float top = TopOf(c);
+                // 按升完的高度叠方块；山还在升的时候 ApplyTerrainHeights 把它们整体往下沉
+                float top = FullTop(c);
                 int count = Mathf.CeilToInt(top - 0.001f);
+                blocksBySquare[i] = new List<GameObject>();
                 for (int layer = 0; layer < count; layer++)
                 {
                     var go = new GameObject($"Terrain {c} {layer}");
@@ -441,6 +634,7 @@ namespace SaturdayGame.Chess.View
                     renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                     renderer.receiveShadows = squares[i].GetComponent<MeshRenderer>().receiveShadows;
                     terrainBlocks.Add(go);
+                    blocksBySquare[i].Add(go);
                     if (layer == 0) terrainTops[i] = renderer;
                 }
             }
@@ -522,14 +716,8 @@ namespace SaturdayGame.Chess.View
         /// <summary>新出现的岩浆格（例如爆炸留下的熔岩坑）也放上特效。</summary>
         public void AddLavaEffects(IEnumerable<Coord> squares)
         {
-            if (lavaEffect == null || squares == null) return;
-            foreach (var c in squares)
-            {
-                var fx = ParticleFx.Spawn(lavaEffect, root, PiecePosition(c) + Vector3.up * lavaEffectLift, lavaEffectScale, Random.Range(0f, 360f));
-                fx.name = $"Lava Effect {c}";
-                ParticleFx.Warm(fx, Random.Range(0.5f, 1.5f));
-                lavaEffects.Add(fx);
-            }
+            if (squares == null) return;
+            foreach (var c in squares) SpawnLavaEffect(c, Random.Range(0.5f, 1.5f));
         }
 
         /// <summary>每格岩浆上放一份特效（ChessDesk.lavaEffect），旧的先清掉。</summary>
@@ -537,17 +725,24 @@ namespace SaturdayGame.Chess.View
         {
             foreach (var fx in lavaEffects) ViewUtil.Destroy(fx);
             lavaEffects.Clear();
-            if (lavaEffect == null || board == null) return;
+            lavaEffectSquares.Clear();
+            if (board == null) return;
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
-                if (!board.IsLava(c)) continue;
                 // 每格随机转个方向、随机快进一段：火苗各不一样、不同步，一出现就已经烧起来了
-                var fx = ParticleFx.Spawn(lavaEffect, root, PiecePosition(c) + Vector3.up * lavaEffectLift, lavaEffectScale, Random.Range(0f, 360f));
-                fx.name = $"Lava Effect {c}";
-                ParticleFx.Warm(fx, Random.Range(2f, 6f));
-                lavaEffects.Add(fx);
+                if (LavaShown(c)) SpawnLavaEffect(c, Random.Range(2f, 6f));
             }
+        }
+
+        void SpawnLavaEffect(Coord c, float warm)
+        {
+            if (lavaEffect == null) return;
+            var fx = ParticleFx.Spawn(lavaEffect, root, PiecePosition(c) + Vector3.up * lavaEffectLift, lavaEffectScale, Random.Range(0f, 360f));
+            fx.name = $"Lava Effect {c}";
+            ParticleFx.Warm(fx, warm);
+            lavaEffects.Add(fx);
+            lavaEffectSquares.Add(c);
         }
 
         /// <summary>
@@ -561,13 +756,13 @@ namespace SaturdayGame.Chess.View
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
-                if (!board.IsCastle(c)) continue;
-                var top = SquareCenter(c) + Vector3.up * TopOf(c);
+                if (!CastleShown(c)) continue;
+                var top = SquareCenter(c) + Vector3.up * FullTop(c);
                 for (int dx = -1; dx <= 1; dx += 2)
                 for (int dz = -1; dz <= 1; dz += 2)
                     points.Add(ToParent(top + new Vector3(dx * 0.5f, 0, dz * 0.5f)));
             }
-            if (castleLabel != null) points.Add(ToParent(castleLabel.transform.localPosition + Vector3.up * 0.3f));
+            if (castleLabel != null && CastleLabelPosition(true, out var labelPosition)) points.Add(ToParent(labelPosition + Vector3.up * 0.3f));
             return points;
         }
 
@@ -654,7 +849,7 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>棋盘已经是第三阶段：棋子换成 3D 模型。</summary>
-        bool Stage3 => board != null && board.Stage3;
+        bool Stage3 => board != null && board.Stage3 && stage3Shown;
 
         public void RefreshPiece(int id)
         {
@@ -733,7 +928,7 @@ namespace SaturdayGame.Chess.View
                 var c = Coord.FromIndex(i);
                 bool dark = (c.X + c.Y) % 2 == 0;
                 colors[i] = dark ? Dark : Light;
-                if (board != null && board.Stage3)
+                if (Stage3)
                 {
                     if (board.Height(c) > 0) colors[i] = hasBoardArt ? Color.Lerp(Rock, Color.black, dark ? 0.12f : 0f) : Color.Lerp(colors[i], Rock, 0.6f);
                 }
@@ -770,7 +965,7 @@ namespace SaturdayGame.Chess.View
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
-                if (board != null && board.IsCastle(c))
+                if (CastleShown(c))
                 {
                     colors[i] = gateOpen ? Color.Lerp(CastleStone, GateOpenColor, 0.6f) : CastleStone;
                     marks[i] = Color.clear;
@@ -781,7 +976,7 @@ namespace SaturdayGame.Chess.View
                         foreach (var m in moves)
                             if (m.To == c) colors[i] = Color.Lerp(colors[i], MoveTarget, 0.7f);
                 }
-                if (board != null && board.IsLava(c))
+                if (LavaShown(c))
                 {
                     colors[i] = Lava;
                     marks[i] = colors[i];

@@ -376,6 +376,8 @@ MonoBehaviour:
   raisedSkullChance: 0.15
   treeEffect: {fileID: 1025285306637258, guid: d8f0099df63275647a8bcf646df1ca00, type: 3}
   treeEffectScale: 0.4
+  beamIcon: {fileID: 0}
+  dragonIcon: {fileID: 0}
   explosionEffect: {fileID: 1828176872806910, guid: 64891a0eb28db934898420d80ca07cb3, type: 3}
   explosionEffectScale: 0.5
   rainEffect: {fileID: 0}
@@ -1073,6 +1075,7 @@ GameObject:
   - component: {fileID: 1185032823}
   - component: {fileID: 1185032822}
   - component: {fileID: 1185032824}
+  - component: {fileID: 1185032825}
   m_Layer: 0
   m_Name: Chess
   m_TagString: Untagged
@@ -1113,6 +1116,7 @@ MonoBehaviour:
   pieceArt: {fileID: 11400000, guid: 5f60d6a5c08f1ce468d67b70804a8337, type: 2}
   desk: {fileID: 330428967}
   sounds: {fileID: 1185032824}
+  stage3Cutscene: {fileID: 1185032825}
   titleFont: {fileID: 12800000, guid: dbdceb70e70cc44469ff42d0a40b6b94, type: 3}
   bodyFont: {fileID: 12800000, guid: cc5590936355ff94cbea6f84aa00de15, type: 3}
   shadows: 1
@@ -1235,6 +1239,79 @@ MonoBehaviour:
     clips: []
     volume: 1
     pitchJitter: 0
+--- !u!114 &1185032825
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1185032821}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9b43ce8082954548ad0c49d9996791d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: SaturdayGame.Chess.View::SaturdayGame.Chess.View.Stage3Cutscene
+  play: 1
+  allowSkip: 1
+  fieldOfView: 50
+  blendBackDuration: 1.2
+  music: {fileID: 8300000, guid: 2f29ae63e7bf94b4994e8d397b477c3b, type: 3}
+  musicVolume: 1
+  loopMusic: 0
+  kingEffect: {fileID: 1000011128802252, guid: 96730f8640590934eacb6f860058e7f9, type: 3}
+  kingEffectScale: 0.35
+  kingEffectLift: 0.4
+  shot1Distance: 2.2
+  shot1Height: 0.45
+  shot1Side: 0.5
+  shot1LookHeight: 0.4
+  shot1Lead: 0.6
+  kingEffectHold: 1.4
+  tiltDuration: 2.5
+  tiltUpAngle: 65
+  tiltRise: 0.3
+  cloudFormDuration: 3
+  cloudOpacity: 0.8
+  skyHold: 1
+  meteorModel: {fileID: 0}
+  meteorSize: 0.6
+  meteorFire: {fileID: 1947871717301538, guid: a990e3ac1318b834488c784d851f42a9, type: 3}
+  meteorFireScale: 0.35
+  meteorTrail: {fileID: 1273915125232972, guid: 73767e07adddc394d82b994801f89bbb, type: 3}
+  meteorTrailScale: 0.3
+  meteorStartOffset: {x: -2, y: 14, z: -7}
+  fallDuration: 2.2
+  fallAcceleration: 1.6
+  followDistance: 2.5
+  followHeight: 0.8
+  cameraStopHeight: 3
+  impactEffect: {fileID: 1121192042590650, guid: e1b08032bec16ba4eb1ae23cbd572664, type: 3}
+  impactScale: 0.5
+  impactShockwave: 0
+  impactShake: 0.25
+  impactShakeDuration: 0.8
+  scatterDuration: 0.9
+  splashEffect: {fileID: 1947871717301538, guid: a990e3ac1318b834488c784d851f42a9, type: 3}
+  splashScale: 0.12
+  splashDuration: 0.8
+  splashHeight: 2
+  shot2Hold: 1.5
+  cloudOpacityAfterImpact: 0.3
+  risePerLevel: 0.6
+  levelPause: 0.15
+  riseDust: {fileID: 1025285306637258, guid: d8f0099df63275647a8bcf646df1ca00, type: 3}
+  riseDustScale: 0.25
+  riseDustPerLevel: 5
+  riseShake: 0.06
+  shot3Direction: {x: 1, y: 0.6, z: -1.2}
+  shot3Distance: {x: 8, y: 6.5}
+  shot3Hold: 0.6
+  hopDuration: 0.28
+  hopHeight: 0.35
+  queenDelay: 0.15
+  shot4Offset: {x: 2.2, y: 1.4, z: -3.2}
+  shot4Smooth: 0.35
+  shot4Hold: 0.8
 --- !u!1 &1329013919
 GameObject:
   m_ObjectHideFlags: 0

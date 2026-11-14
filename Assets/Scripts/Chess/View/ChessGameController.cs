@@ -54,6 +54,8 @@ namespace SaturdayGame.Chess.View
         public ChessDesk desk;
         [Tooltip("音效（Chess 物体上的 ChessSounds），留空时自动在本物体上找；找不到就没有声音")]
         public ChessSounds sounds;
+        [Tooltip("第三阶段的开场过场（Chess 物体上的 Stage3Cutscene），留空时自动在本物体上找；找不到就用沙尘风暴")]
+        public Stage3Cutscene stage3Cutscene;
         [Tooltip("标题字体（NEW、Rule Book、卡片标题、状态栏、说话人、结束文字、按钮、棋子上的小字），留空用 Unity 默认字体加粗")]
         public Font titleFont;
         [Tooltip("正文字体（规则描述、规则书、提示、对白），留空用 Unity 默认字体")]
@@ -117,6 +119,8 @@ namespace SaturdayGame.Chess.View
         const float DragThreshold = 6f;
         bool busy;
         bool jumpToStage3;
+        /// <summary>风暴事件选了播过场：等 BoardRebuilt 事件时再播（那时候棋盘已经可以演第三阶段了）。</summary>
+        bool cutscenePending;
         Piece selected;
         List<Move> selectedMoves = new List<Move>();
         /// <summary>选中消防栓或青蛙时，鼠标停在哪个落点上，以及落下去会喷谁、拉谁（玩家走这一步就照这个来）。</summary>
@@ -134,6 +138,7 @@ namespace SaturdayGame.Chess.View
         {
             EnsureEventSystem();
             if (sounds == null) sounds = GetComponent<ChessSounds>();
+            if (stage3Cutscene == null) stage3Cutscene = GetComponent<Stage3Cutscene>();
             if (boardCamera == null) boardCamera = GetComponentInChildren<Camera>();
             cameraFit = boardCamera != null ? boardCamera.GetComponent<DeskCameraFit>() : null;
             if (cameraFit != null)
@@ -204,6 +209,12 @@ namespace SaturdayGame.Chess.View
         public void NewGame()
         {
             StopAllCoroutines();
+            if (stage3Cutscene != null)
+            {
+                stage3Cutscene.Abort();
+                stage3Cutscene.StopMusic();
+            }
+            cutscenePending = false;
             busy = false;
             cameraTurning = false;
             midViewShown = false;
@@ -756,6 +767,12 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(effectDuration);
                         break;
                     case GameEventType.Storm:
+                        // 有开场过场就交给过场演（在 BoardRebuilt 里播）
+                        if (stage3Cutscene != null && stage3Cutscene.isActiveAndEnabled && stage3Cutscene.play && boardCamera != null)
+                        {
+                            cutscenePending = true;
+                            break;
+                        }
                         // 沙尘卷起，盖住整个画面；棋盘在 BoardRebuilt 时换掉
                         for (float t = 0; t < 1f; t += Time.deltaTime / stormDuration)
                         {
@@ -769,7 +786,13 @@ namespace SaturdayGame.Chess.View
                         selected = null;
                         previewSquare = null;
                         preview = null;
-                        board.RebuildTerrain();
+                        if (cutscenePending)
+                        {
+                            cutscenePending = false;
+                            yield return PlayStage3Cutscene();
+                            break;
+                        }
+                        board.FinishStage3Reveal();
                         board.SyncAll();
                         // 沙尘盖着画面时换灯：平行光关掉，聚光灯打开
                         ApplyStageLighting(true);
@@ -955,10 +978,72 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>第一、二阶段只亮平行光；第三阶段平行光关掉，只亮聚光灯。</summary>
-        void ApplyStageLighting(bool stage3)
+        void ApplyStageLighting(bool stage3) => BlendStageLighting(stage3 ? 1f : 0f);
+
+        /// <summary>灯光在两个阶段之间过渡（开场过场里天慢慢变暗）：0 = 只亮平行光，1 = 只亮聚光灯。</summary>
+        void BlendStageLighting(float t)
         {
-            foreach (var light in directionalLights) if (light != null) light.enabled = !stage3;
-            foreach (var light in spotLights) if (light != null) light.enabled = stage3;
+            t = Mathf.Clamp01(t);
+            foreach (var light in directionalLights)
+            {
+                if (light == null) continue;
+                float full = BaseIntensity(light);
+                light.intensity = full * (1f - t);
+                light.enabled = t < 1f;
+            }
+            foreach (var light in spotLights)
+            {
+                if (light == null) continue;
+                float full = BaseIntensity(light);
+                light.intensity = full * t;
+                light.enabled = t > 0f;
+            }
+        }
+
+        /// <summary>灯在场景里设的亮度（第一次碰到时记下来，之后按它的比例调）。</summary>
+        float BaseIntensity(Light light)
+        {
+            if (!baseIntensities.TryGetValue(light, out float value))
+            {
+                value = light.intensity;
+                baseIntensities[light] = value;
+            }
+            return value;
+        }
+
+        readonly Dictionary<Light, float> baseIntensities = new Dictionary<Light, float>();
+
+        /// <summary>
+        /// 第三阶段的开场过场（Stage3Cutscene）：演完或跳过后棋盘摆成第三阶段的样子，镜头回到第三阶段的视角。
+        /// 和沙尘风暴那条路做的事一样，只是换成演出来。
+        /// </summary>
+        IEnumerator PlayStage3Cutscene()
+        {
+            cameraTurning = true;
+            hud.HideCaption();
+            hud.SetStage3(true);
+            if (cameraFit != null) cameraFit.SetOrbit(0f, 0f, 1f);
+            yield return stage3Cutscene.Play(new Stage3Cutscene.Context
+            {
+                Board = board,
+                Camera = boardCamera,
+                CameraFit = cameraFit,
+                GamePitch = stage3CameraPitch > 0f ? stage3CameraPitch : cameraFit != null ? cameraFit.pitch : 65f,
+                GameFieldOfView = stage3FieldOfView,
+                GameZoom = stage3Zoom,
+                BlendLighting = BlendStageLighting,
+                FinishBoard = () =>
+                {
+                    board.FinishStage3Reveal();
+                    board.SyncAll();
+                    ApplyStageLighting(true);
+                    board.Highlight(null, null, null, null);
+                },
+                HudRoot = transform,
+            });
+            FaceCamera.FollowCameraPitch = true;
+            cameraTurning = false;
+            orbitUnlocked = true;
         }
 
         /// <summary>3D 模型（例如树）用的是受光照的材质，场景里没有灯时补一盏平行光，不然模型是黑的。占位图形和贴图不受光照影响。</summary>
