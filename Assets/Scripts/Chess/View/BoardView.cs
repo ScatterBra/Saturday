@@ -418,7 +418,9 @@ namespace SaturdayGame.Chess.View
             treeShown.Clear();
             treeVanished = false;
             board = newBoard;
-            stage3Shown = newBoard != null && newBoard.Stage3;
+            // 新的一局总是从平地开始显示。调试跳关时逻辑在开局就已经进了第三阶段，
+            // 但后面一定跟着风暴事件，由过场（或沙尘风暴那条路的 FinishStage3Reveal）再把第三阶段演出来
+            stage3Shown = false;
             revealing = false;
             hiddenLava.Clear();
             terrainRise = float.PositiveInfinity;

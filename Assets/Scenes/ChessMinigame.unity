@@ -1255,9 +1255,24 @@ MonoBehaviour:
   allowSkip: 1
   fieldOfView: 50
   blendBackDuration: 1.2
+  handheldPosition: 0.025
+  handheldAngle: 1.2
+  handheldSpeed: 1.3
   music: {fileID: 8300000, guid: 2f29ae63e7bf94b4994e8d397b477c3b, type: 3}
   musicVolume: 1
   loopMusic: 0
+  playIntroShot: 1
+  introDuration: 6
+  introFrom: {x: 1, y: 0}
+  introTo: {x: 5, y: 0}
+  introHeight: 0.45
+  introBack: 0.9
+  introPitch: 6
+  introHandheld: 1
+  dustStorm: {fileID: 1344314377593938, guid: 9e03786a9517b604d8e930182607a128, type: 3}
+  dustStormScale: 0.6
+  dustStormPosition: {x: 0, y: 0.3, z: 0.5}
+  dustStormAt: 2
   kingEffect: {fileID: 1000011128802252, guid: 96730f8640590934eacb6f860058e7f9, type: 3}
   kingEffectScale: 0.35
   kingEffectLift: 0.4
@@ -1273,21 +1288,31 @@ MonoBehaviour:
   cloudFormDuration: 3
   cloudOpacity: 0.8
   skyHold: 1
-  meteorModel: {fileID: 0}
-  meteorSize: 0.6
-  meteorFire: {fileID: 1947871717301538, guid: a990e3ac1318b834488c784d851f42a9, type: 3}
-  meteorFireScale: 0.35
-  meteorTrail: {fileID: 1273915125232972, guid: 73767e07adddc394d82b994801f89bbb, type: 3}
-  meteorTrailScale: 0.3
-  meteorStartOffset: {x: -2, y: 14, z: -7}
-  fallDuration: 2.2
+  shot1Handheld: 0.8
+  meteorEffect: {fileID: 1722250247140862, guid: ef134ce1a2a98d94fb68c860d9c736c6, type: 3}
+  meteorEffectScale: 0.15
+  meteorCount: 5
+  meteorLandTimes:
+  - 1
+  - 3.4
+  - 5
+  - 6.2
+  - 7.6
+  meteorFallDuration: 1.8
   fallAcceleration: 1.6
-  followDistance: 2.5
-  followHeight: 0.8
-  cameraStopHeight: 3
+  meteorStartHeight: {x: 10, y: 14}
+  meteorStartDirection: {x: 0.3, y: 1}
+  meteorStartDistance: {x: 4, y: 8}
+  shot2Square: {x: 0, y: 0}
+  shot2Offset: {x: -0.6, y: 0.45, z: -0.6}
+  trackSmooth: 0.22
+  trackLinger: 0.35
+  shot2Handheld: 1.6
   impactEffect: {fileID: 1121192042590650, guid: e1b08032bec16ba4eb1ae23cbd572664, type: 3}
-  impactScale: 0.5
+  impactScale: 0.45
   impactShockwave: 0
+  firstImpactShake: 0.35
+  firstImpactShakeDuration: 1.2
   impactShake: 0.25
   impactShakeDuration: 0.8
   scatterDuration: 0.9
@@ -1295,7 +1320,7 @@ MonoBehaviour:
   splashScale: 0.12
   splashDuration: 0.8
   splashHeight: 2
-  shot2Hold: 1.5
+  shot2Hold: 2
   cloudOpacityAfterImpact: 0.3
   risePerLevel: 0.6
   levelPause: 0.15

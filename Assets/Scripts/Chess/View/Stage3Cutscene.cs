@@ -9,8 +9,10 @@ namespace SaturdayGame.Chess.View
     /// <summary>
     /// 第三阶段的开场过场（挂在 Chess 物体上，和 ChessGameController 放在一起；没有它就还是原来的沙尘风暴）。
     ///
+    ///   镜头 0：像一枚棋子的视角，手持晃动着从 b1 滑到 f1，沙尘暴卷进来。
     ///   镜头 1：贴着棋盘对准朋友的王，王身上放特效，镜头往上摇看天空，乌云聚起来、天变暗。
-    ///   镜头 2：镜头跟着陨石往下砸，穿过云层，砸进棋盘变成岩浆坑；冲击把棋子吹到第三阶段的位置，火球溅到其他岩浆格。
+    ///   镜头 2：战地记者视角，站在 a1 外面手持拍摄：第一颗陨石突然砸在眼前，镜头剧烈晃动；再一颗一颗追着剩下的陨石砸下来。
+    ///          每颗砸出一个岩浆坑；第一颗的冲击波把棋子吹到第三阶段的位置。
     ///   镜头 3：山一层一层升起来，棋子跟着升。
     ///   镜头 4：王和王后跑上山、逃进城堡。
     ///   最后镜头平滑回到第三阶段的游戏视角。
@@ -30,11 +32,41 @@ namespace SaturdayGame.Chess.View
         [Tooltip("过场演完后，镜头回到游戏视角用多久")]
         public float blendBackDuration = 1.2f;
 
+        [Header("Handheld (shared by every handheld shot)")]
+        [Tooltip("手持晃动：位置晃多少（世界单位）、角度晃多少（度）、晃得多快。每个镜头再乘自己的倍数")]
+        public float handheldPosition = 0.025f;
+        public float handheldAngle = 1.2f;
+        public float handheldSpeed = 1.3f;
+
         [Header("Music")]
         [Tooltip("过场开始时播放（stage3.wav）。跳过过场不会停")]
         public AudioClip music;
         [Range(0f, 1f)] public float musicVolume = 1f;
         public bool loopMusic;
+
+        [Header("Shot 0: piece's-eye view sliding along rank 1, dust storm rolls in")]
+        [Tooltip("关掉就跳过这个镜头，从镜头 1 开始")]
+        public bool playIntroShot = true;
+        [Tooltip("镜头总长（秒）")]
+        public float introDuration = 6f;
+        [Tooltip("从哪一格滑到哪一格（a1 = (0, 0)，b1 = (1, 0)，f1 = (5, 0)）")]
+        public Vector2Int introFrom = new Vector2Int(1, 0);
+        public Vector2Int introTo = new Vector2Int(5, 0);
+        [Tooltip("相机离棋盘多高（棋子眼睛的高度）")]
+        public float introHeight = 0.45f;
+        [Tooltip("相机从格子中心往玩家那边退多少（0 = 正好在格子中间；0.5 = 棋盘边上；再大就退到棋盘外，不会被第一排的棋子挡住）")]
+        public float introBack = 0.9f;
+        [Tooltip("相机往下看多少度（0 = 平视棋盘对面）")]
+        [Range(-30f, 45f)] public float introPitch = 6f;
+        [Tooltip("手持晃动的倍数（1 = Handheld 里的值）")]
+        public float introHandheld = 1f;
+        [Tooltip("沙尘暴（ParticlePack 的 DustStorm）")]
+        public GameObject dustStorm;
+        public float dustStormScale = 0.6f;
+        [Tooltip("沙尘暴放在棋盘哪里（x 左右、y 高度、z 前后，0 = 棋盘中心）")]
+        public Vector3 dustStormPosition = new Vector3(0f, 0.3f, 0.5f);
+        [Tooltip("镜头开始后第几秒出现沙尘暴")]
+        public float dustStormAt = 2f;
 
         [Header("Shot 1: king casts, camera tilts up, clouds form")]
         [Tooltip("王身上放的特效（PlasmaExplosionEffect）")]
@@ -66,38 +98,48 @@ namespace SaturdayGame.Chess.View
         [Range(0f, 1f)] public float cloudOpacity = 0.8f;
         [Tooltip("看着天空停多久")]
         public float skyHold = 1f;
+        [Tooltip("手持晃动的倍数（1 = Handheld 里的值，0 = 不晃）")]
+        public float shot1Handheld = 0.8f;
 
-        [Header("Shot 2: meteor")]
-        [Tooltip("陨石模型，留空就用一个深色球")]
-        public GameObject meteorModel;
-        [Tooltip("陨石大小（世界单位）")]
-        public float meteorSize = 0.6f;
-        [Tooltip("陨石身上的火（FireBall），火苗朝着陨石飞的反方向")]
-        public GameObject meteorFire;
-        public float meteorFireScale = 0.35f;
-        [Tooltip("陨石拖的烟（SmokeEffect），留空就没有")]
-        public GameObject meteorTrail;
-        public float meteorTrailScale = 0.3f;
-        [Tooltip("陨石从砸落点的哪里出发：x 左右、y 高度、z 前后（负数 = 玩家这边）")]
-        public Vector3 meteorStartOffset = new Vector3(-2f, 14f, -7f);
-        [Tooltip("陨石落下用多久")]
-        public float fallDuration = 2.2f;
+        [Header("Shot 2: meteor shower, war-reporter view from a1")]
+        [Tooltip("陨石的拖尾（ParticlePack 的 RocketTrail：只用里面的火、烟、火星三条拖尾，没有实体）")]
+        public GameObject meteorEffect;
+        public float meteorEffectScale = 0.15f;
+        [Tooltip("几颗陨石。先砸岩浆格（每颗砸出一个岩浆坑），岩浆格不够就砸空地（只爆炸）；陨石不够时剩下的岩浆格由小火球溅过去")]
+        public int meteorCount = 5;
+        [Tooltip("每颗陨石在这个镜头开始后第几秒落地（不够就按最后一个间隔往后排）。第一颗要快：镜头一开始没看见它，它就突然砸下来")]
+        public float[] meteorLandTimes = { 1f, 3.4f, 5f, 6.2f, 7.6f };
+        [Tooltip("每颗陨石从天上落到地面用多久")]
+        public float meteorFallDuration = 1.8f;
         [Tooltip("越落越快：1 = 匀速，越大最后越快")]
         [Range(1f, 3f)] public float fallAcceleration = 1.6f;
-        [Tooltip("相机跟在陨石后面多远")]
-        public float followDistance = 2.5f;
-        [Tooltip("相机比陨石高多少")]
-        public float followHeight = 0.8f;
-        [Tooltip("陨石落到这个高度以下时相机停住，看着它砸下去")]
-        public float cameraStopHeight = 3f;
+        [Tooltip("陨石从多高的地方出发（随机在两个值之间）")]
+        public Vector2 meteorStartHeight = new Vector2(10f, 14f);
+        [Tooltip("陨石出发点在落点的哪个方向（会随机偏一点）：x 左右、z 前后（正数 = 棋盘对面，从远处斜着砸过来，镜头看得见）")]
+        public Vector2 meteorStartDirection = new Vector2(0.3f, 1f);
+        [Tooltip("陨石出发点离落点水平多远（随机在两个值之间）")]
+        public Vector2 meteorStartDistance = new Vector2(4f, 8f);
+        [Tooltip("相机站在哪一格（a1 = (0, 0)）")]
+        public Vector2Int shot2Square = new Vector2Int(0, 0);
+        [Tooltip("相机相对这一格中心的位置：x 左右、y 高度（棋子眼睛）、z 前后（负数 = 往棋盘外退，不会被棋子挡住）")]
+        public Vector3 shot2Offset = new Vector3(-0.6f, 0.45f, -0.6f);
+        [Tooltip("镜头跟着陨石转的平滑时间：越大越跟不上（像人手转过去追），越小越跟手")]
+        public float trackSmooth = 0.22f;
+        [Tooltip("陨石落地后镜头在落点上停多久，再去追下一颗")]
+        public float trackLinger = 0.35f;
+        [Tooltip("手持晃动的倍数（战地记者：比别的镜头晃得厉害）")]
+        public float shot2Handheld = 1.6f;
         [Tooltip("砸到棋盘时的爆炸（BigExplosion）")]
         public GameObject impactEffect;
-        public float impactScale = 0.5f;
+        public float impactScale = 0.45f;
         [Tooltip("保留爆炸特效里的冲击波扭曲圈（很大，会盖住一片棋盘）")]
         public bool impactShockwave;
-        [Tooltip("砸下去时镜头震多厉害、震多久")]
-        public float impactShake = 0.25f;
-        public float impactShakeDuration = 0.8f;
+        [Tooltip("第一颗砸下来时镜头剧烈震多厉害、震多久")]
+        public float firstImpactShake = 0.35f;
+        public float firstImpactShakeDuration = 1.2f;
+        [Tooltip("后面每颗砸下来时镜头震多厉害、震多久")]
+        public float impactShake = 0.18f;
+        public float impactShakeDuration = 0.7f;
         [Tooltip("棋子被冲击波吹到新位置用多久")]
         public float scatterDuration = 0.9f;
         [Tooltip("溅到其他岩浆格的小火球（FireBall），留空就直接冒出岩浆")]
@@ -106,8 +148,8 @@ namespace SaturdayGame.Chess.View
         [Tooltip("小火球飞多久、飞多高")]
         public float splashDuration = 0.8f;
         public float splashHeight = 2f;
-        [Tooltip("砸完后停多久")]
-        public float shot2Hold = 1.5f;
+        [Tooltip("最后一颗砸完后停多久（镜头慢慢转回棋盘中间，看着一片火海）")]
+        public float shot2Hold = 2f;
         [Tooltip("砸完后云慢慢淡到这个不透明度（之后镜头从上面看，云太浓会挡住棋盘）")]
         [Range(0f, 1f)] public float cloudOpacityAfterImpact = 0.3f;
 
@@ -163,6 +205,7 @@ namespace SaturdayGame.Chess.View
         bool running;
         bool skipped;
         float shakeAmount, shakeUntil, shakeDuration;
+        float handheldSeed;
         readonly List<GameObject> temporary = new List<GameObject>();
         readonly List<Canvas> hiddenCanvases = new List<Canvas>();
         AudioSource musicSource;
@@ -176,6 +219,7 @@ namespace SaturdayGame.Chess.View
             running = true;
             skipped = false;
             shakeUntil = 0f;
+            handheldSeed = UnityEngine.Random.Range(0f, 100f);
             PlayMusic();
             HideHud(true);
             if (ctx.CameraFit != null) ctx.CameraFit.enabled = false;
@@ -227,12 +271,68 @@ namespace SaturdayGame.Chess.View
             // 王、王后过场里待的格子（风暴前站的地方，被冲击波挤开的话换到最近的空格）
             var temp = new Dictionary<int, Coord>();
 
+            if (playIntroShot) yield return ShotIntro();
             yield return ShotKing(king);
             yield return ShotMeteor(board, royals, royalIds, temp);
             yield return ShotMountains(board, royals, royalIds, temp);
             yield return ShotEscape(board, royals, temp);
             running = false;
         }
+
+        // ---------- 镜头 0 ----------
+
+        /// <summary>像一枚棋子的视角，贴着第一排从 introFrom 滑到 introTo，带手持晃动；第 dustStormAt 秒沙尘暴卷进来。</summary>
+        IEnumerator ShotIntro()
+        {
+            var from = BoardView.SquareCenter(new Coord(introFrom.x, introFrom.y)) + new Vector3(0f, introHeight, -introBack);
+            var to = BoardView.SquareCenter(new Coord(introTo.x, introTo.y)) + new Vector3(0f, introHeight, -introBack);
+            var baseRotation = Quaternion.Euler(introPitch, 0f, 0f);
+            GameObject storm = null;
+            float duration = Mathf.Max(0.1f, introDuration);
+            for (float t = 0; t < duration; t += Time.deltaTime)
+            {
+                if (storm == null && dustStorm != null && t >= dustStormAt) storm = SpawnDustStorm();
+                float k = Mathf.SmoothStep(0f, 1f, t / duration);
+                SetHandheldCamera(Vector3.Lerp(from, to, k), baseRotation, introHandheld);
+                yield return null;
+            }
+            // 沙尘暴不再卷新的沙子，已经卷起来的慢慢散掉（镜头 1 开始时还看得到一点）
+            if (storm != null)
+                foreach (var ps in storm.GetComponentsInChildren<ParticleSystem>()) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+        }
+
+        GameObject SpawnDustStorm()
+        {
+            var fx = ParticleFx.Spawn(dustStorm, ctx.Board.Root, dustStormPosition, dustStormScale);
+            fx.name = "Cutscene Dust Storm";
+            // 原特效是预热好的（一出现就满屏），关掉预热，沙尘从无到有卷起来
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var main = ps.main;
+                main.prewarm = false;
+                ps.Clear(false);
+                ps.Play(false);
+            }
+            temporary.Add(fx);
+            return fx;
+        }
+
+        /// <summary>
+        /// 手持镜头：在给定的位置和朝向上叠一层晃动（几层不同频率的柏林噪声，位置和角度一起轻轻晃）。
+        /// amount 是这个镜头的倍数。每次过场的噪声起点不一样，晃法不重复。
+        /// </summary>
+        void SetHandheldCamera(Vector3 localPosition, Quaternion localRotation, float amount)
+        {
+            float s = Time.time * handheldSpeed;
+            float p = handheldPosition * amount, a = handheldAngle * amount;
+            var wobble = new Vector3(Noise(handheldSeed, s), Noise(handheldSeed + 10f, s), Noise(handheldSeed + 20f, s)) * p;
+            var tilt = Quaternion.Euler(Noise(handheldSeed + 30f, s) * a, Noise(handheldSeed + 40f, s) * a, Noise(handheldSeed + 50f, s) * a * 0.5f);
+            SetCamera(localPosition + wobble, localRotation * tilt);
+        }
+
+        /// <summary>-1 到 1 之间平滑变化的噪声：两层频率叠加，比单层更像手抖。</summary>
+        static float Noise(float seed, float time) =>
+            (Mathf.PerlinNoise(seed, time) - 0.5f) * 1.4f + (Mathf.PerlinNoise(seed + 5f, time * 2.7f) - 0.5f) * 0.6f;
 
         // ---------- 镜头 1 ----------
 
@@ -246,7 +346,7 @@ namespace SaturdayGame.Chess.View
 
             for (float t = 0; t < shot1Lead; t += Time.deltaTime)
             {
-                SetCamera(camPos, startRotation);
+                SetHandheldCamera(camPos, startRotation, shot1Handheld);
                 yield return null;
             }
 
@@ -259,7 +359,7 @@ namespace SaturdayGame.Chess.View
             }
             for (float t = 0; t < kingEffectHold; t += Time.deltaTime)
             {
-                SetCamera(camPos, startRotation);
+                SetHandheldCamera(camPos, startRotation, shot1Handheld);
                 yield return null;
             }
 
@@ -275,7 +375,7 @@ namespace SaturdayGame.Chess.View
                 float tilt = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / Mathf.Max(0.01f, tiltDuration)));
                 float form = Mathf.Clamp01(t / Mathf.Max(0.01f, cloudFormDuration));
                 var rotation = Quaternion.Euler(Mathf.Lerp(startPitch, -tiltUpAngle, tilt), yaw, 0f);
-                SetCamera(camPos + Vector3.up * tiltRise * tilt, rotation);
+                SetHandheldCamera(camPos + Vector3.up * tiltRise * tilt, rotation, shot1Handheld);
                 ctx.Board.SetStormCloudOpacity(cloudOpacity * form);
                 ctx.BlendLighting?.Invoke(form);
                 yield return null;
@@ -284,138 +384,270 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 镜头 2 ----------
 
+        /// <summary>一颗陨石：从 Start 斜着砸到 End，第 Land 秒落地。</summary>
+        sealed class Meteor
+        {
+            public Coord Target;
+            public Vector3 Start, End;
+            public float Land;
+            public GameObject Trail;
+            public bool Landed;
+            public Vector3 Position(float time, float fall, float acceleration)
+            {
+                float u = Mathf.Clamp01((time - (Land - fall)) / Mathf.Max(0.05f, fall));
+                return Vector3.Lerp(Start, End, Mathf.Pow(u, acceleration));
+            }
+        }
+
+        /// <summary>
+        /// 战地记者视角：相机站在 a1 外面（棋子的高度），手持晃动。
+        /// 第一颗陨石突然砸在眼前，镜头剧烈晃动；然后镜头抬头去追第二颗、第三颗……一路跟着它们砸下来。
+        /// 第一颗砸中时冲击波把棋子吹到第三阶段的位置。每颗砸在一格岩浆上，砸出岩浆坑。
+        /// </summary>
         IEnumerator ShotMeteor(Board board, List<Piece> royals, HashSet<int> royalIds, Dictionary<int, Coord> temp)
         {
-            var lava = new List<Coord>();
-            for (int i = 0; i < 64; i++)
-                if (board.IsLava(Coord.FromIndex(i))) lava.Add(Coord.FromIndex(i));
-            // 砸在离棋盘中心最近的岩浆格（画面里最好看），没有岩浆就砸在中间
-            var impact = new Coord(3, 4);
-            float best = float.MaxValue;
-            foreach (var c in lava)
-            {
-                float d = (BoardView.SquareCenter(c) - Vector3.zero).sqrMagnitude;
-                if (d < best) { best = d; impact = c; }
-            }
-            var impactPos = ctx.Board.PiecePosition(impact);
-            var start = impactPos + meteorStartOffset;
+            var camPos = BoardView.SquareCenter(new Coord(shot2Square.x, shot2Square.y)) + shot2Offset;
+            var boardCenter = new Vector3(0f, 0.3f, 0f);
+            var meteors = PlanMeteors(board, camPos, boardCenter, out var leftoverLava);
+            if (meteors.Count == 0) yield break;
 
-            var meteor = BuildMeteor(start, impactPos - start);
-            Vector3 camPos = start, look = impactPos;
-            bool cameraStopped = false;
-            for (float t = 0; t < 1f; t += Time.deltaTime / Mathf.Max(0.05f, fallDuration))
+            // 一开始看着第一颗要砸的地方（它从画面外突然砸进来）
+            var firstEnd = meteors[0].End + Vector3.up * 0.3f;
+            var look = Vector3.Lerp(boardCenter, firstEnd, 0.75f);
+            var lookVelocity = Vector3.zero;
+            float lastLand = meteors[meteors.Count - 1].Land;
+            float total = lastLand + shot2Hold;
+            bool scattered = false;
+
+            for (float t = 0; t < total; t += Time.deltaTime)
             {
-                float k = Mathf.Pow(t, fallAcceleration);
-                var p = Vector3.Lerp(start, impactPos, k);
-                meteor.transform.position = ctx.Board.Root.TransformPoint(p);
-                if (!cameraStopped && p.y < cameraStopHeight) cameraStopped = true;
-                if (!cameraStopped)
+                // 陨石：到时间就出现，按轨迹往下砸，落地就爆炸
+                for (int i = 0; i < meteors.Count; i++)
                 {
-                    var dir = (impactPos - start).normalized;
-                    camPos = p - dir * followDistance + Vector3.up * followHeight;
-                    look = Vector3.Lerp(p, impactPos, 0.15f);
-                }
-                else look = Vector3.Lerp(look, impactPos, 1f - Mathf.Exp(-6f * Time.deltaTime));
-                SetCamera(camPos, LookRotation(look - camPos));
-                yield return null;
-            }
-            Destroy(meteor);
-            temporary.Remove(meteor);
+                    var m = meteors[i];
+                    if (m.Landed) continue;
+                    if (t >= m.Land - meteorFallDuration && m.Trail == null) m.Trail = SpawnMeteorTrail(m.Position(t, meteorFallDuration, fallAcceleration));
+                    if (m.Trail != null) m.Trail.transform.localPosition = m.Position(t, meteorFallDuration, fallAcceleration);
+                    if (t < m.Land) continue;
 
-            // 砸中：爆炸、震动、岩浆坑、棋子被吹到第三阶段的位置
-            if (impactEffect != null)
-            {
-                var fx = ParticleFx.Spawn(impactEffect, ctx.Board.Root, impactPos + Vector3.up * 0.2f, impactScale);
-                fx.name = "Cutscene Meteor Impact";
-                if (!impactShockwave)
+                    m.Landed = true;
+                    StopTrail(m.Trail);
+                    Explode(m.End);
+                    if (board.IsLava(m.Target)) ctx.Board.RevealLava(m.Target);
+                    ctx.Board.Highlight(null, null, null, null);
+                    if (i == 0) Shake(firstImpactShake, firstImpactShakeDuration);
+                    else Shake(impactShake, impactShakeDuration);
+                    if (!scattered)
+                    {
+                        scattered = true;
+                        ScatterPieces(board, royals, royalIds, temp);
+                    }
+                    // 最后一颗砸完，陨石没砸到的岩浆格由小火球溅过去
+                    if (i == meteors.Count - 1)
+                    {
+                        float delay = 0f;
+                        foreach (var c in leftoverLava)
+                        {
+                            StartCoroutine(Splash(m.End, c, delay));
+                            delay += 0.08f;
+                        }
+                    }
+                }
+
+                // 镜头：第一颗砸完后停一下，然后一颗一颗追；追的那颗落地后在落点上停一会儿再去追下一颗
+                Vector3 target;
+                if (t < meteors[0].Land + trackLinger) target = Vector3.Lerp(boardCenter, firstEnd, 0.75f);
+                else
                 {
-                    var shockwave = fx.transform.Find("Shockwave");
-                    if (shockwave != null) shockwave.gameObject.SetActive(false);
+                    var next = meteors.Find(m => t < m.Land + trackLinger && m != meteors[0]);
+                    if (next == null)
+                    {
+                        // 全砸完了：慢慢转回棋盘中间看着一片火海，云也淡下来
+                        float u = Mathf.Clamp01((t - lastLand - trackLinger) / Mathf.Max(0.01f, shot2Hold));
+                        target = Vector3.Lerp(meteors[meteors.Count - 1].End + Vector3.up * 0.3f, boardCenter, Mathf.SmoothStep(0f, 1f, u));
+                        ctx.Board.SetStormCloudOpacity(Mathf.Lerp(cloudOpacity, cloudOpacityAfterImpact, u));
+                    }
+                    else if (next.Landed) target = next.End + Vector3.up * 0.3f;
+                    // 还没出现的陨石：先往它要来的天上看（像记者听见声音先抬头）
+                    else target = next.Position(Mathf.Max(t, next.Land - meteorFallDuration * 0.85f), meteorFallDuration, fallAcceleration);
                 }
-                ParticleFx.PlayOnce(fx);
-                temporary.Add(fx);
-            }
-            Shake(impactShake, impactShakeDuration);
-            ctx.Board.RevealLava(impact);
-            ctx.Board.Highlight(null, null, null, null);
-
-            PlaceRoyals(board, royals, temp);
-            foreach (var piece in board.AllPieces)
-            {
-                if (!piece.OnBoard || !ctx.Board.TryGetPieceView(piece.Id, out var view)) continue;
-                if (!view.gameObject.activeSelf)
-                {
-                    // 风暴里新冒出来的棋子（补回来的王后）：直接出现在它的位置
-                    view.gameObject.SetActive(true);
-                    view.localPosition = ctx.Board.PiecePosition(royalIds.Contains(piece.Id) ? temp[piece.Id] : piece.Pos);
-                    continue;
-                }
-                var to = royalIds.Contains(piece.Id) ? temp[piece.Id] : piece.Pos;
-                StartCoroutine(ctx.Board.AnimateKnockback(piece.Id, to, scatterDuration));
-            }
-
-            // 小火球溅到其他岩浆格
-            float delay = 0f;
-            foreach (var c in lava)
-            {
-                if (c == impact) continue;
-                StartCoroutine(Splash(impactPos, c, delay));
-                delay += 0.08f;
-            }
-
-            float hold = shot2Hold + delay;
-            for (float t = 0; t < hold; t += Time.deltaTime)
-            {
-                ctx.Board.SetStormCloudOpacity(Mathf.Lerp(cloudOpacity, cloudOpacityAfterImpact, t / Mathf.Max(0.01f, hold)));
-                SetCamera(camPos, LookRotation(look - camPos));
+                look = Vector3.SmoothDamp(look, target, ref lookVelocity, trackSmooth);
+                SetHandheldCamera(camPos, LookRotation(look - camPos), shot2Handheld);
                 yield return null;
             }
         }
 
-        GameObject BuildMeteor(Vector3 localStart, Vector3 localDirection)
+        /// <summary>
+        /// 定好每颗陨石砸哪里、什么时候落地。先砸岩浆格，岩浆格不够就砸普通空格（不砸城堡）。
+        /// 第一颗砸在镜头正前方；第二颗挑离第一颗最远的方向，镜头要转过去追；其余随机。
+        /// leftoverLava = 陨石不够、没砸到的岩浆格。
+        /// </summary>
+        List<Meteor> PlanMeteors(Board board, Vector3 camPos, Vector3 boardCenter, out List<Coord> leftoverLava)
         {
-            var meteor = new GameObject("Cutscene Meteor");
-            meteor.transform.SetParent(ctx.Board.Root, false);
-            meteor.transform.localPosition = localStart;
-            temporary.Add(meteor);
-
-            GameObject body;
-            if (meteorModel != null) body = Instantiate(meteorModel, meteor.transform);
-            else
+            var lava = new List<Coord>();
+            var plain = new List<Coord>();
+            for (int i = 0; i < 64; i++)
             {
-                body = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                Destroy(body.GetComponent<Collider>());
-                body.transform.SetParent(meteor.transform, false);
-                var renderer = body.GetComponent<Renderer>();
-                var material = renderer.material;
-                var rock = new Color(0.22f, 0.16f, 0.13f);
-                if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", rock);
-                material.color = rock;
-                if (material.HasProperty("_EmissionColor"))
+                var c = Coord.FromIndex(i);
+                if (board.IsLava(c)) lava.Add(c);
+                else if (!board.IsCastle(c) && board.Height(c) == 0) plain.Add(c);
+            }
+            Shuffle(lava);
+            Shuffle(plain);
+            var targets = new List<Coord>(lava);
+            targets.AddRange(plain);
+            int count = Mathf.Clamp(meteorCount, 0, targets.Count);
+            targets.RemoveRange(count, targets.Count - count);
+            leftoverLava = lava.FindAll(c => !targets.Contains(c));
+            if (count == 0) return new List<Meteor>();
+
+            Vector3 Direction(Coord c) => (BoardView.SquareCenter(c) - camPos).normalized;
+            var forward = (boardCenter - camPos).normalized;
+            // 第一颗：在镜头正前方、不要太近
+            int first = 0;
+            float best = float.MinValue;
+            for (int i = 0; i < targets.Count; i++)
+            {
+                float distance = (BoardView.SquareCenter(targets[i]) - camPos).magnitude;
+                float score = Vector3.Dot(Direction(targets[i]), forward) - (distance < 2.5f ? 1f : 0f);
+                if (score > best) { best = score; first = i; }
+            }
+            (targets[0], targets[first]) = (targets[first], targets[0]);
+            // 第二颗：和第一颗方向差得最远，镜头要转过去
+            if (targets.Count > 2)
+            {
+                int second = 1;
+                float least = float.MaxValue;
+                for (int i = 1; i < targets.Count; i++)
                 {
-                    material.EnableKeyword("_EMISSION");
-                    material.SetColor("_EmissionColor", new Color(1.2f, 0.35f, 0.05f));
+                    float dot = Vector3.Dot(Direction(targets[i]), Direction(targets[0]));
+                    if (dot < least) { least = dot; second = i; }
                 }
+                (targets[1], targets[second]) = (targets[second], targets[1]);
             }
-            body.transform.localPosition = Vector3.zero;
-            body.transform.localScale = Vector3.one * meteorSize;
 
-            // 火和烟挂在一个朝着飞行反方向的支点下：粒子包里的特效默认往上喷，转过来就往后喷
-            var tail = new GameObject("Tail");
-            tail.transform.SetParent(meteor.transform, false);
-            tail.transform.localRotation = Quaternion.FromToRotation(Vector3.up, -localDirection.normalized);
-            if (meteorFire != null)
+            var meteors = new List<Meteor>();
+            var away = new Vector3(meteorStartDirection.x, 0f, meteorStartDirection.y);
+            if (away.sqrMagnitude < 0.0001f) away = Vector3.forward;
+            away.Normalize();
+            for (int i = 0; i < targets.Count; i++)
             {
-                var fx = ParticleFx.Spawn(meteorFire, tail.transform, Vector3.zero, meteorFireScale);
-                ParticleFx.Warm(fx, 0.5f);
+                var end = ctx.Board.PiecePosition(targets[i]);
+                var direction = Quaternion.Euler(0f, UnityEngine.Random.Range(-35f, 35f), 0f) * away;
+                var start = end + direction * UnityEngine.Random.Range(meteorStartDistance.x, meteorStartDistance.y)
+                                + Vector3.up * UnityEngine.Random.Range(meteorStartHeight.x, meteorStartHeight.y);
+                meteors.Add(new Meteor { Target = targets[i], Start = start, End = end, Land = LandTime(i) });
             }
-            if (meteorTrail != null)
+            return meteors;
+        }
+
+        /// <summary>第 i 颗陨石的落地时间：按 meteorLandTimes，不够就按最后一个间隔往后排。</summary>
+        float LandTime(int i)
+        {
+            var times = meteorLandTimes != null && meteorLandTimes.Length > 0 ? meteorLandTimes : new[] { 1f };
+            if (i < times.Length) return times[i];
+            float step = times.Length > 1 ? times[times.Length - 1] - times[times.Length - 2] : 1.2f;
+            return times[times.Length - 1] + step * (i - times.Length + 1);
+        }
+
+        static void Shuffle<T>(List<T> list)
+        {
+            for (int i = list.Count - 1; i > 0; i--)
             {
-                var fx = ParticleFx.Spawn(meteorTrail, tail.transform, Vector3.zero, meteorTrailScale);
-                fx.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-                ParticleFx.Warm(fx, 0.1f);
+                int k = UnityEngine.Random.Range(0, i + 1);
+                (list[i], list[k]) = (list[k], list[i]);
             }
-            return meteor;
+        }
+
+        /// <summary>
+        /// 陨石的拖尾：RocketTrail 本来是发射火箭粒子、火和烟挂在火箭粒子上当子发射器。
+        /// 这里只留火（Fire Small）、火星（Embers）、烟（Smoke）三条，改成普通的世界空间发射器挂在一个物体上，
+        /// 按飞过的距离发射粒子，物体往下砸就拖出一道火和烟。没有实体。
+        /// </summary>
+        GameObject SpawnMeteorTrail(Vector3 localPosition)
+        {
+            var go = new GameObject("Cutscene Meteor");
+            go.transform.SetParent(ctx.Board.Root, false);
+            go.transform.localPosition = localPosition;
+            temporary.Add(go);
+            if (meteorEffect == null) return go;
+
+            var fx = Instantiate(meteorEffect, go.transform);
+            fx.transform.localPosition = Vector3.zero;
+            fx.transform.localScale = Vector3.one * meteorEffectScale;
+            var root = fx.GetComponent<ParticleSystem>();
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var main = ps.main;
+                main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                main.prewarm = false;
+                ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+                if (ps == root)
+                {
+                    // 火箭本身不要：不发射、不显示，也不再带子发射器
+                    var emission = ps.emission;
+                    emission.enabled = false;
+                    var sub = ps.subEmitters;
+                    sub.enabled = false;
+                    var renderer = ps.GetComponent<ParticleSystemRenderer>();
+                    if (renderer != null) renderer.enabled = false;
+                    continue;
+                }
+                if (ps.name != "Fire Small" && ps.name != "Embers" && ps.name != "Smoke")
+                {
+                    ps.gameObject.SetActive(false);
+                    continue;
+                }
+                // 贴在拖尾物体上，粒子留在世界里，才拖得出一道
+                ps.transform.SetParent(go.transform, false);
+                ps.transform.localPosition = Vector3.zero;
+                ps.transform.localScale = Vector3.one * meteorEffectScale;
+                main.simulationSpace = ParticleSystemSimulationSpace.World;
+                main.loop = true;
+            }
+            foreach (var ps in go.GetComponentsInChildren<ParticleSystem>()) ps.Play(false);
+            return go;
+        }
+
+        /// <summary>陨石落地：拖尾不再发射，已经拖出去的烟慢慢散掉再删。</summary>
+        void StopTrail(GameObject trail)
+        {
+            if (trail == null) return;
+            foreach (var ps in trail.GetComponentsInChildren<ParticleSystem>()) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            Destroy(trail, 5f);
+        }
+
+        void Explode(Vector3 at)
+        {
+            if (impactEffect == null) return;
+            var fx = ParticleFx.Spawn(impactEffect, ctx.Board.Root, at + Vector3.up * 0.2f, impactScale, UnityEngine.Random.Range(0f, 360f));
+            fx.name = "Cutscene Meteor Impact";
+            if (!impactShockwave)
+            {
+                var shockwave = fx.transform.Find("Shockwave");
+                if (shockwave != null) shockwave.gameObject.SetActive(false);
+            }
+            ParticleFx.PlayOnce(fx);
+            temporary.Add(fx);
+        }
+
+        /// <summary>第一颗陨石的冲击波：所有棋子被吹到第三阶段的位置，王和王后先待在附近的空格。</summary>
+        void ScatterPieces(Board board, List<Piece> royals, HashSet<int> royalIds, Dictionary<int, Coord> temp)
+        {
+            PlaceRoyals(board, royals, temp);
+            foreach (var piece in board.AllPieces)
+            {
+                if (!piece.OnBoard || !ctx.Board.TryGetPieceView(piece.Id, out var view)) continue;
+                var to = royalIds.Contains(piece.Id) ? temp[piece.Id] : piece.Pos;
+                if (!view.gameObject.activeSelf)
+                {
+                    // 风暴里新冒出来的棋子（补回来的王后）：直接出现在它的位置
+                    view.gameObject.SetActive(true);
+                    view.localPosition = ctx.Board.PiecePosition(to);
+                    continue;
+                }
+                StartCoroutine(ctx.Board.AnimateKnockback(piece.Id, to, scatterDuration));
+            }
         }
 
         IEnumerator Splash(Vector3 from, Coord to, float delay)
@@ -719,14 +951,18 @@ namespace SaturdayGame.Chess.View
         {
             var root = ctx.Board.Root;
             var position = localPosition;
+            var rotation = localRotation;
             if (Time.time < shakeUntil && shakeDuration > 0f)
             {
                 float fade = (shakeUntil - Time.time) / shakeDuration;
                 float s = shakeAmount * fade;
                 float time = Time.time * 25f;
                 position += new Vector3(Mathf.PerlinNoise(time, 0f) - 0.5f, Mathf.PerlinNoise(0f, time) - 0.5f, Mathf.PerlinNoise(time, time) - 0.5f) * 2f * s;
+                // 角度也一起抖（每 0.1 的震动约 4 度），震得厉害时画面会明显歪一下
+                float degrees = s * 40f;
+                rotation *= Quaternion.Euler((Mathf.PerlinNoise(time, 3f) - 0.5f) * degrees, (Mathf.PerlinNoise(3f, time) - 0.5f) * degrees, (Mathf.PerlinNoise(time, 7f) - 0.5f) * degrees);
             }
-            ctx.Camera.transform.SetPositionAndRotation(root.TransformPoint(position), root.rotation * localRotation);
+            ctx.Camera.transform.SetPositionAndRotation(root.TransformPoint(position), root.rotation * rotation);
         }
 
         static Quaternion LookRotation(Vector3 localDirection) =>
@@ -734,6 +970,9 @@ namespace SaturdayGame.Chess.View
 
         void Shake(float amount, float duration)
         {
+            // 上一次震得更厉害、还没震完时不要被小的盖掉
+            float remaining = Time.time < shakeUntil ? shakeAmount * (shakeUntil - Time.time) / shakeDuration : 0f;
+            if (amount < remaining) return;
             shakeAmount = amount;
             shakeDuration = Mathf.Max(0.01f, duration);
             shakeUntil = Time.time + shakeDuration;
