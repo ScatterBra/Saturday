@@ -493,6 +493,8 @@ namespace SaturdayGame.Chess.View
             for (int k = 0; k < lavaEffects.Count; k++)
                 if (lavaEffects[k] != null) lavaEffects[k].transform.localPosition = PiecePosition(lavaEffectSquares[k]) + Vector3.up * lavaEffectLift;
             if (castleLabel != null && CastleLabelPosition(false, out var labelPosition)) castleLabel.transform.localPosition = labelPosition;
+            // 开场过场里城堡还没升起来时不显示“Castle”字样
+            if (castleLabel != null) castleLabel.SetActive(!revealing || terrainRise > 0.01f);
         }
 
         void DestroyStormCloud()

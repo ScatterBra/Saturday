@@ -64,6 +64,8 @@ namespace SaturdayGame.Chess.View
         public bool shadows = true;
         [Tooltip("打开阴影时桌面和棋盘格子用的受光照材质（URP Lit），留空则运行时创建")]
         public Material surfaceMaterial;
+        [Tooltip("第一、二阶段的天空盒（例如用 HDRI 做的 Stage12Skybox），也给 3D 模型提供环境光。进第三阶段时跟着灯光一起慢慢变暗，换回相机原来的纯色背景。留空就一直是纯色背景")]
+        public Material stage12Skybox;
         public float aiThinkTime = 0.6f;
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
@@ -149,6 +151,7 @@ namespace SaturdayGame.Chess.View
             }
             EnsureLight();
             CollectStageLights();
+            SetUpSky();
             var factory = new ChessViewFactory(placeholderMaterial, boardCamera, pieceArt, surfaceMaterial, shadows, titleFont, bodyFont,
                 cameraFit != null ? cameraFit.ViewReference : null);
             if (desk == null) desk = GetComponentInChildren<ChessDesk>();
@@ -247,7 +250,9 @@ namespace SaturdayGame.Chess.View
             selectAfterEvents = null;
             board.SetWarnings(null);
             board.Bind(game.Board);
-            ApplyStageLighting(game.Board.Stage3);
+            // 新的一局总是从第一、二阶段的灯光和天空开始。调试跳关时逻辑开局就进了第三阶段，
+            // 但后面一定跟着风暴事件，由过场（或沙尘风暴那条路）再换成第三阶段的灯光
+            ApplyStageLighting(false);
             hud.ResetForNewGame();
             hud.SetStorm(0);
             // 上一局转过的相机回到场景里设的角度，棋子重新平躺
@@ -980,10 +985,56 @@ namespace SaturdayGame.Chess.View
         /// <summary>第一、二阶段只亮平行光；第三阶段平行光关掉，只亮聚光灯。</summary>
         void ApplyStageLighting(bool stage3) => BlendStageLighting(stage3 ? 1f : 0f);
 
+        // ---------- 天空 ----------
+
+        /// <summary>运行时用的天空盒副本（改曝光不会改到材质文件），以及原来的天空盒、相机背景，第三阶段和退出时还原。</summary>
+        Material skyInstance;
+        float skyExposure = 1f;
+        Material originalSkybox;
+        CameraClearFlags originalClearFlags;
+        bool skyShown;
+
+        void SetUpSky()
+        {
+            originalSkybox = RenderSettings.skybox;
+            if (boardCamera != null) originalClearFlags = boardCamera.clearFlags;
+            if (stage12Skybox == null) return;
+            skyInstance = new Material(stage12Skybox) { name = stage12Skybox.name + " (runtime)", hideFlags = HideFlags.DontSave };
+            if (skyInstance.HasProperty("_Exposure")) skyExposure = skyInstance.GetFloat("_Exposure");
+        }
+
+        /// <summary>
+        /// 天空跟着阶段灯光走：t = 0（第一、二阶段）显示天空盒；往第三阶段过渡时天空盒越来越暗；
+        /// t = 1（第三阶段）换回相机原来的纯色背景和原来的天空盒（环境光也跟着换回来）。
+        /// </summary>
+        void ApplySky(float t)
+        {
+            if (skyInstance == null || boardCamera == null) return;
+            if (skyInstance.HasProperty("_Exposure")) skyInstance.SetFloat("_Exposure", skyExposure * (1f - t));
+            bool show = t < 1f;
+            if (show == skyShown && RenderSettings.skybox == (show ? skyInstance : originalSkybox)) return;
+            skyShown = show;
+            RenderSettings.skybox = show ? skyInstance : originalSkybox;
+            boardCamera.clearFlags = show ? CameraClearFlags.Skybox : originalClearFlags;
+            // 环境光（3D 模型的底色）按新的天空重新算一次
+            DynamicGI.UpdateEnvironment();
+        }
+
+        void OnDestroy()
+        {
+            // 小游戏场景卸载时把全局的天空盒还回去（它是整个游戏共用的设置）
+            if (skyInstance != null)
+            {
+                if (RenderSettings.skybox == skyInstance) RenderSettings.skybox = originalSkybox;
+                Destroy(skyInstance);
+            }
+        }
+
         /// <summary>灯光在两个阶段之间过渡（开场过场里天慢慢变暗）：0 = 只亮平行光，1 = 只亮聚光灯。</summary>
         void BlendStageLighting(float t)
         {
             t = Mathf.Clamp01(t);
+            ApplySky(t);
             foreach (var light in directionalLights)
             {
                 if (light == null) continue;

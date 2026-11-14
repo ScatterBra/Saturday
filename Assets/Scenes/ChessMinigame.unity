@@ -1121,6 +1121,7 @@ MonoBehaviour:
   bodyFont: {fileID: 12800000, guid: cc5590936355ff94cbea6f84aa00de15, type: 3}
   shadows: 1
   surfaceMaterial: {fileID: 0}
+  stage12Skybox: {fileID: 2100000, guid: 41dc313b127bf7b428404d3c780b6d19, type: 2}
   aiThinkTime: 0.6
   moveDuration: 0.25
   effectDuration: 0.35
@@ -1259,7 +1260,7 @@ MonoBehaviour:
   handheldAngle: 1.2
   handheldSpeed: 1.3
   music: {fileID: 8300000, guid: 2f29ae63e7bf94b4994e8d397b477c3b, type: 3}
-  musicVolume: 0.4
+  musicVolume: 0.6
   musicDelay: 2
   loopMusic: 1
   sandstormSound: {fileID: 8300000, guid: a4899fbe4e91cd744a127206f063bea0, type: 3}
