@@ -65,6 +65,13 @@ namespace SaturdayGame.Chess.View
         [Tooltip("每个方块是骷髅方块的机会（0–1），小一点骷髅就少")]
         [Range(0f, 1f)] public float raisedSkullChance = 0.15f;
 
+        [Tooltip("第三阶段的城堡模型（Model/Castle/Castle.fbx）：原点在 a8 格中心的棋盘面上，占 a8、b8、a7 三格，子物体 Gate 是吊桥。城堡格不是这个 L 形、或者没有棋盘图时，退回灰色石块。留空也用石块")]
+        public GameObject castleModel;
+        [Tooltip("城堡模型里王和后站的平台有多高（模型自己的单位）。要和 Stage3Layout.CastleHeight × 0.5 一样")]
+        public float castleModelPlatform = 3.5f;
+        [Tooltip("城门打开时吊桥放下来用多久（秒）")]
+        public float castleGateSeconds = 0.8f;
+
         [Tooltip("兵变成树、树变回兵（或被吃掉）时在那一格播一次的特效（例如 ParticlePack 的 DustExplosion），留空就不播")]
         public GameObject treeEffect;
         [Tooltip("树特效的整体缩放")]

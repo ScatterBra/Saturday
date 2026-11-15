@@ -16,7 +16,8 @@ namespace SaturdayGame.Chess
     /// </summary>
     public sealed class Stage3Layout
     {
-        public const int CastleHeight = 5;
+        /// <summary>城堡平台的高度（级）。7 级 = 3.5，和城堡模型（Model/Castle/Castle.fbx）的平台一样高。</summary>
+        public const int CastleHeight = 7;
 
         public static readonly string DefaultTerrain =
             "CC43....\n" +

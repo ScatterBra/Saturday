@@ -66,6 +66,10 @@ namespace SaturdayGame.Chess.View
         public Material surfaceMaterial;
         [Tooltip("第一、二阶段的天空盒（例如用 HDRI 做的 Stage12Skybox），也给 3D 模型提供环境光。进第三阶段时跟着灯光一起慢慢变暗，换回相机原来的纯色背景。留空就一直是纯色背景")]
         public Material stage12Skybox;
+        [Tooltip("第三阶段（风暴里）房间暗到原来亮度的多少（0 = 全黑，1 = 不变）")]
+        [Range(0f, 1f)] public float stage3RoomBrightness = 0.35f;
+        [Tooltip("第三阶段房间的色调（天空盒的 Tint，默认灰 = 0.5；偏蓝显得冷）")]
+        public Color stage3RoomTint = new Color(0.38f, 0.42f, 0.55f, 0.5f);
         public float aiThinkTime = 0.6f;
         public float moveDuration = 0.25f;
         public float effectDuration = 0.35f;
@@ -987,37 +991,64 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 天空 ----------
 
-        /// <summary>运行时用的天空盒副本（改曝光不会改到材质文件），以及原来的天空盒、相机背景，第三阶段和退出时还原。</summary>
+        /// <summary>运行时用的天空盒副本（改曝光、色调不会改到材质文件），以及原来的天空盒（第三阶段的环境光用它，退出时还原）。</summary>
         Material skyInstance;
         float skyExposure = 1f;
+        Color skyTint = new Color(0.5f, 0.5f, 0.5f, 0.5f);
         Material originalSkybox;
-        CameraClearFlags originalClearFlags;
+        /// <summary>棋盘相机自己的天空盒：一直显示房间（第三阶段暗下来），和管环境光的全局天空盒分开。</summary>
+        Skybox cameraSky;
         bool skyShown;
 
         void SetUpSky()
         {
             originalSkybox = RenderSettings.skybox;
-            if (boardCamera != null) originalClearFlags = boardCamera.clearFlags;
-            if (stage12Skybox == null) return;
+            if (stage12Skybox == null || boardCamera == null) return;
             skyInstance = new Material(stage12Skybox) { name = stage12Skybox.name + " (runtime)", hideFlags = HideFlags.DontSave };
             if (skyInstance.HasProperty("_Exposure")) skyExposure = skyInstance.GetFloat("_Exposure");
+            if (skyInstance.HasProperty("_Tint")) skyTint = skyInstance.GetColor("_Tint");
+            if (!boardCamera.TryGetComponent(out cameraSky)) cameraSky = boardCamera.gameObject.AddComponent<Skybox>();
+            cameraSky.material = skyInstance;
+            boardCamera.clearFlags = CameraClearFlags.Skybox;
+            // 地面投影的天空盒（Saturday/Skybox Ground Projected）：HDRI 的地板铺在桌面下方，以场景里桌面的位置为准
+            if (skyInstance.HasProperty("_DeskTop") && desk != null)
+            {
+                var top = desk.transform.Find("Background");
+                var p = top != null ? top.position : desk.transform.position;
+                skyInstance.SetVector("_DeskTop", new Vector4(p.x, p.y, p.z, 0f));
+            }
         }
 
         /// <summary>
-        /// 天空跟着阶段灯光走：t = 0（第一、二阶段）显示天空盒；往第三阶段过渡时天空盒越来越暗；
-        /// t = 1（第三阶段）换回相机原来的纯色背景和原来的天空盒（环境光也跟着换回来）。
+        /// 天空跟着阶段灯光走：房间一直在（相机自己的天空盒），t = 0（第一、二阶段）正常亮度；
+        /// 往第三阶段过渡时慢慢暗到 stage3RoomBrightness、色调变成 stage3RoomTint，像风暴来了屋里没开灯。
+        /// 环境光：第一、二阶段用房间算；t = 1（第三阶段）换回原来的天空盒，第三阶段的灯光不受房间影响。
         /// </summary>
         void ApplySky(float t)
         {
             if (skyInstance == null || boardCamera == null) return;
-            if (skyInstance.HasProperty("_Exposure")) skyInstance.SetFloat("_Exposure", skyExposure * (1f - t));
-            bool show = t < 1f;
-            if (show == skyShown && RenderSettings.skybox == (show ? skyInstance : originalSkybox)) return;
-            skyShown = show;
-            RenderSettings.skybox = show ? skyInstance : originalSkybox;
-            boardCamera.clearFlags = show ? CameraClearFlags.Skybox : originalClearFlags;
+            if (skyInstance.HasProperty("_Exposure")) skyInstance.SetFloat("_Exposure", skyExposure * Mathf.Lerp(1f, stage3RoomBrightness, t));
+            if (skyInstance.HasProperty("_Tint")) skyInstance.SetColor("_Tint", Color.Lerp(skyTint, stage3RoomTint, t));
+            bool stage12 = t < 1f;
+            if (stage12 == skyShown && RenderSettings.skybox == (stage12 ? skyInstance : originalSkybox)) return;
+            skyShown = stage12;
+            RenderSettings.skybox = stage12 ? skyInstance : originalSkybox;
             // 环境光（3D 模型的底色）按新的天空重新算一次
             DynamicGI.UpdateEnvironment();
+        }
+
+        /// <summary>
+        /// 天空盒材质上的房间参数（旋转、地板高度、虚化、桌下阴影……）每帧同步到运行时副本，
+        /// Play 模式里直接改 Stage12Skybox 材质就能看到效果（曝光、色调、桌面位置由代码管，不同步）。
+        /// </summary>
+        static readonly string[] SkyLiveFloats = { "_Rotation", "_TableHeight", "_CaptureHeight", "_Radius", "_BlurMax", "_BlurNear", "_BlurFar", "_ShadowSoftness", "_ShadowStrength" };
+
+        void LateUpdate()
+        {
+            if (skyInstance == null || stage12Skybox == null) return;
+            foreach (var name in SkyLiveFloats)
+                if (stage12Skybox.HasProperty(name)) skyInstance.SetFloat(name, stage12Skybox.GetFloat(name));
+            if (stage12Skybox.HasProperty("_ShadowSize")) skyInstance.SetVector("_ShadowSize", stage12Skybox.GetVector("_ShadowSize"));
         }
 
         void OnDestroy()

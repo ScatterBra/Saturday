@@ -7,7 +7,7 @@ namespace SaturdayGame.Chess.View
     /// <summary>
     /// 棋盘的显示：64 个格子 + 所有棋子的 PieceView。棋盘平放在根物体的 XZ 平面上，
     /// 格子 (x, y) 的中心在本地坐标 (x - 3.5, 0, y - 3.5)。
-    /// 第三阶段的高原用一格一格升起的方块表示，每级高 LevelHeight；城堡格是灰色石块。
+    /// 第三阶段的高原用一格一格升起的方块表示，每级高 LevelHeight；城堡格摆城堡模型（ChessDesk.castleModel），没有模型时是灰色石块。
     /// 场景里摆了棋盘图（ChessDesk.board）时：平地格子藏在棋盘图下面，高亮、岩浆改用盖在棋盘图上的半透明色块。
     /// </summary>
     public sealed class BoardView
@@ -71,6 +71,16 @@ namespace SaturdayGame.Chess.View
         readonly Dictionary<int, PieceView> pieces = new Dictionary<int, PieceView>();
         readonly Transform pieceRoot;
         GameObject castleLabel;
+        readonly GameObject castleModelSource;
+        readonly float castleModelPlatform = 3.5f;
+        readonly float castleGateSeconds = 0.8f;
+        /// <summary>摆在棋盘上的城堡模型（城堡格是 L 形、有棋盘图时才有），没有为 null。</summary>
+        GameObject castleModel;
+        /// <summary>城堡模型原点所在的格子（L 的拐角，默认 a8）。</summary>
+        Coord castleAnchor;
+        /// <summary>城堡模型从平台往上还有多高（塔尖），升起时要整个藏在棋盘下面。</summary>
+        float castleModelTop;
+        CastleGate castleGate;
         Board board;
         readonly GameObject lavaEffect;
         readonly float lavaEffectScale;
@@ -138,6 +148,9 @@ namespace SaturdayGame.Chess.View
                 raisedSideTextures = desk.raisedSideTextures;
                 raisedSkullTexture = desk.raisedSkullTexture;
                 raisedSkullChance = desk.raisedSkullChance;
+                castleModelSource = desk.castleModel;
+                castleModelPlatform = desk.castleModelPlatform;
+                castleGateSeconds = desk.castleGateSeconds;
                 hydrantSprayFrames = desk.hydrantSprayFrames;
                 hydrantSprayFps = desk.hydrantSprayFps;
                 hydrantSprayHeight = desk.hydrantSprayHeight;
@@ -167,10 +180,14 @@ namespace SaturdayGame.Chess.View
                 factory.WetTint = desk.wetTint;
             }
 
-            // 桌面（backdrop）：顶面在 y = -0.405，在 0.4 厚的棋盘模型底下，比相机能看到的范围大很多，宽屏也不会露边
-            var tableTop = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.455f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
-            tableTop.name = "Table Top";
-            factory.SetColor(tableTop, new Color(0.42f, 0.3f, 0.22f));
+            // 没有场景桌面时的占位桌面（backdrop）：顶面在 y = -0.405，在 0.4 厚的棋盘模型底下，比相机能看到的范围大很多，宽屏也不会露边。
+            // 场景里摆了桌子（ChessDesk）就不要它：桌子外面是房间（地面投影的天空盒），一大块平板会把房间地板挡住
+            if (desk == null)
+            {
+                var tableTop = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.455f, 0), new Vector3(80f, 0.1f, 50f), surface: true);
+                tableTop.name = "Table Top";
+                factory.SetColor(tableTop, new Color(0.42f, 0.3f, 0.22f));
+            }
             var frame = factory.Primitive(PrimitiveType.Cube, root, new Vector3(0, -0.12f, 0), new Vector3(9f, 0.1f, 9f), surface: true);
             factory.SetColor(frame, new Color(0.3f, 0.2f, 0.14f));
             for (int i = 0; i < 64; i++)
@@ -435,6 +452,7 @@ namespace SaturdayGame.Chess.View
         public void RebuildTerrain()
         {
             RebuildTerrainBlocks();
+            RebuildCastleModel();
             RebuildLavaEffects();
 
             if (castleLabel != null) ViewUtil.Destroy(castleLabel);
@@ -471,6 +489,13 @@ namespace SaturdayGame.Chess.View
                 count++;
             }
             position = count > 0 ? sum / count + Vector3.up * 0.8f : Vector3.zero;
+            if (count > 0 && castleModel != null)
+            {
+                // 有城堡模型时字放在塔尖上面，不然会压在塔上（相机取景、云的高度都跟着这个点）
+                float modelTop = full ? FullTop(castleAnchor) + castleModelTop
+                    : castleModel.transform.localPosition.y + castleModelPlatform + castleModelTop;
+                position.y = modelTop + 0.35f;
+            }
             return count > 0;
         }
 
@@ -492,6 +517,14 @@ namespace SaturdayGame.Chess.View
             }
             for (int k = 0; k < lavaEffects.Count; k++)
                 if (lavaEffects[k] != null) lavaEffects[k].transform.localPosition = PiecePosition(lavaEffectSquares[k]) + Vector3.up * lavaEffectLift;
+            if (castleModel != null)
+            {
+                // 升完时平台和城堡格顶面对齐；升到一半时按比例往下沉，没开始升时连塔尖都在棋盘下面
+                float full = FullTop(castleAnchor);
+                float rise = full > 0f ? Mathf.Clamp01(TopOf(castleAnchor) / full) : 1f;
+                float sink = (castleModelPlatform + castleModelTop) * (1f - rise);
+                castleModel.transform.localPosition = SquareCenter(castleAnchor) + Vector3.up * (full - castleModelPlatform - sink);
+            }
             if (castleLabel != null && CastleLabelPosition(false, out var labelPosition)) castleLabel.transform.localPosition = labelPosition;
             // 开场过场里城堡还没升起来时不显示“Castle”字样
             if (castleLabel != null) castleLabel.SetActive(!revealing || terrainRise > 0.01f);
@@ -521,6 +554,7 @@ namespace SaturdayGame.Chess.View
             float highest = 0f;
             for (int i = 0; i < 64; i++) highest = Mathf.Max(highest, FullTop(Coord.FromIndex(i)));
             if (CastleLabelPosition(true, out var labelPosition)) highest = Mathf.Max(highest, labelPosition.y + 0.3f);
+            if (castleModel != null) highest = Mathf.Max(highest, FullTop(castleAnchor) + castleModelTop);
 
             var fx = ParticleFx.Spawn(stormCloud, root, new Vector3(0f, highest + stormCloudClearance, 0f), 1f);
             fx.name = "Storm Cloud";
@@ -644,6 +678,66 @@ namespace SaturdayGame.Chess.View
             }
         }
 
+        /// <summary>
+        /// 城堡格正好是 L 形（拐角 + 右边一格 + 下边一格，默认 a8、b8、a7）时，摆城堡模型代替灰色石块。
+        /// 城堡格的高亮改用盖在平台顶面上的色块，所以没有棋盘图（没有色块）时也退回石块。
+        /// </summary>
+        void RebuildCastleModel()
+        {
+            if (castleModel != null) ViewUtil.Destroy(castleModel);
+            castleModel = null;
+            castleGate = null;
+            if (castleModelSource == null || overlays == null || !Stage3 || !CastleIsL(out castleAnchor)) return;
+
+            castleModel = Object.Instantiate(castleModelSource, root, false);
+            castleModel.name = "Castle";
+            // FBX 导进来时根节点带着 180° 的 Y 转角（坐标轴换算）；网格本身已经是棋盘方向（b8 在 +X，a7 在 -Z），所以把转角清掉
+            castleModel.transform.localRotation = Quaternion.identity;
+            castleModel.transform.localScale = Vector3.one;
+            float top = 0f;
+            foreach (var r in castleModel.GetComponentsInChildren<Renderer>())
+            {
+                r.shadowCastingMode = factory.Shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = factory.Shadows;
+                if (r is MeshRenderer && r.TryGetComponent<MeshFilter>(out var filter) && filter.sharedMesh != null)
+                {
+                    var b = filter.sharedMesh.bounds;
+                    top = Mathf.Max(top, r.transform.localPosition.y + b.max.y);
+                }
+            }
+            castleModelTop = Mathf.Max(0f, top - castleModelPlatform);
+
+            var gate = castleModel.transform.Find("Gate");
+            if (gate != null)
+            {
+                castleGate = gate.gameObject.AddComponent<CastleGate>();
+                castleGate.seconds = castleGateSeconds;
+                castleGate.SetOpen(board.GateOpen, true);
+            }
+            for (int i = 0; i < 64; i++)
+                if (board.IsCastle(Coord.FromIndex(i))) squares[i].SetActive(false);
+        }
+
+        /// <summary>城堡格是不是模型那个 L 形：拐角 anchor、它右边一格、它下边一格，一共三格。</summary>
+        bool CastleIsL(out Coord anchor)
+        {
+            anchor = default;
+            int count = 0;
+            bool found = false;
+            for (int i = 0; i < 64; i++)
+            {
+                var c = Coord.FromIndex(i);
+                if (!board.IsCastle(c)) continue;
+                count++;
+                if (!found || c.X < anchor.X || (c.X == anchor.X && c.Y > anchor.Y)) anchor = c;
+                found = true;
+            }
+            if (count != 3) return false;
+            var right = new Coord(anchor.X + 1, anchor.Y);
+            var below = new Coord(anchor.X, anchor.Y - 1);
+            return right.IsValid && below.IsValid && board.IsCastle(right) && board.IsCastle(below);
+        }
+
         /// <summary>方块网格和材质只建一次（材质照着格子原来的材质抄，受不受光照不变）。</summary>
         void EnsureBlockAssets(Material baseMaterial)
         {
@@ -709,6 +803,7 @@ namespace SaturdayGame.Chess.View
         /// <summary>城堡上方的字：城门关着写 Castle，开了写 Gate open!</summary>
         public void RefreshCastleLabel()
         {
+            if (castleGate != null && board != null) castleGate.SetOpen(board.GateOpen, false);
             if (castleLabel == null || board == null) return;
             var label = castleLabel.GetComponent<TextMesh>();
             if (label == null) return;
@@ -972,13 +1067,22 @@ namespace SaturdayGame.Chess.View
                 if (CastleShown(c))
                 {
                     colors[i] = gateOpen ? Color.Lerp(CastleStone, GateOpenColor, 0.6f) : CastleStone;
-                    marks[i] = Color.clear;
+                    // 有城堡模型时石块藏起来了，改在平台顶面盖色块：城门开了整块泛绿，能走进去的格子再亮一些
+                    marks[i] = castleModel != null && gateOpen ? new Color(GateOpenColor.r, GateOpenColor.g, GateOpenColor.b, 0.3f) : Color.clear;
                     if (pickOptions != null)
                         foreach (var o in pickOptions)
-                            if (o == c) colors[i] = Color.Lerp(colors[i], PickTarget, 0.6f);
+                            if (o == c)
+                            {
+                                colors[i] = Color.Lerp(colors[i], PickTarget, 0.6f);
+                                if (castleModel != null) marks[i] = new Color(PickTarget.r, PickTarget.g, PickTarget.b, 0.55f);
+                            }
                     if (moves != null)
                         foreach (var m in moves)
-                            if (m.To == c) colors[i] = Color.Lerp(colors[i], MoveTarget, 0.7f);
+                            if (m.To == c)
+                            {
+                                colors[i] = Color.Lerp(colors[i], MoveTarget, 0.7f);
+                                if (castleModel != null) marks[i] = new Color(MoveTarget.r, MoveTarget.g, MoveTarget.b, 0.55f);
+                            }
                 }
                 if (LavaShown(c))
                 {
