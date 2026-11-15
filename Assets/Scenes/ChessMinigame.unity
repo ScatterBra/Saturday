@@ -1396,7 +1396,7 @@ MonoBehaviour:
   shadows: 1
   surfaceMaterial: {fileID: 0}
   stage12Skybox: {fileID: 2100000, guid: 6e721f1050c5cc44593883192038cab8, type: 2}
-  stage3RoomBrightness: 0.35
+  stage3RoomBrightness: 0.2
   stage3RoomTint: {r: 0.38, g: 0.42, b: 0.55, a: 0.5}
   aiThinkTime: 0.6
   moveDuration: 0.25

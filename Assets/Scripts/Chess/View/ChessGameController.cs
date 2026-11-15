@@ -67,7 +67,7 @@ namespace SaturdayGame.Chess.View
         [Tooltip("第一、二阶段的天空盒（例如用 HDRI 做的 Stage12Skybox），也给 3D 模型提供环境光。进第三阶段时跟着灯光一起慢慢变暗，换回相机原来的纯色背景。留空就一直是纯色背景")]
         public Material stage12Skybox;
         [Tooltip("第三阶段（风暴里）房间暗到原来亮度的多少（0 = 全黑，1 = 不变）")]
-        [Range(0f, 1f)] public float stage3RoomBrightness = 0.35f;
+        [Range(0f, 1f)] public float stage3RoomBrightness = 0.2f;
         [Tooltip("第三阶段房间的色调（天空盒的 Tint，默认灰 = 0.5；偏蓝显得冷）")]
         public Color stage3RoomTint = new Color(0.38f, 0.42f, 0.55f, 0.5f);
         public float aiThinkTime = 0.6f;
