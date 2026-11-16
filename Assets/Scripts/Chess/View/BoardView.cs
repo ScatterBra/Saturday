@@ -113,6 +113,10 @@ namespace SaturdayGame.Chess.View
         readonly float beamEffectScale = 0.35f, beamEffectTravel = 0.6f;
         /// <summary>雷雨云里的雨（平时关着，有棋子潮湿时才下）。</summary>
         ParticleSystem cloudRain;
+        /// <summary>云里一闪一闪的灯光（雷暴充满时闪得更勤更亮）和它原来的发射量、亮度。</summary>
+        ParticleSystem cloudLights;
+        float cloudLightsRate, cloudLightsIntensity;
+        bool cloudCharged;
         /// <summary>一直标着的格子（王后预告要打的格子），每次 Highlight 都画上。</summary>
         readonly List<Coord> warnings = new List<Coord>();
         /// <summary>每枚棋子现在是不是显示成树；变了就播一次树特效。</summary>
@@ -537,6 +541,7 @@ namespace SaturdayGame.Chess.View
             stormCloudInstance = null;
             stormCloudMaterial = null;
             cloudRain = null;
+            cloudLights = null;
             raining = false;
         }
 
@@ -613,6 +618,32 @@ namespace SaturdayGame.Chess.View
                 if (ps.name == "Rain") cloudRain = ps;
             raining = false;
             if (cloudRain != null) cloudRain.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            cloudLights = null;
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+                if (ps.lights.enabled) cloudLights = ps;
+            if (cloudLights != null)
+            {
+                cloudLightsRate = cloudLights.emission.rateOverTimeMultiplier;
+                cloudLightsIntensity = cloudLights.lights.intensityMultiplier;
+            }
+            ApplyCloudCharged();
+        }
+
+        /// <summary>雷暴充满了：云里的闪电闪得更勤、更亮，提示可以放了。没有云就记下来，云出来时再套上。</summary>
+        public void SetCloudCharged(bool on)
+        {
+            if (on == cloudCharged) return;
+            cloudCharged = on;
+            ApplyCloudCharged();
+        }
+
+        void ApplyCloudCharged()
+        {
+            if (cloudLights == null) return;
+            var emission = cloudLights.emission;
+            emission.rateOverTimeMultiplier = cloudLightsRate * (cloudCharged ? 4f : 1f);
+            var lights = cloudLights.lights;
+            lights.intensityMultiplier = cloudLightsIntensity * (cloudCharged ? 2.5f : 1f);
         }
 
         bool raining;

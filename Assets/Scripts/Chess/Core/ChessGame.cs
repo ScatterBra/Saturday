@@ -120,8 +120,11 @@ namespace SaturdayGame.Chess
         /// <summary>正在放的常驻技能（放出去就结束这一回合）。</summary>
         Stage3Skill? usingSkill;
         int initialGuards;
-        int bankedCharge;
-        bool thunderUsed;
+        /// <summary>雷暴积累条：玩家每吃掉（打死）一枚对方棋子 +1，放完雷暴清零。</summary>
+        int thunderCharge;
+        /// <summary>上次结算时对方还剩几枚棋子；playerActing = 这段时间是不是玩家在行动（吃掉的算不算玩家的）。</summary>
+        int enemyMark;
+        bool playerActing;
         bool gateAnnounced;
         int beamReadyTurn;
         int dragonReadyTurn;
@@ -141,7 +144,7 @@ namespace SaturdayGame.Chess
         public IReadOnlyList<RuleBase> Offers => offers;
         /// <summary>当前这组规则卡是在什么情况下弹出的。</summary>
         public OfferKind CurrentOfferKind => offerKind;
-        /// <summary>当前这组规则卡可以跳过（救急技能可以，第三阶段的卡跳过 = 存进雷暴，固定选卡也可以跳过）。</summary>
+        /// <summary>当前这组规则卡可以跳过（游戏逻辑上都可以；第三阶段的卡界面上不给跳过按钮）。</summary>
         public bool CanSkipOffers => Phase == GamePhase.ChoosingRule;
         /// <summary>ChoosingTarget 阶段等待的点选请求。</summary>
         public TargetRequest PendingTarget { get; private set; }
@@ -176,11 +179,10 @@ namespace SaturdayGame.Chess
 
         /// <summary>第三阶段开始时的守卫数。</summary>
         public int InitialGuards => initialGuards;
-        /// <summary>雷暴积累条满格数。</summary>
-        public int ThunderMax => Math.Max(1, initialGuards - 2);
-        /// <summary>雷暴积累条现在的格数（不超过满格）。</summary>
-        public int ThunderCharge => Math.Min(ThunderMax, bankedCharge + Math.Max(0, initialGuards - Board.GuardCount));
-        public bool ThunderUsed => thunderUsed;
+        /// <summary>雷暴积累条满格数：第三阶段开始时守卫数的一半（14 个守卫 → 7）。</summary>
+        public int ThunderMax => Math.Max(1, initialGuards / 2);
+        /// <summary>雷暴积累条现在的格数（不超过满格）。玩家吃掉对方棋子才涨（走棋吃子、技能、卡牌都算），对方自己的回合里死的不算。</summary>
+        public int ThunderCharge => Math.Min(ThunderMax, thunderCharge);
         /// <summary>城门开了（守卫全灭）。</summary>
         public bool GateOpen => Board.GateOpen;
         /// <summary>王后预告要打的格子（下一回合放技能），没有预告时为空。</summary>
@@ -289,29 +291,24 @@ namespace SaturdayGame.Chess
             StartActivation(rule);
         }
 
-        /// <summary>不选这一组规则卡。第三阶段不选 = 存进雷暴积累条。</summary>
+        /// <summary>不选这一组规则卡。</summary>
         public void SkipOffers()
         {
             if (!CanSkipOffers) throw new InvalidOperationException("These rule cards cannot be skipped");
-            if (offerKind == OfferKind.Stage3)
-            {
-                bankedCharge++;
-                events.Add(GameEvent.Notice("Saved for the storm. Thunder charge +1."));
-            }
             offers = null;
             BeginTurn();
         }
 
         // ---------- 第三阶段：技能栏 ----------
 
-        /// <summary>常驻技能还要等几回合才能用（0 = 可以用）。雷暴：用过了返回 -1。</summary>
+        /// <summary>常驻技能还要等几回合才能用（0 = 可以用）。雷暴没有冷却，看积累条。</summary>
         public int Cooldown(Stage3Skill skill)
         {
             switch (skill)
             {
                 case Stage3Skill.Beam: return Math.Max(0, beamReadyTurn - Board.FullMove);
                 case Stage3Skill.Dragon: return Math.Max(0, dragonReadyTurn - Board.FullMove);
-                default: return thunderUsed ? -1 : 0;
+                default: return 0;
             }
         }
 
@@ -418,7 +415,6 @@ namespace SaturdayGame.Chess
             bool acted = ctx.Acted;
             ctx.Acted = false;
             ctx.Caster = null;
-            bankedCharge += ctx.TakeThunderCharge();
 
             if (usingCard != null)
             {
@@ -446,7 +442,11 @@ namespace SaturdayGame.Chess
                     {
                         case Stage3Skill.Beam: beamReadyTurn = Board.FullMove + settings.BeamCooldown + 1; break;
                         case Stage3Skill.Dragon: dragonReadyTurn = Board.FullMove + settings.DragonCooldown + 1; break;
-                        default: thunderUsed = true; break;
+                        default:
+                            // 放完雷暴积累条清零，雷暴自己打死的不算（重新开始攒）
+                            thunderCharge = 0;
+                            enemyMark = EnemyCount();
+                            break;
                     }
                     EndTurnBySkill();
                     return;
@@ -473,6 +473,7 @@ namespace SaturdayGame.Chess
         {
             while (true)
             {
+                TallyThunderCharge();
                 if (settings.MaxFullMoves > 0 && Board.FullMove > settings.MaxFullMoves)
                 {
                     EndGame(null, "Turn limit reached.");
@@ -497,6 +498,7 @@ namespace SaturdayGame.Chess
                 }
 
                 var side = Board.SideToMove;
+                playerActing = side == PlayerSide;
                 if (side == PlayerSide)
                 {
                     if (!InStage3 && Board.FullMove >= settings.StormTurn)
@@ -586,6 +588,25 @@ namespace SaturdayGame.Chess
             }
         }
 
+        /// <summary>
+        /// 雷暴积累条结算：从上次结算到现在对方少了几枚棋子，这段时间是玩家在行动（玩家走棋、放技能、用卡）就加进积累条。
+        /// 每次轮到某一方行动前（BeginTurn）结算一次，所以用卡打死敌人后同一回合就能看到涨了。
+        /// </summary>
+        void TallyThunderCharge()
+        {
+            if (!InStage3) return;
+            int now = EnemyCount();
+            if (playerActing && now < enemyMark) thunderCharge = Math.Min(ThunderMax, thunderCharge + enemyMark - now);
+            enemyMark = now;
+        }
+
+        int EnemyCount()
+        {
+            int count = 0;
+            foreach (var _ in Board.PiecesOf(OpponentSide)) count++;
+            return count;
+        }
+
         bool HasPieces(Side side)
         {
             foreach (var _ in Board.PiecesOf(side)) return true;
@@ -644,8 +665,9 @@ namespace SaturdayGame.Chess
             telegraphTurn = -1;
             passesInARow = 0;
             initialGuards = Board.GuardCount;
-            bankedCharge = 0;
-            thunderUsed = false;
+            thunderCharge = 0;
+            enemyMark = EnemyCount();
+            playerActing = false;
             gateAnnounced = false;
             usingCard = null;
             usingCardOffers = null;

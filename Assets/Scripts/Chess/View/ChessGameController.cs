@@ -872,11 +872,12 @@ namespace SaturdayGame.Chess.View
                         break;
                     case GameEventType.RulesOffered:
                         yield return ReturnToFront();
-                        hud.SetSkipLabel(e.OfferKind == OfferKind.Stage3 ? "Charge storm" : "Skip");
+                        hud.SetSkipLabel("Skip");
                         hud.ShowOffers(e.Rules, e.OfferKind);
                         // 从上到下一张一张飞进来，每张一声
                         yield return hud.FlyInCards(cardFlyDuration, () => PlaySound(s => s.paperPopup));
-                        hud.ShowSkip(true);
+                        // 第三阶段的卡不给跳过，挑一张用
+                        hud.ShowSkip(e.OfferKind != OfferKind.Stage3);
                         break;
                     case GameEventType.RuleActivated:
                         hud.HideOffers();
@@ -925,13 +926,14 @@ namespace SaturdayGame.Chess.View
             if (toSelect != null && toSelect.OnBoard && toSelect.Side == game.PlayerSide && game.Phase == GamePhase.PlayerTurn) Select(toSelect);
         }
 
-        /// <summary>第三阶段左下角的技能栏：冷却、手里的卡、雷暴积累条。不是第三阶段就收起来。</summary>
+        /// <summary>第三阶段左下角的雷暴按钮和积累条（吃掉敌人就涨，满了点按钮放）；满了云里闪电也变多。不是第三阶段就收起来。</summary>
         void RefreshSkillBar()
         {
             bool show = game.InStage3 && game.Phase != GamePhase.GameOver;
             if (!show)
             {
                 hud.SetSkillBar(false, default, 0, 0);
+                board.SetCloudCharged(false);
                 return;
             }
             int charge = game.ThunderCharge, max = game.ThunderMax;
@@ -939,11 +941,12 @@ namespace SaturdayGame.Chess.View
             var thunder = new ChessHud.SkillSlot
             {
                 Title = "Thunderstorm",
-                Detail = game.ThunderUsed ? "Used" : charge < max ? $"Charging {charge}/{max}" : thunderReady ? "READY! Takes your turn" : "Charged",
+                Detail = charge < max ? $"Take enemies to charge: {charge}/{max}" : thunderReady ? "READY! Click to strike" : "Charged",
                 Interactable = thunderReady,
                 Glow = thunderReady,
             };
             hud.SetSkillBar(true, thunder, charge, max);
+            board.SetCloudCharged(charge >= max);
         }
 
         void UpdateStatus()
@@ -969,7 +972,7 @@ namespace SaturdayGame.Chess.View
                     hud.SetStatus(game.CurrentOfferKind == OfferKind.StageCard
                         ? $"Turn {turn} - pick a new house rule, or skip"
                         : game.CurrentOfferKind == OfferKind.Stage3
-                            ? $"Turn {turn} - pick a card, or charge the storm"
+                            ? $"Turn {turn} - pick a card"
                             : $"Turn {turn} - pick a skill, or skip");
                     break;
                 case GamePhase.ChoosingTarget:

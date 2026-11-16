@@ -333,7 +333,7 @@ namespace SaturdayGame.Chess.View
 
         public void ShowSkip(bool show) => skipButton.SetActive(show);
 
-        /// <summary>Skip 按钮上的字（第三阶段选卡时是 Charge storm）。</summary>
+        /// <summary>Skip 按钮上的字。</summary>
         public void SetSkipLabel(string text)
         {
             var label = skipButton.GetComponentInChildren<Text>();
@@ -341,11 +341,24 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>刷新第三阶段的技能栏（visible = false 时收起来）。charge / max 是雷暴积累条。</summary>
+        bool thunderGlow;
+
+        /// <summary>雷暴充满、能放的时候按钮一闪一闪（颜色在两种橙色之间来回，微微放大）。</summary>
+        void Update()
+        {
+            if (!thunderGlow || thunderButton == null || !skillBar.activeSelf) return;
+            float k = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6f);
+            thunderButton.image.color = Color.Lerp(new Color(0.85f, 0.5f, 0.12f, 0.95f), new Color(0.95f, 0.68f, 0.2f, 1f), k);
+            thunderButton.transform.localScale = Vector3.one * (1f + 0.04f * k);
+        }
+
         public void SetSkillBar(bool visible, SkillSlot thunder, int charge, int max)
         {
             skillBar.SetActive(visible);
             if (!visible) return;
             Apply(thunderButton, thunderTitle, thunderDetail, thunder);
+            thunderGlow = thunder.Glow;
+            if (!thunderGlow) thunderButton.transform.localScale = Vector3.one;
             thunderFill.anchorMax = new Vector2(max > 0 ? Mathf.Clamp01((float)charge / max) : 0f, 1f);
         }
 
@@ -466,6 +479,7 @@ namespace SaturdayGame.Chess.View
                 sb.Append("  • nobody can step on lava; whatever falls in is gone\n");
                 sb.Append("  • wet + fire = boom (blasts neighbours away)\n");
                 sb.Append("  • click a bishop or knight to use its skill\n");
+                sb.Append("  • take enemy pieces to charge the thunderstorm\n");
                 sb.Append("  • skills and thunder take your turn; cards don't\n");
             }
             foreach (var rule in ruleBook)
@@ -478,17 +492,16 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>
-        /// 第三阶段的技能栏：屏幕左下角，只放不属于哪枚棋子的雷暴大招（带积累条）。卡牌点了就马上用，不进技能栏。
+        /// 第三阶段的技能栏：屏幕左下角，只有一个雷暴按钮（带积累条），没有标题。积累条满了按钮一闪一闪，点它就放。
+        /// 卡牌点了就马上用，不进技能栏。
         /// 象的光束、马的火龙点棋子时在棋子头顶弹出（BuildPieceSkill）。
         /// </summary>
         void BuildSkillBar(RectTransform root)
         {
-            const float width = 330f, step = 62f;
-            var bar = Rect(root, "Skill Bar", Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(16, 16), new Vector2(width, step + 30));
+            const float width = 330f, step = 70f;
+            var bar = Rect(root, "Skill Bar", Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(16, 16), new Vector2(width, step));
             skillBar = bar.gameObject;
-            var heading = Label(bar, "Heading", "Skills", 22, FontStyle.Bold, TextAnchor.LowerLeft, new Vector2(4, 0), new Vector2(-8, 28));
-            heading.color = Color.white;
-            float y = -30;
+            float y = 0;
             thunderButton = SkillButton(bar, "Thunder", y, width, () => SkillClicked?.Invoke(Stage3Skill.Thunder), out thunderTitle, out thunderDetail);
             // 积累条：按钮底部一条细长的进度
             var track = Panel((RectTransform)thunderButton.transform, "Track", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 6), new Vector2(-24, 8), new Color(0, 0, 0, 0.45f));
@@ -533,7 +546,7 @@ namespace SaturdayGame.Chess.View
 
         Button SkillButton(RectTransform parent, string name, float y, float width, Action onClick, out Text title, out Text detail)
         {
-            var rt = Panel(parent, name, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, y), new Vector2(width, 56), new Color(0.3f, 0.24f, 0.2f, 0.92f));
+            var rt = Panel(parent, name, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, y), new Vector2(width, 68), new Color(0.3f, 0.24f, 0.2f, 0.92f));
             var button = rt.gameObject.AddComponent<Button>();
             button.onClick.AddListener(() => onClick());
             title = Label(rt, "Title", "", 22, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(12, -4), new Vector2(-20, 28));

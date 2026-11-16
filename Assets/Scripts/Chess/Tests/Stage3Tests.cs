@@ -168,7 +168,7 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text.Contains("castle")));
             Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text.Contains("lava")));
             Assert.AreEqual(14, game.InitialGuards);
-            Assert.AreEqual(12, game.ThunderMax, "full when only two guards are left");
+            Assert.AreEqual(7, game.ThunderMax, "half the guards at the start of stage 3");
             Assert.AreEqual(0, game.ThunderCharge);
             Assert.AreEqual(new GameSettings().LavaSquares, Enumerable.Range(0, 64).Count(i => game.Board.IsLava(Coord.FromIndex(i))));
         }
@@ -452,7 +452,7 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void LastStand_BlowsUpYourOwnPiece_AndChargesTheStorm()
+        public void LastStand_BlowsUpYourOwnPiece()
         {
             var board = Setup(Flat, new[] { "Ke1", "Nd4", "pd5", "pc3", "kh8" });
             var ctx = Context(board, 1);
@@ -463,13 +463,12 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsTrue(board.IsLava(C("d4")), "a lava pit is left behind");
             Assert.IsNotNull(board.PieceAt(C("d6")), "d5 is blasted to d6");
             Assert.IsNotNull(board.PieceAt(C("b2")), "c3 is blasted to b2");
-            Assert.AreEqual(SelfDestructRule.ThunderBonus, ctx.TakeThunderCharge());
         }
 
         // ---------- 一整局 ----------
 
         [Test]
-        public void Stage3Cards_AreUsedRightAway_SkippingChargesTheStorm()
+        public void Stage3Cards_AreUsedRightAway_SkippingDoesNotChargeTheStorm()
         {
             var game = Stage3Game(2);
             Assert.AreEqual(GamePhase.ChoosingRule, game.Phase);
@@ -482,7 +481,7 @@ namespace SaturdayGame.Chess.Tests
 
             game = Stage3Game(2);
             game.SkipOffers();
-            Assert.AreEqual(1, game.ThunderCharge, "skipping the cards charges the storm");
+            Assert.AreEqual(0, game.ThunderCharge, "only taking enemy pieces charges the storm");
         }
 
         [Test]
@@ -581,16 +580,41 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
+        public void ThunderCharge_CountsEnemiesTakenOnYourTurn_NotOnTheirs_AndResetsAfterTheStrike()
+        {
+            var game = Stage3Game(6);
+            game.SkipOffers();
+            game.DrainEvents();
+            Assert.AreEqual(GamePhase.PlayerTurn, game.Phase);
+            Assert.AreEqual(0, game.ThunderCharge);
+
+            // 玩家回合里少了一个守卫（技能、卡牌、走棋吃子都是这样）：算进积累条
+            game.Board.RemovePiece(game.Board.PiecesOf(Side.Black).First(p => !game.Board.InCastle(p)));
+            int before = game.Board.PiecesOf(Side.Black).Count();
+            game.PlayMove(game.LegalMoves().First());
+            int takenByMove = before - game.Board.PiecesOf(Side.Black).Count();
+            Assert.AreEqual(1 + takenByMove, game.ThunderCharge);
+
+            // 对方回合里自己少了棋子：不算
+            Assert.AreEqual(GamePhase.OpponentTurn, game.Phase);
+            int charge = game.ThunderCharge;
+            game.Board.RemovePiece(game.Board.PiecesOf(Side.Black).First(p => !game.Board.InCastle(p)));
+            var ai = new ChessAI(new Random(1)) { BlunderChance = 0 };
+            game.PlayMove(ai.ChooseMove(game.Board).Value);
+            Assert.AreEqual(charge, game.ThunderCharge, "pieces the friend loses on their own turn don't count");
+        }
+
+        [Test]
         public void ClearingTheGuards_OpensTheGate_AndWalkingInWins()
         {
             var game = Stage3Game(6);
             game.SkipOffers();
             game.DrainEvents();
             foreach (var p in game.Board.PiecesOf(Side.Black).Where(p => !game.Board.InCastle(p)).ToList()) game.Board.RemovePiece(p);
-            Assert.AreEqual(game.ThunderMax, game.ThunderCharge, "every guard lost fills the bar");
 
             // 随便走一步，朋友只剩城堡里的国王、王后：跳过，城门打开
             game.PlayMove(game.LegalMoves().First());
+            Assert.AreEqual(game.ThunderMax, game.ThunderCharge, "taking every guard on your turn fills the bar");
             var events = game.DrainEvents();
             Assert.IsTrue(events.Any(e => e.Type == GameEventType.GateOpened));
             Assert.IsTrue(game.GateOpen);

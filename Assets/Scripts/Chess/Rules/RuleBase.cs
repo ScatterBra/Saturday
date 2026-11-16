@@ -137,17 +137,6 @@ namespace SaturdayGame.Chess
         /// </summary>
         public int? Caster;
 
-        /// <summary>技能额外给雷暴积累条加的格数（例如自爆），ChessGame 用 TakeThunderCharge 取走。</summary>
-        int thunderCharge;
-
-        public void AddThunderCharge(int amount) => thunderCharge += amount;
-
-        public int TakeThunderCharge()
-        {
-            int amount = thunderCharge;
-            thunderCharge = 0;
-            return amount;
-        }
 
         public void Emit(GameEvent e) => emit(e);
 

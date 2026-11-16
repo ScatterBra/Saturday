@@ -116,7 +116,7 @@ namespace SaturdayGame.Chess
 
         public override string Id => "thunder";
         public override string Title => "Thunderstorm";
-        public override string Description => $"Lightning hits a {Size}x{Size} area. Every enemy guard in it is gone. Your pieces are safe. Once per game. Takes your turn.";
+        public override string Description => $"Lightning hits a {Size}x{Size} area. Every enemy guard in it is gone. Your pieces are safe. Charge it by taking enemy pieces. Takes your turn.";
         public override RuleKind Kind => RuleKind.Debuff;
         public override int Stage => 2;
 
@@ -255,15 +255,12 @@ namespace SaturdayGame.Chess
 
     /// <summary>
     /// 自爆：选自己一枚棋子（王除外），它原地爆炸：按爆炸的规则推开身边的棋子、留下熔岩坑，自己死掉。
-    /// 雷暴积累条多涨 ThunderBonus 格。
     /// </summary>
     public sealed class SelfDestructRule : RuleBase
     {
-        public const int ThunderBonus = 2;
-
         public override string Id => "self_destruct";
         public override string Title => "Last Stand";
-        public override string Description => $"One of your pieces (not the king) blows up. Neighbours get blasted away, a lava pit is left. Storm charge +{ThunderBonus}.";
+        public override string Description => $"One of your pieces (not the king) blows up. Neighbours get blasted away, a lava pit is left.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 2;
 
@@ -289,7 +286,6 @@ namespace SaturdayGame.Chess
             ctx.Say(Speakers.You, "For the castle!");
             ctx.Kill(piece, "blast", piece);
             ctx.Explode(at);
-            ctx.AddThunderCharge(ThunderBonus);
             ctx.Say(Speakers.Friend, "You blew up your own guy?!");
         }
 
