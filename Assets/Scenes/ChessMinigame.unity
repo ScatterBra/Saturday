@@ -1461,6 +1461,11 @@ MonoBehaviour:
     - {fileID: 8300000, guid: 33c4e0739ed551a449f0a4d0b00c5f84, type: 3}
     volume: 1
     pitchJitter: 0.05
+  bishBird:
+    clips:
+    - {fileID: 8300000, guid: 76d4dc0249dcde740b8d61b041285922, type: 3}
+    volume: 1
+    pitchJitter: 0.05
   pieceChange:
     clips:
     - {fileID: 8300000, guid: 6a8674e8e23c9e6439d4f130796e8680, type: 3}

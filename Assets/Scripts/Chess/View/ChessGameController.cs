@@ -687,7 +687,9 @@ namespace SaturdayGame.Chess.View
                 {
                     case GameEventType.Moved:
                         yield return board.AnimateMove(e.PieceId, e.From, e.To, moveDuration);
-                        PlaySound(s => s.pieceFall);
+                        // Bish-bird 落子不是"嗒"一声，是叫一声（没配音效就还是普通落子声）
+                        bool bird = game.Board.GetPiece(e.PieceId)?.Skin == "bishbird";
+                        PlaySound(s => bird && s.bishBird.clips.Length > 0 ? s.bishBird : s.pieceFall);
                         break;
                     case GameEventType.Pushed:
                         // 推子的是消防栓就是喷水，是青蛙就是舌头

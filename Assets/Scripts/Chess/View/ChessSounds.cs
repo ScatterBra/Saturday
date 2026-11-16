@@ -25,6 +25,8 @@ namespace SaturdayGame.Chess.View
         [Range(0f, 1f)] public float masterVolume = 1f;
         [Tooltip("棋子落到格子上（双方走棋、吃子、复活）。不包括被喷开、被拉过来、被击飞")]
         public Sfx pieceFall = new Sfx { pitchJitter = 0.05f };
+        [Tooltip("Bish-bird（主教变体）走棋落子时，代替 pieceFall 播的叫声")]
+        public Sfx bishBird = new Sfx { pitchJitter = 0.05f };
         [Tooltip("棋子换外观（主教变体、车变消防栓或青蛙等）")]
         public Sfx pieceChange = new Sfx();
         [Tooltip("一枚棋子变成树（每棵树冒出来时各播一次）、树消失，以及临时变身的棋子变回原样（例如喷完火的龙变回马）")]

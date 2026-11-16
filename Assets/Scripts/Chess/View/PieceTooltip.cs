@@ -50,9 +50,12 @@ namespace SaturdayGame.Chess.View
                     info.Body = $"{moves} Every time it lands, it pulls the closest enemy in a straight line (2-{FrogTongue.MaxReach} squares away) one step closer.";
                     if (stage3) info.Body += " Pull one into lava and it's gone.";
                     break;
+                case "bishbird":
+                    info.Title = SkinName(piece.Skin);
+                    info.Body = "Completely useless. All it does is squawk.";
+                    break;
                 case "elephant":
                 case "fish_shop":
-                case "bishbird":
                 case "cake":
                     info.Title = SkinName(piece.Skin);
                     info.Body = $"A bishop in disguise. {moves}";
