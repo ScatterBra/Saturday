@@ -48,7 +48,7 @@ namespace SaturdayGame.Chess
                 case "tree_pawns": return new TreePawnsRule();
                 case "dragon_knight": return new DragonKnightRule();
                 case "crayon_revival": return new CrayonRevivalRule();
-                case "wizard_birds": return new WizardBirdsRule();
+                case "ice_lance": return new IceLanceRule();
                 case "bishop_beam": return new BishopBeamSkill();
                 case "thunder": return new ThunderSkill();
                 case "rain": return new RainRule();

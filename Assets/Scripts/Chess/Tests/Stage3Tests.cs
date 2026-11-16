@@ -554,7 +554,7 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsFalse(events.Any(e => e.Type == GameEventType.OpponentSkill), "and casts next turn");
             CollectionAssert.AreEquivalent(warning.Squares, game.FriendTelegraph);
 
-            // 把一个被标记的棋子走开（如果能走），然后看鸟群只砸还在格子上的
+            // 把一个被标记的棋子走开（如果能走），然后看冰枪只扎还在格子上的
             var marked = warning.Squares.Select(c => game.Board.PieceAt(c)).Where(p => p != null && p.Side == Side.White).ToList();
             if (game.Phase == GamePhase.OpponentTurn) game.PlayMove(game.LegalMoves().First());
             while (game.Phase == GamePhase.ChoosingRule) game.SkipOffers();
@@ -562,10 +562,10 @@ namespace SaturdayGame.Chess.Tests
             var dodger = game.LegalMoves().Contains(dodge) ? game.Board.GetPiece(dodge.PieceId) : null;
             game.PlayMove(dodger != null ? dodge : game.LegalMoves().First());
             events = game.DrainEvents();
-            Assert.IsTrue(events.Any(e => e.Type == GameEventType.OpponentSkill && e.Rule.Id == "wizard_birds"));
-            foreach (var p in game.Board.PiecesOf(Side.White).Where(p => p.FrozenSkin == "poop"))
+            Assert.IsTrue(events.Any(e => e.Type == GameEventType.OpponentSkill && e.Rule.Id == "ice_lance"));
+            foreach (var p in game.Board.PiecesOf(Side.White).Where(p => p.FrozenSkin == "ice"))
                 Assert.IsTrue(warning.Squares.Contains(p.Pos), $"{p} was hit outside the marked squares");
-            if (dodger != null) Assert.IsFalse(dodger.IsFrozen, "the piece that moved away dodged the birds");
+            if (dodger != null) Assert.IsFalse(dodger.IsFrozen, "the piece that moved away dodged the ice lance");
             Assert.IsTrue(game.Board.PiecesOf(Side.Black).All(p => !p.IsFrozen));
         }
 

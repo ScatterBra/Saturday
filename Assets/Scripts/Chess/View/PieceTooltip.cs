@@ -116,8 +116,8 @@ namespace SaturdayGame.Chess.View
                         }
                         info.Status = Join(info.Status, $"Rooted. Can't move for {turns}.");
                         break;
-                    case "poop":
-                        info.Status = Join(info.Status, $"Covered in bird mess. Can't move for {turns}.");
+                    case IceLanceRule.Ice:
+                        info.Status = Join(info.Status, $"Frozen solid. Can't move for {turns}.");
                         break;
                     default:
                         info.Status = Join(info.Status, $"Can't move for {turns}.");

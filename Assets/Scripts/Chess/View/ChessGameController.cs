@@ -698,6 +698,15 @@ namespace SaturdayGame.Chess.View
             }
         }
 
+        /// <summary>冰枪从哪里飞出来：对方王后（在城堡里）的头顶；王后不在了就从棋子正上方掉下来。</summary>
+        Vector3 IceLanceSource(int targetId)
+        {
+            foreach (var p in game.Board.PiecesOf(game.OpponentSide))
+                if (p.Type == PieceType.Queen && board.TryGetPieceTop(p.Id, out var top)) return top + Vector3.up * 0.3f;
+            board.TryGetPieceTop(targetId, out var target);
+            return target + Vector3.up * 6f;
+        }
+
         void PlaySound(System.Func<ChessSounds, ChessSounds.Sfx> pick)
         {
             if (sounds != null) sounds.Play(pick(sounds));
@@ -782,6 +791,14 @@ namespace SaturdayGame.Chess.View
                         yield return board.AnimatePop(e.PieceId, effectDuration);
                         break;
                     case GameEventType.AppearanceChanged:
+                        // 王后的冰枪：飞过去扎上就冻住（扎中时变蓝），棋子不弹一下
+                        if (e.Frozen && e.Text == IceLanceRule.Ice)
+                        {
+                            PlaySound(s => s.iceLance);
+                            yield return board.AnimateIceLance(e.PieceId, IceLanceSource(e.PieceId));
+                            board.RefreshPiece(e.PieceId);
+                            break;
+                        }
                         if (e.Frozen && e.Text == "tree") PlaySound(s => s.tree);
                         else if (e.Reverted)
                         {

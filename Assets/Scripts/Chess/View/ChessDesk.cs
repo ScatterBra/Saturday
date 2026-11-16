@@ -84,6 +84,16 @@ namespace SaturdayGame.Chess.View
         public Sprite beamIcon;
         [Tooltip("马的技能（火龙）图标：第三阶段点马时在它头顶弹出。留空就用文字按钮")]
         public Sprite dragonIcon;
+        [Tooltip("王后的冰枪（ParticlePack 的 IceLance）：拿里面的冰枪模型和材质从王后飞到被冻住的棋子身上，扎中时播里面的碎冰和雾；冰枪一直插着，解冻时碎掉。留空就只冻住、没有特效")]
+        public GameObject iceLance;
+        [Tooltip("冰枪的长度（世界单位，一格 = 1）")]
+        public float iceLanceLength = 0.9f;
+        [Tooltip("冰枪从王后飞到棋子用多久（秒）")]
+        public float iceLanceFlight = 0.45f;
+        [Tooltip("冰枪扎进棋子多深（世界单位）")]
+        public float iceLanceDepth = 0.2f;
+        [Tooltip("扎中、碎掉时碎冰和雾的整体缩放")]
+        public float iceBurstScale = 0.12f;
         [Tooltip("潮湿的棋子遇火爆炸、自爆时在爆炸中心播一次的特效（例如 ParticlePack 的 SmallExplosion），留空就不播")]
         public GameObject explosionEffect;
         [Tooltip("爆炸特效的整体缩放")]

@@ -110,6 +110,10 @@ namespace SaturdayGame.Chess.View
         readonly float explosionEffectScale = 0.5f, rainEffectScale = 1f, rainDuration = 2.5f, thunderEffectScale = 0.5f;
         readonly Color beamColor = new Color(2.5f, 2.2f, 0.9f);
         readonly GameObject beamEffect;
+        readonly GameObject iceLancePrefab;
+        readonly float iceLanceLength = 0.9f, iceLanceFlight = 0.45f, iceLanceDepth = 0.2f, iceBurstScale = 0.12f;
+        /// <summary>插在冻住的棋子身上的冰枪（挂在棋子下面，跟着棋子走），解冻、被吃时拿掉。</summary>
+        readonly Dictionary<int, GameObject> iceLances = new Dictionary<int, GameObject>();
         readonly float beamEffectScale = 0.35f, beamEffectTravel = 0.6f;
         /// <summary>雷雨云里的雨（平时关着，有棋子潮湿时才下）。</summary>
         ParticleSystem cloudRain;
@@ -149,6 +153,11 @@ namespace SaturdayGame.Chess.View
                 lavaEffectScale = desk.lavaEffectScale;
                 lavaEffectLift = desk.lavaEffectLift;
                 treeEffect = desk.treeEffect;
+                iceLancePrefab = desk.iceLance;
+                iceLanceLength = desk.iceLanceLength;
+                iceLanceFlight = desk.iceLanceFlight;
+                iceLanceDepth = desk.iceLanceDepth;
+                iceBurstScale = desk.iceBurstScale;
                 raisedSideTextures = desk.raisedSideTextures;
                 raisedSkullTexture = desk.raisedSkullTexture;
                 raisedSkullChance = desk.raisedSkullChance;
@@ -437,6 +446,7 @@ namespace SaturdayGame.Chess.View
             foreach (var view in pieces.Values) view.Destroy();
             pieces.Clear();
             treeShown.Clear();
+            iceLances.Clear();
             treeVanished = false;
             board = newBoard;
             // 新的一局总是从平地开始显示。调试跳关时逻辑在开局就已经进了第三阶段，
@@ -990,6 +1000,17 @@ namespace SaturdayGame.Chess.View
         void Refresh(PieceView view, Piece piece)
         {
             view.Refresh(piece, Stage3);
+            // 冰化了（或者棋子没了）：插着的冰枪碎掉
+            bool ice = piece.OnBoard && piece.IsFrozen && piece.FrozenSkin == IceLanceRule.Ice;
+            if (!ice && iceLances.TryGetValue(piece.Id, out var lance))
+            {
+                iceLances.Remove(piece.Id);
+                if (lance != null)
+                {
+                    if (piece.OnBoard && !quietTrees) PlayIceBurst(root.InverseTransformPoint(lance.transform.position));
+                    ViewUtil.Destroy(lance);
+                }
+            }
             bool tree = piece.OnBoard && piece.IsFrozen && piece.FrozenSkin == "tree";
             treeShown.TryGetValue(piece.Id, out bool was);
             if (tree == was) return;
@@ -1025,6 +1046,110 @@ namespace SaturdayGame.Chess.View
         public void PlayRevertEffect(int id)
         {
             if (pieces.TryGetValue(id, out var view)) PlayTreeEffect(view.Root.transform.localPosition);
+        }
+
+        // ---------- 王后的冰枪 ----------
+
+        /// <summary>
+        /// 一根冰枪从 fromWorld（王后头顶）沿一道低弧线飞到棋子身上，扎进去一点，然后一直插在棋子身上（挂在棋子下面），
+        /// 解冻时在 Refresh 里碎掉。扎中时播一次碎冰和雾。没配冰枪特效就什么都不做。
+        /// </summary>
+        public IEnumerator AnimateIceLance(int targetId, Vector3 fromWorld)
+        {
+            if (iceLancePrefab == null || !pieces.TryGetValue(targetId, out var view) || view.Root == null) yield break;
+            var bounds = PieceBounds(view);
+            var lance = CreateIceLance(out var tipLocal);
+            if (lance == null) yield break;
+
+            // 扎在棋子上半身，往里扎 iceLanceDepth
+            var hit = bounds.center + Vector3.up * bounds.extents.y * 0.3f;
+            var end = hit + (hit - fromWorld).normalized * iceLanceDepth;
+            float arc = Mathf.Max(0.4f, Vector3.Distance(fromWorld, end) * 0.12f);
+
+            float duration = Mathf.Max(0.05f, iceLanceFlight);
+            for (float t = 0f; t < 1f; t += Time.deltaTime / duration)
+            {
+                PlaceLance(lance, tipLocal, fromWorld, end, arc, t);
+                yield return null;
+            }
+            PlaceLance(lance, tipLocal, fromWorld, end, arc, 1f);
+
+            // 插在棋子身上：挂到棋子下面，被推开、被吹走时一起走；同一枚棋子再被扎一次就换成新的
+            if (iceLances.TryGetValue(targetId, out var old) && old != null) ViewUtil.Destroy(old);
+            lance.transform.SetParent(view.Root.transform, true);
+            iceLances[targetId] = lance;
+            PlayIceBurst(root.InverseTransformPoint(hit));
+            // 扎中的一刻变蓝、地上出现回合数
+            Refresh(view, board.GetPiece(targetId));
+        }
+
+        static Vector3 ArcPoint(Vector3 from, Vector3 to, float arc, float t) =>
+            Vector3.Lerp(from, to, t) + Vector3.up * (arc * 4f * t * (1f - t));
+
+        /// <summary>把冰枪的枪尖放在弧线上 t 处，枪身顺着飞行方向。</summary>
+        static void PlaceLance(GameObject lance, Vector3 tipLocal, Vector3 from, Vector3 to, float arc, float t)
+        {
+            t = Mathf.Clamp01(t);
+            var tip = ArcPoint(from, to, arc, t);
+            var direction = t < 0.99f ? ArcPoint(from, to, arc, t + 0.01f) - tip : tip - ArcPoint(from, to, arc, t - 0.01f);
+            var rotation = Quaternion.FromToRotation(Vector3.right, direction.normalized);
+            lance.transform.SetPositionAndRotation(tip - rotation * Vector3.Scale(tipLocal, lance.transform.lossyScale), rotation);
+        }
+
+        /// <summary>冰枪模型：用 IceLance 特效里粒子用的那个模型和材质，做成普通物体。tipLocal = 枪尖在模型里的位置（模型沿 +X 方向）。</summary>
+        GameObject CreateIceLance(out Vector3 tipLocal)
+        {
+            tipLocal = default;
+            var source = iceLancePrefab.GetComponentInChildren<ParticleSystemRenderer>();
+            if (source == null || source.mesh == null) return null;
+            var mesh = source.mesh;
+            var go = new GameObject("Ice Lance", typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(root, false);
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = source.sharedMaterial;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            float length = Mathf.Max(0.01f, mesh.bounds.size.x);
+            go.transform.localScale = Vector3.one * (iceLanceLength / length / Mathf.Max(0.0001f, root.lossyScale.x));
+            tipLocal = new Vector3(mesh.bounds.max.x, mesh.bounds.center.y, mesh.bounds.center.z);
+            return go;
+        }
+
+        /// <summary>碎冰和雾：IceLance 特效里除了飞出去的冰枪和中间那颗冰球，其余的粒子只播一小下。</summary>
+        void PlayIceBurst(Vector3 localPosition)
+        {
+            if (iceLancePrefab == null) return;
+            var fx = ParticleFx.Spawn(iceLancePrefab, root, localPosition, iceBurstScale, Random.Range(0f, 360f));
+            fx.name = "Ice Burst";
+            if (fx.TryGetComponent<ParticleSystem>(out var lances))
+            {
+                var emission = lances.emission;
+                emission.enabled = false;
+            }
+            var ball = fx.transform.Find("IceBall");
+            if (ball != null) ball.gameObject.SetActive(false);
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                var main = ps.main;
+                main.duration = Mathf.Min(main.duration, 0.3f);
+            }
+            ParticleFx.PlayOnce(fx);
+        }
+
+        /// <summary>棋子看得见的部分的包围盒（世界坐标），不算插在身上的冰枪。</summary>
+        static Bounds PieceBounds(PieceView view)
+        {
+            var bounds = new Bounds(view.Root.transform.position + Vector3.up * 0.4f, Vector3.one * 0.8f);
+            bool any = false;
+            foreach (var r in view.Root.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled || r.name == "Ice Lance") continue;
+                if (!any) bounds = r.bounds;
+                else bounds.Encapsulate(r.bounds);
+                any = true;
+            }
+            return bounds;
         }
 
         void PlayTreeEffect(Vector3 localPosition)

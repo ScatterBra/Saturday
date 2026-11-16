@@ -49,6 +49,8 @@ namespace SaturdayGame.Chess.View
         public Sfx beam = new Sfx();
         [Tooltip("第三阶段：雷暴大招")]
         public Sfx thunder = new Sfx();
+        [Tooltip("第三阶段：王后的冰枪飞出去（每根各播一次）")]
+        public Sfx iceLance = new Sfx { pitchJitter = 0.08f };
         [Tooltip("第三阶段：城门打开")]
         public Sfx gate = new Sfx();
 

@@ -25,7 +25,7 @@ namespace SaturdayGame.Chess
 
         /// <summary>还要冻结几个（自己一方的）回合。</summary>
         public int FrozenTurns;
-        /// <summary>冻结时叠加的外观，例如 tree、poop。解冻后清空。</summary>
+        /// <summary>冻结时叠加的外观，例如 tree、ice。解冻后清空。</summary>
         public string FrozenSkin;
 
         public bool IsFrozen => FrozenTurns > 0;

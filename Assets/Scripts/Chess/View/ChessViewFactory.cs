@@ -117,12 +117,14 @@ namespace SaturdayGame.Chess.View
 
         /// <summary>始终朝向镜头的 3D 文字。</summary>
         /// <param name="title">用标题字体（醒目的短字，例如 Princess、棋子上的小字）；没有标题字体时用正文字体加粗。</param>
-        public TextMesh Label(Transform parent, Vector3 localPosition, float characterSize, string text, bool title = false)
+        /// <param name="faceCamera">false = 平躺在地上（字面朝上、顶边朝远处），不跟着镜头转。</param>
+        public TextMesh Label(Transform parent, Vector3 localPosition, float characterSize, string text, bool title = false, bool faceCamera = true)
         {
             var go = new GameObject("Label");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
-            Face(go);
+            if (faceCamera) Face(go);
+            else go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             var mesh = go.AddComponent<TextMesh>();
             var useFont = title && titleFont != null ? titleFont : font;
             mesh.font = useFont;

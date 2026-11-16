@@ -65,7 +65,7 @@ namespace SaturdayGame.Chess
         public int[] FriendSkillTurns = { 2 };
         public int FriendSkillEvery = 4;
         /// <summary>王后放的技能 Id，见 RuleCatalog.Create。</summary>
-        public string FriendSkill = "wizard_birds";
+        public string FriendSkill = "ice_lance";
         /// <summary>象的光束、火龙用完之后要等几回合才能再用。</summary>
         public int BeamCooldown = 3;
         public int DragonCooldown = 3;
@@ -128,7 +128,7 @@ namespace SaturdayGame.Chess
         bool gateAnnounced;
         int beamReadyTurn;
         int dragonReadyTurn;
-        WizardBirdsRule plannedFriendSkill;
+        IceLanceRule plannedFriendSkill;
         int telegraphTurn = -1;
 
         public Board Board { get; }
@@ -703,7 +703,7 @@ namespace SaturdayGame.Chess
 
             int castTurn = NextFriendCastTurn();
             if (castTurn < 0 || Board.FullMove < castTurn - 1) return;
-            var skill = RuleCatalog.Create(settings.FriendSkill) as WizardBirdsRule;
+            var skill = RuleCatalog.Create(settings.FriendSkill) as IceLanceRule;
             if (skill == null || !skill.IsAvailable(friendCtx))
             {
                 friendSkillIndex++;
@@ -713,7 +713,7 @@ namespace SaturdayGame.Chess
             plannedFriendSkill = skill;
             telegraphTurn = Board.FullMove;
             events.Add(GameEvent.SkillTelegraphed(skill, squares));
-            events.Add(GameEvent.Dialogue(Speakers.Friend, $"My queen is calling {skill.Title.Replace("The ", "the ")}. Next turn they hit the marked squares!"));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "My queen is aiming her ice lances. Next turn they hit the marked squares!"));
         }
 
         /// <summary>下一次王后放技能的回合（绝对回合数），不再放了返回 -1。</summary>

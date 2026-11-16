@@ -382,6 +382,11 @@ MonoBehaviour:
   treeEffectScale: 0.4
   beamIcon: {fileID: 0}
   dragonIcon: {fileID: 0}
+  iceLance: {fileID: 1820680284854294, guid: 1a1c02facd51d87458dcaa3a761e2c03, type: 3}
+  iceLanceLength: 0.9
+  iceLanceFlight: 0.45
+  iceLanceDepth: 0.2
+  iceBurstScale: 0.12
   explosionEffect: {fileID: 1828176872806910, guid: 64891a0eb28db934898420d80ca07cb3, type: 3}
   explosionEffectScale: 0.5
   rainEffect: {fileID: 0}
@@ -1518,6 +1523,10 @@ MonoBehaviour:
     clips: []
     volume: 1
     pitchJitter: 0
+  iceLance:
+    clips: []
+    volume: 1
+    pitchJitter: 0.08
   gate:
     clips: []
     volume: 1

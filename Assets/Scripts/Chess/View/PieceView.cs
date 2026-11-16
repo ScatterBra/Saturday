@@ -22,6 +22,9 @@ namespace SaturdayGame.Chess.View
         readonly GameObject frozenMarker;
         readonly TextMesh letter;
         readonly TextMesh caption;
+        /// <summary>被冰枪冻住时，平躺在棋子前面（靠玩家一侧）格子上的白色剩余回合数。</summary>
+        readonly TextMesh iceTurns;
+        static readonly Color IceTint = new Color(0.45f, 0.7f, 1f);
         readonly SpriteRenderer sprite;
         readonly FaceCamera spriteFacing;
         GameObject model;
@@ -40,6 +43,10 @@ namespace SaturdayGame.Chess.View
 
             letter = factory.Label(Root.transform, new Vector3(0, 0.32f, 0), 0.06f, "");
             caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "", title: true);
+            iceTurns = factory.Label(Root.transform, new Vector3(0f, 0.03f, -0.34f), 0.05f, "", title: true, faceCamera: false);
+            iceTurns.color = Color.white;
+            iceTurns.gameObject.name = "Ice Turns";
+            iceTurns.gameObject.SetActive(false);
             // 调整棋子在棋盘上的高度
             if (factory.Art != null)
             {
@@ -60,6 +67,9 @@ namespace SaturdayGame.Chess.View
             bool useModel = model != null;
             // 第三阶段模型没有黑方版本时压暗；其他模型（例如树）保持原色
             var wet = piece.IsWet ? factory.WetTint : Color.white;
+            // 被冰枪冻住：整枚棋子变冰蓝
+            bool ice = piece.IsFrozen && piece.FrozenSkin == IceLanceRule.Ice;
+            if (ice) wet *= IceTint;
             if (useModel)
             {
                 var tint = resolved.Standee && resolved.Tint != default ? resolved.Tint : Color.white;
@@ -89,14 +99,17 @@ namespace SaturdayGame.Chess.View
                 sprite.color = resolved.Tint * Color.Lerp(Color.white, SkinColor(skin), 0.6f);
             if (sprite != null && useSprite) sprite.color *= wet;
 
-            frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen);
+            // 冰冻不用头顶的小方块，用插着的冰枪 + 地上的回合数表示
+            frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen && !ice);
+            iceTurns.gameObject.SetActive(ice);
+            if (ice) iceTurns.text = piece.FrozenTurns.ToString();
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
 
             letter.text = PieceValues.Letter(piece.Type);
             letter.color = white ? WhiteInk : BlackInk;
 
             string text = skin ?? "";
-            if (piece.IsFrozen)
+            if (piece.IsFrozen && !ice)
             {
                 // 冻结外观有图时只显示剩余回合数
                 string frozen = resolved.ShowsFrozen ? piece.FrozenTurns.ToString() : $"{piece.FrozenSkin} {piece.FrozenTurns}";
@@ -184,7 +197,7 @@ namespace SaturdayGame.Chess.View
                 case "dragon": return new Color(1f, 0.45f, 0.05f);
                 case "crayon": return new Color(1f, 0.85f, 0.2f);
                 case "tree": return new Color(0.15f, 0.55f, 0.2f);
-                case "poop": return new Color(0.45f, 0.3f, 0.15f);
+                case IceLanceRule.Ice: return new Color(0.6f, 0.85f, 1f);
                 default: return Color.magenta;
             }
         }

@@ -21,8 +21,8 @@ namespace SaturdayGame.Chess
             }
         }
 
-        /// <summary>鸟群：王除外，后可以被砸中但概率很低。</summary>
-        public static int BirdWeight(Piece p)
+        /// <summary>冰枪：王除外，后可以被扎中但概率很低。</summary>
+        public static int FreezeWeight(Piece p)
         {
             switch (p.Type)
             {
