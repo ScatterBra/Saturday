@@ -19,6 +19,8 @@ namespace SaturdayGame.Chess.View
         public Transform newArea;
         [Tooltip("右边规则书：规则文字和被吃区挂在这个物体下面（4.2 × 9 格）。子物体上的模型或 SpriteRenderer 是本子的底图，物体本身放在本子顶面的高度。这个物体本身不要旋转（字的画布会自己平躺），要转方向就转子物体")]
         public Transform ruleBook;
+        [Tooltip("鼠标停在规则书上时的高光轮廓材质（Saturday/Outline Hull，颜色在 RuleBookFocus 上调），留空就没有轮廓（点一下照样能拿起来）")]
+        public Material ruleBookOutline;
 
         [Tooltip("每格岩浆上放一份的特效（例如 ParticlePack 的 WildFire），留空就只有橙色色块")]
         public GameObject lavaEffect;

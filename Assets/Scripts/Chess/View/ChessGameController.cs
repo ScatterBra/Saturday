@@ -115,6 +115,8 @@ namespace SaturdayGame.Chess.View
         float startFieldOfView;
         float startZoom;
         bool cameraTurning;
+        /// <summary>规则书：鼠标停上去描边，点一下举到镜头前，点外面放回去。</summary>
+        RuleBookFocus ruleBookFocus;
         /// <summary>这一局相机已经转到中间视角了（只转一次）。</summary>
         bool midViewShown;
         /// <summary>可以右键拖动转视角了（中间视角出现后、第三阶段）。</summary>
@@ -168,6 +170,7 @@ namespace SaturdayGame.Chess.View
             hud.PieceSkillClicked += OnPieceSkillClicked;
             hud.PlayAgainClicked += NewGame;
             hud.BackClicked += () => MinigameSession.Finish(game.Winner == game.PlayerSide ? "won" : game.Winner == null ? "draw" : "lost");
+            if (desk != null) ruleBookFocus = RuleBookFocus.Attach(desk.ruleBook, boardCamera, desk.ruleBookOutline);
             NewGame();
         }
 
@@ -258,6 +261,7 @@ namespace SaturdayGame.Chess.View
             // 但后面一定跟着风暴事件，由过场（或沙尘风暴那条路）再换成第三阶段的灯光
             ApplyStageLighting(false);
             hud.ResetForNewGame();
+            if (ruleBookFocus != null) ruleBookFocus.PutBack();
             hud.SetStorm(0);
             // 上一局转过的相机回到场景里设的角度，棋子重新平躺
             FaceCamera.FollowCameraPitch = false;
@@ -276,6 +280,8 @@ namespace SaturdayGame.Chess.View
         {
             if (game == null) return;
             UpdateOrbit();
+            // 规则书举着（或鼠标在规则书上点了）的时候，棋盘不响应
+            if (UpdateRuleBook()) return;
             UpdateTooltip();
             UpdatePieceSkillButton();
             if (busy) return;
@@ -301,6 +307,27 @@ namespace SaturdayGame.Chess.View
             if (!mouse.leftButton.wasPressedThisFrame) return;
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
             if (board.TryGetPointedCoord(boardCamera.ScreenPointToRay(mouse.position.ReadValue()), out var coord)) ClickSquare(coord);
+        }
+
+        /// <summary>
+        /// 规则书：鼠标停上去描边，左键点一下举到镜头前；举着时点外面或按 Esc 放回去。
+        /// 演出、转相机的时候不能拿起放下。返回 true = 规则书举着或这一下点在规则书上，这一帧别的输入都不处理。
+        /// </summary>
+        bool UpdateRuleBook()
+        {
+            var mouse = Mouse.current;
+            if (ruleBookFocus == null || mouse == null || boardCamera == null) return false;
+            var keyboard = Keyboard.current;
+            bool canInteract = !busy && !cameraTurning && game.Phase != GamePhase.GameOver;
+            bool consumed = ruleBookFocus.Tick(boardCamera.ScreenPointToRay(mouse.position.ReadValue()),
+                mouse.leftButton.wasPressedThisFrame, keyboard != null && keyboard.escapeKey.wasPressedThisFrame, canInteract);
+            if (consumed)
+            {
+                hud.HideTooltip();
+                hud.HidePieceSkill();
+                board.HideGhost();
+            }
+            return consumed;
         }
 
         /// <summary>
@@ -342,7 +369,8 @@ namespace SaturdayGame.Chess.View
                 rightPressPosition = position;
                 rightDragging = false;
             }
-            bool canOrbit = orbitUnlocked && !cameraTurning;
+            // 规则书举在镜头前时不能转视角、不能缩放
+            bool canOrbit = orbitUnlocked && !cameraTurning && (ruleBookFocus == null || !ruleBookFocus.Active);
             if (mouse.rightButton.isPressed && canOrbit)
             {
                 if (!rightDragging && (position - rightPressPosition).magnitude > DragThreshold) rightDragging = true;

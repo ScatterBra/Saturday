@@ -345,6 +345,7 @@ MonoBehaviour:
   boardHasCoordinates: 1
   newArea: {fileID: 1329013920}
   ruleBook: {fileID: 388564103}
+  ruleBookOutline: {fileID: 2100000, guid: 214b914295d82d84c8090b3a11e4327d, type: 2}
   lavaEffect: {fileID: 1956197547661106, guid: f293a2dcc753a4a489fefe7f8f312d69, type: 3}
   lavaEffectScale: 0.3
   lavaEffectLift: 0.2
