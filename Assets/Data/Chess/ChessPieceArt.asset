@@ -244,8 +244,10 @@ MonoBehaviour:
   - skin: marie
     onlyForType: 1
     type: 4
-    white: []
-    black: []
+    white:
+    - {fileID: 21300000, guid: 8ba35e0ccf484f440b9a5ebbdc827f07, type: 3}
+    black:
+    - {fileID: 21300000, guid: 8ba35e0ccf484f440b9a5ebbdc827f07, type: 3}
     models:
     - {fileID: 919132149155446097, guid: 9085713c822051c408392b823e6e8cdf, type: 3}
     blackModels:
@@ -260,8 +262,10 @@ MonoBehaviour:
   - skin: cleopatra
     onlyForType: 1
     type: 4
-    white: []
-    black: []
+    white:
+    - {fileID: 21300000, guid: fc91754dd14895d47a6020e0a341ff04, type: 3}
+    black:
+    - {fileID: 21300000, guid: fc91754dd14895d47a6020e0a341ff04, type: 3}
     models:
     - {fileID: 919132149155446097, guid: cdada87f9d4c1be498018104624962d4, type: 3}
     blackModels:

@@ -169,15 +169,12 @@ namespace SaturdayGame.Chess.View
             // 被吃过的普通棋子：被吃区里、复活以后都一直是纸片版（换过外观的保持原来的外观）
             if (piece.WasLost && string.IsNullOrEmpty(piece.Skin))
             {
-                var blackPaper = piece.Side == Side.Black
-                    ? Pick(piece.Type, blackPaperPawn, blackPaperKnight, blackPaperBishop, blackPaperRook, blackPaperQueen, blackPaperKing)
-                    : null;
-                var paper = blackPaper != null ? blackPaper : Pick(piece.Type, paperPawn, paperKnight, paperBishop, paperRook, paperQueen, paperKing);
+                var paper = PaperSprite(piece, out bool hasBlackPaper);
                 if (paper != null)
                 {
                     result.Sprite = paper;
                     result.Paper = true;
-                    result.Tint = piece.Side == Side.Black && blackPaper == null ? blackTint : Color.white;
+                    result.Tint = piece.Side == Side.Black && !hasBlackPaper ? blackTint : Color.white;
                     result.ShowsSkin = true;
                     return result;
                 }
@@ -201,6 +198,16 @@ namespace SaturdayGame.Chess.View
             return result;
         }
 
+        /// <summary>这种棋子的纸片版图（黑方有单独的图就用黑方的）。</summary>
+        Sprite PaperSprite(Piece piece, out bool hasBlackPaper)
+        {
+            var blackPaper = piece.Side == Side.Black
+                ? Pick(piece.Type, blackPaperPawn, blackPaperKnight, blackPaperBishop, blackPaperRook, blackPaperQueen, blackPaperKing)
+                : null;
+            hasBlackPaper = blackPaper != null;
+            return blackPaper != null ? blackPaper : Pick(piece.Type, paperPawn, paperKnight, paperBishop, paperRook, paperQueen, paperKing);
+        }
+
         bool TrySkin(string id, Piece piece, bool stage3, ref Resolved result)
         {
             if (string.IsNullOrEmpty(id)) return false;
@@ -216,7 +223,12 @@ namespace SaturdayGame.Chess.View
                 bool hasStage3 = stage3 && stage3List != null && stage3List.Length > 0;
                 if ((list == null || list.Length == 0) && !hasModel && !hasStage3) continue;
                 if (list != null && list.Length > 0) result.Sprite = list[Variant(piece, list.Length)];
-                else result.Sprite = BaseSprite(piece, out _); // 只有模型的外观（例如大象），被吃区里显示基础棋子的图
+                else
+                {
+                    // 只有模型的外观（例如 queen 的变种、主教变体），被吃区里显示纸片版；没有纸片图才用基础棋子的图
+                    var paper = piece.WasLost ? PaperSprite(piece, out _) : null;
+                    result.Sprite = paper != null ? paper : BaseSprite(piece, out _);
+                }
                 result.Tint = piece.Side == Side.Black && !hasBlack ? variantBlackTint : Color.white;
                 if (hasModel)
                 {
