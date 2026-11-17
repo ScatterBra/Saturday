@@ -447,6 +447,7 @@ namespace SaturdayGame.Chess.View
             pieces.Clear();
             treeShown.Clear();
             iceLances.Clear();
+            DestroyCake();
             treeVanished = false;
             board = newBoard;
             // 新的一局总是从平地开始显示。调试跳关时逻辑在开局就已经进了第三阶段，
@@ -931,6 +932,106 @@ namespace SaturdayGame.Chess.View
                 view.SetPosition(PiecePosition(piece.Pos));
                 Refresh(view, piece);
             }
+            SyncCake();
+        }
+
+        // ---------- 蛋糕争夺 ----------
+
+        /// <summary>棋盘上的蛋糕：借一枚外观是 cake 的假棋子来显示（PieceArt 里 cake 的图和模型）。</summary>
+        PieceView cakeView;
+
+        PieceView CreateCakeView(Coord at)
+        {
+            var fake = new Piece { Id = -1, Type = PieceType.Bishop, Side = Side.White, Pos = at, StartPos = at, Skin = "cake" };
+            var view = new PieceView(factory, pieceRoot, fake);
+            view.Root.name = "Cake";
+            view.Refresh(fake, Stage3);
+            view.SetPosition(PiecePosition(at));
+            return view;
+        }
+
+        void DestroyCake()
+        {
+            if (cakeView != null) cakeView.Destroy();
+            cakeView = null;
+        }
+
+        /// <summary>蛋糕的显示跟棋盘对齐（新开一局、整体同步时）。</summary>
+        void SyncCake()
+        {
+            if (board == null || !board.Cake.HasValue)
+            {
+                DestroyCake();
+                return;
+            }
+            if (cakeView == null) cakeView = CreateCakeView(board.Cake.Value);
+            cakeView.Root.transform.localScale = Vector3.one;
+            cakeView.SetPosition(PiecePosition(board.Cake.Value));
+        }
+
+        /// <summary>蛋糕从天上掉到 at，落地弹一下。</summary>
+        public IEnumerator AnimateCakeDrop(Coord at, float duration)
+        {
+            DestroyCake();
+            cakeView = CreateCakeView(at);
+            var end = PiecePosition(at);
+            var start = end + Vector3.up * 6f;
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                cakeView.SetPosition(Vector3.Lerp(start, end, t * t));
+                yield return null;
+            }
+            cakeView.SetPosition(end);
+            for (float t = 0; t < 1f; t += Time.deltaTime / (duration * 0.5f))
+            {
+                float squash = Mathf.Sin(t * Mathf.PI) * 0.2f;
+                cakeView.Root.transform.localScale = new Vector3(1f + squash, 1f - squash, 1f + squash);
+                yield return null;
+            }
+            cakeView.Root.transform.localScale = Vector3.one;
+        }
+
+        /// <summary>蛋糕自己跳到隔壁格子。</summary>
+        public IEnumerator AnimateCakeMove(Coord to, float duration)
+        {
+            if (cakeView == null) cakeView = CreateCakeView(to);
+            var start = cakeView.Root.transform.localPosition;
+            var end = PiecePosition(to);
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                cakeView.SetPosition(Vector3.Lerp(start, end, t) + Vector3.up * (0.6f * 4f * t * (1f - t)));
+                yield return null;
+            }
+            cakeView.SetPosition(end);
+        }
+
+        /// <summary>蛋糕被吃掉：缩没了。</summary>
+        public IEnumerator AnimateCakeTaken(float duration)
+        {
+            if (cakeView == null) yield break;
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                cakeView.Root.transform.localScale = Vector3.one * (1f - t);
+                yield return null;
+            }
+            DestroyCake();
+        }
+
+        /// <summary>蛋糕跑掉：往棋盘外跳一大步，边跳边变小。</summary>
+        public IEnumerator AnimateCakeEscape(float duration)
+        {
+            if (cakeView == null) yield break;
+            var start = cakeView.Root.transform.localPosition;
+            var outward = new Vector3(start.x, 0f, start.z);
+            outward = outward.sqrMagnitude > 0.01f ? outward.normalized : Vector3.right;
+            var end = start + outward * 6f;
+            for (float t = 0; t < 1f; t += Time.deltaTime / duration)
+            {
+                cakeView.SetPosition(Vector3.Lerp(start, end, t) + Vector3.up * (2f * 4f * t * (1f - t)));
+                cakeView.Root.transform.localScale = Vector3.one * (1f - t * 0.8f);
+                yield return null;
+            }
+            DestroyCake();
         }
 
         PieceView ghost;
@@ -1196,7 +1297,7 @@ namespace SaturdayGame.Chess.View
             if (selected.HasValue) Mark(colors, marks, selected.Value.Index, Selected, 1f, 0.55f);
             if (moves != null)
                 foreach (var m in moves)
-                    Mark(colors, marks, m.To.Index, board.PieceAt(m.To) != null || board.IsLava(m.To) ? CaptureTarget : MoveTarget, 1f, 0.55f);
+                    Mark(colors, marks, m.To.Index, board.PieceAt(m.To) != null || board.IsLava(m.To) || board.IsCake(m.To) ? CaptureTarget : MoveTarget, 1f, 0.55f);
             if (pickOptions != null)
                 foreach (var c in pickOptions)
                     Mark(colors, marks, c.Index, PickTarget, 1f, 0.55f);

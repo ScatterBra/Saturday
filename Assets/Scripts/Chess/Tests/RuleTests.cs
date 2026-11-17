@@ -98,7 +98,7 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void BishopVariants_FourBishopsGetFourDifferentLooks_AndKeepThem()
+        public void BishopVariants_EachSideGetsAFishShopAndABird_AndKeepsThem()
         {
             var firstSkins = new HashSet<string>();
             for (int seed = 0; seed < 30; seed++)
@@ -109,7 +109,9 @@ namespace SaturdayGame.Chess.Tests
                 Run(rule, ctx);
                 var skins = board.AllPieces.Where(p => p.Type == PieceType.Bishop).Select(p => p.Skin).ToList();
                 Assert.AreEqual(4, skins.Count);
-                CollectionAssert.AreEquivalent(BishopVariantsRule.Skins, skins);
+                foreach (var side in new[] { Side.White, Side.Black })
+                    CollectionAssert.AreEquivalent(BishopVariantsRule.Skins,
+                        board.AllPieces.Where(p => p.Type == PieceType.Bishop && p.Side == side).Select(p => p.Skin).ToList());
                 firstSkins.Add(board.PieceAt(C("c1")).Skin);
 
                 for (int i = 0; i < 6; i++) rule.OnTurnEnded(ctx, i % 2 == 0 ? Side.White : Side.Black);

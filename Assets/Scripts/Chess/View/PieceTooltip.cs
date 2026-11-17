@@ -54,9 +54,12 @@ namespace SaturdayGame.Chess.View
                     info.Title = SkinName(piece.Skin);
                     info.Body = "Completely useless. All it does is squawk.";
                     break;
-                case "elephant":
+                case ChessGame.MarieSkin:
+                case ChessGame.CleopatraSkin:
+                    info.Title = SkinName(piece.Skin);
+                    info.Body = $"A queen in costume. {moves}";
+                    break;
                 case "fish_shop":
-                case "cake":
                     info.Title = SkinName(piece.Skin);
                     info.Body = $"A bishop in disguise. {moves}";
                     break;
@@ -139,6 +142,8 @@ namespace SaturdayGame.Chess.View
                 case "fish_shop": return "Fish Shop";
                 case "bishbird": return "Bish-bird";
                 case "cake": return "Cake";
+                case ChessGame.MarieSkin: return "Marie Antoinette";
+                case ChessGame.CleopatraSkin: return "Cleopatra";
                 default: return char.ToUpperInvariant(skin[0]) + skin.Substring(1).Replace('_', ' ');
             }
         }

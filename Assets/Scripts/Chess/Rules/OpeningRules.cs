@@ -195,15 +195,15 @@ namespace SaturdayGame.Chess
         }
     }
 
-    /// <summary>四个主教各自随机变成一样东西（大象、Bi's shop、Bish bird、蛋糕），互不重复，之后一直保持。</summary>
+    /// <summary>主教变成别的东西：每一方的两个主教一个变 Bi's shop、一个变 Bish-bird（谁变哪个随机），之后一直保持。</summary>
     public sealed class BishopVariantsRule : RuleBase
     {
         /// <summary>主教可能变成的样子（外观 ID）。</summary>
-        public static readonly string[] Skins = { "elephant", "fish_shop", "bishbird", "cake" };
+        public static readonly string[] Skins = { "fish_shop", "bishbird" };
 
         public override string Id => "bishop_variants";
         public override string Title => "Bishops Can Be Anything";
-        public override string Description => "Every bishop picked something else to be: an elephant, a fish shop, a bird or a cake. They stay that way.";
+        public override string Description => "Every bishop picked something else to be: a fish shop or a bird. They stay that way.";
         public override string RuleBookText => "Bishops picked new looks. They still move like bishops.";
         public override RuleKind Kind => RuleKind.Cosmetic;
         public override int Stage => 0;
@@ -213,21 +213,23 @@ namespace SaturdayGame.Chess
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {
-            var skins = (string[])Skins.Clone();
-            for (int i = skins.Length - 1; i > 0; i--)
-            {
-                int j = ctx.Rng.Next(i + 1);
-                (skins[i], skins[j]) = (skins[j], skins[i]);
-            }
-
-            int next = 0;
+            // 每一方各打乱一次，两个主教各拿一种
             foreach (var side in new[] { ctx.Player, ctx.Opponent })
+            {
+                var skins = (string[])Skins.Clone();
+                for (int i = skins.Length - 1; i > 0; i--)
+                {
+                    int j = ctx.Rng.Next(i + 1);
+                    (skins[i], skins[j]) = (skins[j], skins[i]);
+                }
+                int next = 0;
                 foreach (var bishop in ctx.Visible(side, PieceType.Bishop))
                     ctx.SetSkin(bishop, skins[next++ % skins.Length]);
+            }
 
             ctx.Say(Speakers.Friend, "Bishops are boring. Let them be whatever they want.");
-            ctx.Say(Speakers.You, "...Is that one a cake?");
-            ctx.Say(Speakers.Friend, "It's still a bishop. It just wants to be a cake.");
+            ctx.Say(Speakers.You, "...Is that one a bird?");
+            ctx.Say(Speakers.Friend, "It's still a bishop. It just wants to be a bird.");
             yield break;
         }
     }

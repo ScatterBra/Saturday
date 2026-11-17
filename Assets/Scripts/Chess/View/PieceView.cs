@@ -198,6 +198,9 @@ namespace SaturdayGame.Chess.View
                 case "crayon": return new Color(1f, 0.85f, 0.2f);
                 case "tree": return new Color(0.15f, 0.55f, 0.2f);
                 case IceLanceRule.Ice: return new Color(0.6f, 0.85f, 1f);
+                // queen 的两个变种：美术图进来之前的占位颜色
+                case ChessGame.MarieSkin: return new Color(1f, 0.72f, 0.85f);
+                case ChessGame.CleopatraSkin: return new Color(0.95f, 0.8f, 0.3f);
                 default: return Color.magenta;
             }
         }

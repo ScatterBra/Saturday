@@ -33,6 +33,9 @@ namespace SaturdayGame.Chess
         /// <summary>第三阶段：城门打开后玩家的棋子走进了城堡，夺权成功。</summary>
         public bool CastleTaken;
 
+        /// <summary>蛋糕争夺：这一步走到蛋糕上，把它吃掉了。</summary>
+        public bool CakeTaken;
+
         public bool KingCaptured => Captured != null && Captured.Type == PieceType.King;
     }
 }

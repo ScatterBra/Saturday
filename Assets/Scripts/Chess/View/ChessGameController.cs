@@ -27,8 +27,17 @@ namespace SaturdayGame.Chess.View
             new ScheduledRule(5, "bishop_variants"),
             new ScheduledRule(7, "fire_hydrant"),
         };
-        [Tooltip("到这个回合朋友掀起风暴，进入第三阶段")]
+        [Tooltip("到这个回合朋友掀起风暴，进入第三阶段（开了蛋糕争夺时不用它，见 Storm Delay After Card）")]
         public int stormTurn = 20;
+        [Header("Cake")]
+        [Tooltip("这个回合棋盘中间掉下一块会跑的蛋糕，双方抢，没抢到的一方全体后退一格（0 = 关掉，回到固定的选卡、风暴回合）")]
+        public int cakeTurn = 10;
+        [Tooltip("蛋糕落下后这么多轮没人抢到就跑掉，双方都不罚")]
+        public int cakeMaxRounds = 8;
+        [Tooltip("蛋糕分出胜负后第几轮弹第二阶段的选卡")]
+        public int cardDelayAfterCake = 5;
+        [Tooltip("第二阶段选卡后第几轮掀起风暴")]
+        public int stormDelayAfterCard = 10;
         [Tooltip("风暴后随机撒多少格岩浆")]
         public int lavaSquares = 5;
         [Tooltip("第三阶段每隔几回合弹一次卡牌（两张挑一张拿到手里）")]
@@ -237,6 +246,11 @@ namespace SaturdayGame.Chess.View
                 OpeningRules = openingRules,
                 // 调试跳关：第一回合就掀起风暴
                 StormTurn = jumpToStage3 ? 1 : stormTurn,
+                // 调试跳关时不抢蛋糕
+                CakeTurn = jumpToStage3 ? 0 : cakeTurn,
+                CakeMaxRounds = cakeMaxRounds,
+                CardDelayAfterCake = cardDelayAfterCake,
+                StormDelayAfterCard = stormDelayAfterCard,
                 LavaSquares = lavaSquares,
                 Stage3SkillEvery = stage3SkillEvery,
                 FriendSkillTurns = friendSkillTurns,
@@ -728,6 +742,25 @@ namespace SaturdayGame.Chess.View
                         bool bird = game.Board.GetPiece(e.PieceId)?.Skin == "bishbird";
                         PlaySound(s => bird && s.bishBird.clips.Length > 0 ? s.bishBird : s.pieceFall);
                         break;
+                    case GameEventType.CakeDropped:
+                        PlaySound(s => s.pieceFall);
+                        yield return board.AnimateCakeDrop(e.To, 0.6f);
+                        break;
+                    case GameEventType.CakeMoved:
+                        yield return board.AnimateCakeMove(e.To, effectDuration * 1.2f);
+                        break;
+                    case GameEventType.CakeTaken:
+                        PlaySound(s => s.pieceChange);
+                        yield return board.AnimateCakeTaken(effectDuration);
+                        break;
+                    case GameEventType.CakeEscaped:
+                        yield return board.AnimateCakeEscape(effectDuration * 2f);
+                        break;
+                    case GameEventType.SteppedBack:
+                        // 没抢到蛋糕的一方一起往后退：每枚只等一小会儿
+                        StartCoroutine(board.AnimatePush(e.PieceId, e.To, effectDuration * 1.5f));
+                        yield return new WaitForSeconds(0.03f);
+                        break;
                     case GameEventType.Pushed:
                         // 推子的是消防栓就是喷水，是青蛙就是舌头
                         var pusher = e.SourcePieceId >= 0 ? game.Board.GetPiece(e.SourcePieceId) : null;
@@ -1005,6 +1038,11 @@ namespace SaturdayGame.Chess.View
                 string hint;
                 if (game.InStage3)
                     hint = "Storm the castle! A new card shows up every few turns.";
+                else if (game.CakeActive)
+                    hint = game.CakeRoundsLeft == 1 ? "Grab the cake! It runs off after this turn."
+                        : $"Grab the cake! It runs off in {game.CakeRoundsLeft} turns.";
+                else if (game.CakeEnabled && game.CakeDropTurn < 0 && (game.NextRuleTurn <= 0 || game.NextRuleTurn > game.Settings.CakeTurn))
+                    hint = $"Something sweet lands on turn {game.Settings.CakeTurn}.";
                 else if (game.NextRuleTurn > 0) hint = $"A new rule appears on turn {game.NextRuleTurn}.";
                 else hint = "No more new rules... but something is brewing.";
                 hud.SetNewHint(hint);

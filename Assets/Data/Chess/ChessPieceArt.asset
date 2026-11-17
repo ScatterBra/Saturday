@@ -49,6 +49,7 @@ MonoBehaviour:
   blackQueenModel: {fileID: 919132149155446097, guid: 16baea691e0476e45a21c865752004f7, type: 3}
   blackKingModel: {fileID: 919132149155446097, guid: aae098ddeda2ece4db3005ac4c9372f3, type: 3}
   stage3ModelYaw: 0
+  stage3RandomYaw: 25
   blackTint: {r: 0, g: 0, b: 0, a: 0}
   variantBlackTint: {r: 0.75, g: 0.75, b: 0.8, a: 1}
   pieceHeight: 0.95
@@ -240,17 +241,35 @@ MonoBehaviour:
     - {fileID: 919132149155446097, guid: 73ebacaf677c47d46948a7e6e36d5745, type: 3}
     stage3BlackModels:
     - {fileID: 919132149155446097, guid: 827aba8e7d4ff3949925941a234c5ea2, type: 3}
-  - skin: elephant
-    onlyForType: 0
-    type: 0
+  - skin: marie
+    onlyForType: 1
+    type: 4
     white: []
     black: []
     models:
-    - {fileID: 919132149155446097, guid: 6b6476645ed5b304682ba536961b7395, type: 3}
+    - {fileID: 919132149155446097, guid: 9085713c822051c408392b823e6e8cdf, type: 3}
     blackModels:
-    - {fileID: 919132149155446097, guid: d295938004c545640a072971c06c8130, type: 3}
+    - {fileID: 919132149155446097, guid: 9085713c822051c408392b823e6e8cdf, type: 3}
     standee: 1
     randomYaw: 0
     keepModelSize: 0
-    stage3Models: []
-    stage3BlackModels: []
+    stage3Models:
+    - {fileID: 919132149155446097, guid: 9085713c822051c408392b823e6e8cdf, type: 3}
+    stage3BlackModels:
+    - {fileID: 919132149155446097, guid: 9085713c822051c408392b823e6e8cdf, type: 3}
+  - skin: cleopatra
+    onlyForType: 1
+    type: 4
+    white: []
+    black: []
+    models:
+    - {fileID: 919132149155446097, guid: cdada87f9d4c1be498018104624962d4, type: 3}
+    blackModels:
+    - {fileID: 919132149155446097, guid: cdada87f9d4c1be498018104624962d4, type: 3}
+    standee: 1
+    randomYaw: 0
+    keepModelSize: 0
+    stage3Models:
+    - {fileID: 919132149155446097, guid: cdada87f9d4c1be498018104624962d4, type: 3}
+    stage3BlackModels:
+    - {fileID: 919132149155446097, guid: cdada87f9d4c1be498018104624962d4, type: 3}

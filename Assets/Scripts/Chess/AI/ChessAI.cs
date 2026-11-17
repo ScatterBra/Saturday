@@ -10,6 +10,7 @@ namespace SaturdayGame.Chess
     /// AI 不知道有哪些规则，它只调用走法生成器，所以自然会遵守冻结、城堡、岩浆等状态。
     /// 第三阶段双方正常吃子、不判将军：同样看两步，王也算子力（王被吃不会直接输）；
     /// 攻城的一方（测试里由 AI 代下）城门开了就往城堡走，能进就进。AI 不会放技能。
+    /// 蛋糕争夺：吃到蛋糕算 CakeValue 分（对方下一步能吃到就算丢了这么多），离蛋糕近一点加一点位置分。
     /// </summary>
     public sealed class ChessAI
     {
@@ -17,6 +18,8 @@ namespace SaturdayGame.Chess
         public double BlunderChance = 0.2;
         /// <summary>评分噪声幅度（单位：兵的价值）。</summary>
         public double Noise = 0.6;
+        /// <summary>蛋糕在 AI 眼里值几个兵（抢到它对方要全体后退）。</summary>
+        public const int CakeValue = 3;
 
 
         readonly Random rng;
@@ -48,7 +51,7 @@ namespace SaturdayGame.Chess
             {
                 var next = board.Clone();
                 next.Apply(move);
-                double score = ScoreAfterReply(next, side) + Positional(board, move) + (rng.NextDouble() * 2 - 1) * Noise;
+                double score = ScoreAfterReply(next, side) + Positional(board, move) + CakeScore(board, move) + (rng.NextDouble() * 2 - 1) * Noise;
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -101,7 +104,7 @@ namespace SaturdayGame.Chess
             return best;
         }
 
-        /// <summary>对方回应时会吃掉我们最值钱的子。</summary>
+        /// <summary>对方回应时会吃掉我们最值钱的子（对方能抢到蛋糕也算丢了 CakeValue）。</summary>
         static double ScoreAfterReply(Board board, Side me)
         {
             double material = Material(board, me);
@@ -110,8 +113,18 @@ namespace SaturdayGame.Chess
             {
                 var target = board.PieceAt(reply.To);
                 if (target != null) worstLoss = Math.Max(worstLoss, Value(board, target));
+                else if (board.IsCake(reply.To)) worstLoss = Math.Max(worstLoss, CakeValue);
             }
             return material - worstLoss;
+        }
+
+        /// <summary>蛋糕争夺：吃到蛋糕加 CakeValue；还没吃到时，往蛋糕靠近一格加一点。</summary>
+        static double CakeScore(Board board, Move move)
+        {
+            if (!board.Cake.HasValue) return 0;
+            var cake = board.Cake.Value;
+            if (move.To == cake) return CakeValue;
+            return 0.1 * (move.From.DistanceTo(cake) - move.To.DistanceTo(cake));
         }
 
         /// <summary>一点点位置分：鼓励兵往前走、马和象离开底线，不鼓励王到处乱走。</summary>

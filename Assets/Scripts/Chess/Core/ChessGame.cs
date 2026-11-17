@@ -50,8 +50,17 @@ namespace SaturdayGame.Chess
             new ScheduledRule(5, "bishop_variants"),
             new ScheduledRule(7, "fire_hydrant"),
         };
-        /// <summary>到这个回合（玩家走之前）朋友掀起风暴，进入第三阶段。</summary>
+        /// <summary>到这个回合（玩家走之前）朋友掀起风暴，进入第三阶段。开了蛋糕争夺时不用它，见 StormDelayAfterCard。</summary>
         public int StormTurn = 20;
+        /// <summary>
+        /// 蛋糕争夺：这个回合（玩家走之前）棋盘中间掉下一块会跑的蛋糕，0 = 关掉。
+        /// 开着时第二阶段选卡改成蛋糕分出胜负后第 CardDelayAfterCake 轮，风暴改成选卡后第 StormDelayAfterCard 轮。
+        /// </summary>
+        public int CakeTurn;
+        /// <summary>蛋糕落下后这么多轮没人抢到，就跑掉（双方都不罚）。</summary>
+        public int CakeMaxRounds = 8;
+        public int CardDelayAfterCake = 5;
+        public int StormDelayAfterCard = 10;
         /// <summary>风暴后随机撒多少格岩浆。</summary>
         public int LavaSquares = 5;
         /// <summary>第三阶段开始时弹一次卡牌，之后每隔这么多回合再弹一次。</summary>
@@ -79,17 +88,16 @@ namespace SaturdayGame.Chess
     /// 一整局棋：棋盘 + 阶段 + 规则 + 胜负。玩家固定执白（下方），对手是朋友（AI，执黑）。
     ///
     /// 第一阶段（第 4 回合起）：规则按 OpeningRules 的回合表自动生效，不弹卡。
-    /// 第二阶段：第 10 回合固定选卡。
+    /// 第二阶段：第 10 回合固定选卡；开了蛋糕争夺（CakeTurn）时第 10 回合改成抢蛋糕，选卡在蛋糕分出胜负后第 5 轮。
     /// 第一、二阶段按正式的将军规则（不能送将，王不会被吃）：玩家被将军时可以选一个救急技能；被将死就输。
-    /// 进入第三阶段（风暴）：第 20 回合，或者第 10 回合选卡之后将军了对手，或者将死了对手。
+    /// 进入第三阶段（风暴）：第 20 回合（开了蛋糕争夺时是选卡后第 10 轮），或者第二阶段选卡之后将军了对手，或者将死了对手。
     ///
     /// 第三阶段（攻城夺权）：
     /// - 风暴把双方的棋子吹散，朋友的国王和王后躲进城堡，再随机撒几格岩浆。双方正常吃子，王也能被吃。
     /// - 朋友城堡外的棋子都是守卫。守卫全灭后城门打开，玩家任意一枚棋子走进城堡就赢；玩家的棋子全没了就输。没有回合上限，不能复活。
     /// - 玩家的常驻技能（UseSkill）：象的光束、马的火龙（各有冷却）、雷暴大招（积累条满了放一次）。放常驻技能就是这一回合的行动。
-    /// - 每隔几回合弹两张卡牌（下雨、树、山崩、自爆）：点哪张就马上用哪张，不占回合（选目标时取消就回到选卡）；
-    ///   不挑就存进雷暴积累条。
-    /// - 雷暴积累条：每消灭一个守卫涨一格，不挑卡涨一格，自爆多涨几格；满格数 = 开局守卫数 − 2。
+    /// - 每隔几回合弹两张卡牌（下雨、树、山崩、自爆）：点哪张就马上用哪张，不占回合（选目标时取消就回到选卡）。
+    /// - 雷暴积累条：玩家每吃掉一枚对方棋子涨一格；满格数 = 开局守卫数的一半；放完清零。
     /// - 王后按时间表放技能，前一回合先在棋盘上标出目标格子。
     ///
     /// 所有操作都会往事件队列里加事件，表现层用 DrainEvents() 取出来按顺序演出。
@@ -131,6 +139,21 @@ namespace SaturdayGame.Chess
         IceLanceRule plannedFriendSkill;
         int telegraphTurn = -1;
 
+        // 蛋糕争夺
+        /// <summary>蛋糕落下的回合，-1 = 还没落。</summary>
+        int cakeDropTurn = -1;
+        /// <summary>蛋糕分出胜负（被抢到或跑掉）的回合，-1 = 还没分出。</summary>
+        int cakeDoneTurn = -1;
+        /// <summary>蛋糕上一次自己挪动的回合。</summary>
+        int cakeMovedTurn = -1;
+        /// <summary>第二阶段选卡弹出的回合，-1 = 还没弹。</summary>
+        int stageCardTurn = -1;
+        /// <summary>双方 queen 的变种外观（蛋糕落下时随机分配，之后升变出来的 queen 也用它）。</summary>
+        readonly Dictionary<Side, string> queenSkins = new Dictionary<Side, string>();
+
+        public const string MarieSkin = "marie";
+        public const string CleopatraSkin = "cleopatra";
+
         public Board Board { get; }
         public Random Rng { get; }
         public Side PlayerSide => Side.White;
@@ -158,7 +181,8 @@ namespace SaturdayGame.Chess
                 for (int stage = nextStage; stage < CardStages; stage++)
                 {
                     if (RuleCatalog.CreatePool(stage).Count == 0) continue;
-                    int turn = settings.StageTurns[stage];
+                    int turn = StageTurn(stage);
+                    if (turn == int.MaxValue) break;
                     if (best < 0 || turn < best) best = turn;
                     break;
                 }
@@ -167,8 +191,35 @@ namespace SaturdayGame.Chess
         }
         /// <summary>下一个阶段（0..StageTurns.Length）。</summary>
         public int NextStage => nextStage;
-        public int NextStageTurn => !InStage3 && nextStage < CardStages ? settings.StageTurns[nextStage] : -1;
-        public int StormTurn => settings.StormTurn;
+        public int NextStageTurn => !InStage3 && nextStage < CardStages && StageTurn(nextStage) != int.MaxValue ? StageTurn(nextStage) : -1;
+        /// <summary>风暴的回合；开了蛋糕争夺、还没到选卡时不知道，返回 -1。</summary>
+        public int StormTurn => EffectiveStormTurn == int.MaxValue ? -1 : EffectiveStormTurn;
+
+        // ---------- 蛋糕争夺 ----------
+
+        public bool CakeEnabled => settings.CakeTurn > 0;
+        /// <summary>蛋糕在棋盘上，正在抢。</summary>
+        public bool CakeActive => Board.Cake.HasValue && !InStage3;
+        public int CakeDropTurn => cakeDropTurn;
+        /// <summary>蛋糕分出胜负（被抢到或跑掉）的回合，-1 = 还没分出。</summary>
+        public int CakeDoneTurn => cakeDoneTurn;
+        /// <summary>第二阶段选卡弹出的回合，-1 = 还没弹。</summary>
+        public int StageCardTurn => stageCardTurn;
+        /// <summary>蛋糕还能跑几轮（落下前、分出胜负后为 0）。</summary>
+        public int CakeRoundsLeft => CakeActive ? Math.Max(0, cakeDropTurn + settings.CakeMaxRounds - Board.FullMove) : 0;
+        /// <summary>这一方 queen 的变种外观，还没分配时为 null。</summary>
+        public string QueenSkin(Side side) => queenSkins.TryGetValue(side, out var skin) ? skin : null;
+
+        /// <summary>第 stage 个阶段开始的回合。开了蛋糕争夺时，最后一次选卡在蛋糕分出胜负之后；还没分出时为 int.MaxValue。</summary>
+        int StageTurn(int stage)
+        {
+            if (CakeEnabled && stage == CardStages - 1)
+                return cakeDoneTurn < 0 ? int.MaxValue : cakeDoneTurn + settings.CardDelayAfterCake;
+            return settings.StageTurns[stage];
+        }
+
+        int EffectiveStormTurn => !CakeEnabled ? settings.StormTurn
+            : stageCardTurn < 0 ? int.MaxValue : stageCardTurn + settings.StormDelayAfterCard;
         /// <summary>固定选卡的次数：StageTurns 里多写的回合（规则池不够的）会被忽略。</summary>
         int CardStages => Math.Min(settings.StageTurns.Length, RuleCatalog.StageCount);
         public bool InStage3 => Board.Stage3;
@@ -242,7 +293,13 @@ namespace SaturdayGame.Chess
 
             events.Add(GameEvent.Moved(mover, move.From, move.To));
             if (result.Captured != null) events.Add(GameEvent.Captured(result.Captured, move.To, "captured", mover));
-            if (result.Promoted) events.Add(GameEvent.Promoted(mover));
+            if (result.Promoted)
+            {
+                // 蛋糕落下以后升变出来的 queen 也换成这一方的变种外观
+                if (queenSkins.TryGetValue(side, out var queenSkin)) mover.Skin = queenSkin;
+                events.Add(GameEvent.Promoted(mover));
+            }
+            if (result.CakeTaken) CakeWon(mover, move.To);
 
             if (result.CastleTaken)
             {
@@ -501,15 +558,18 @@ namespace SaturdayGame.Chess
                 playerActing = side == PlayerSide;
                 if (side == PlayerSide)
                 {
-                    if (!InStage3 && Board.FullMove >= settings.StormTurn)
+                    if (!InStage3 && Board.FullMove >= EffectiveStormTurn)
                     {
                         StartStorm("Enough of this. Let me show you something.");
                         continue;
                     }
 
-                    if (!InStage3 && nextStage < CardStages && Board.FullMove >= settings.StageTurns[nextStage])
+                    if (!InStage3 && CakeEnabled && UpdateCake()) continue;
+
+                    if (!InStage3 && nextStage < CardStages && Board.FullMove >= StageTurn(nextStage))
                     {
                         int stage = nextStage++;
+                        if (stage == CardStages - 1) stageCardTurn = Board.FullMove;
                         events.Add(GameEvent.StageStarted(stage));
                         var pool = RuleCatalog.CreatePool(stage);
                         // 规则池是空的（第一阶段）：只宣布进入新阶段，规则之后按回合表自动生效
@@ -651,8 +711,97 @@ namespace SaturdayGame.Chess
         }
 
         /// <summary>朋友掀起风暴：铺上第三阶段的地形，国王和王后躲进城堡，其余棋子被吹散，撒上岩浆，轮到玩家。</summary>
+        // ---------- 蛋糕争夺 ----------
+
+        /// <summary>
+        /// 轮到玩家走之前：到回合就放下蛋糕；之后每一整轮蛋糕自己挪一格，跑满 CakeMaxRounds 轮就跑掉。
+        /// 返回 true = 蛋糕跑掉了（分出了胜负），BeginTurn 要从头再检查一遍（选卡的回合可能变了）。
+        /// </summary>
+        bool UpdateCake()
+        {
+            if (cakeDropTurn < 0)
+            {
+                if (Board.FullMove >= settings.CakeTurn) DropCake();
+                return false;
+            }
+            if (!Board.Cake.HasValue || Board.FullMove <= cakeMovedTurn) return false;
+            cakeMovedTurn = Board.FullMove;
+            var at = Board.Cake.Value;
+            if (Board.FullMove - cakeDropTurn >= settings.CakeMaxRounds)
+            {
+                Board.RemoveCake();
+                cakeDoneTurn = Board.FullMove;
+                events.Add(GameEvent.CakeEscaped(at));
+                events.Add(GameEvent.Dialogue(Speakers.Friend, "It ran off the table! Nobody gets cake."));
+                return true;
+            }
+            var next = CakeEscape.NextSquare(Board, Rng);
+            if (next.HasValue)
+            {
+                Board.MoveCake(next.Value);
+                events.Add(GameEvent.CakeMoved(at, next.Value));
+            }
+            return false;
+        }
+
+        void DropCake()
+        {
+            var at = CakeEscape.DropSquare(Board, Rng);
+            cakeDropTurn = cakeMovedTurn = Board.FullMove;
+            if (!at.HasValue)
+            {
+                // 棋盘塞满了（几乎不可能）：没有蛋糕，直接当作跑掉了
+                cakeDoneTurn = Board.FullMove;
+                return;
+            }
+            Board.PlaceCake(at.Value);
+            events.Add(GameEvent.CakeDropped(at.Value));
+
+            // 双方的 queen 随机分到玛丽·安托瓦内特和克利奥帕特拉
+            bool playerIsMarie = Rng.Next(2) == 0;
+            queenSkins[PlayerSide] = playerIsMarie ? MarieSkin : CleopatraSkin;
+            queenSkins[OpponentSide] = playerIsMarie ? CleopatraSkin : MarieSkin;
+            foreach (var side in new[] { PlayerSide, OpponentSide })
+                foreach (var queen in Board.PiecesOf(side))
+                {
+                    if (queen.Type != PieceType.Queen) continue;
+                    queen.Skin = queenSkins[side];
+                    events.Add(GameEvent.AppearanceChanged(queen, queen.Skin));
+                }
+
+            events.Add(GameEvent.Dialogue(playerIsMarie ? Speakers.You : Speakers.Friend, "Let them eat cake!"));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, $"Cake! Any piece can grab it, but it runs a step every turn. Whoever misses it backs off. {settings.CakeMaxRounds} turns, go!"));
+        }
+
+        /// <summary>有人吃到了蛋糕：没抢到的一方所有棋子往自己底线退一格。</summary>
+        void CakeWon(Piece eater, Coord at)
+        {
+            cakeDoneTurn = Board.FullMove;
+            events.Add(GameEvent.CakeTaken(eater, at));
+            var loser = eater.Side.Opponent();
+            if (eater.Side == PlayerSide)
+            {
+                events.Add(GameEvent.Dialogue(Speakers.You, "Mine!"));
+                events.Add(GameEvent.Dialogue(Speakers.Friend, "Hey, that was MY cake! ...Fine. Everybody back up."));
+            }
+            else
+            {
+                events.Add(GameEvent.Dialogue(Speakers.Friend, "Mine! Now back off, all of you."));
+            }
+            foreach (var (piece, from) in CakeEscape.StepBack(Board, loser))
+                events.Add(GameEvent.SteppedBack(piece, from, piece.Pos));
+        }
+
         void StartStorm(string line)
         {
+            if (Board.Cake.HasValue)
+            {
+                // 风暴来的时候蛋糕还在（理论上不会）：被风吹跑
+                var at = Board.Cake.Value;
+                Board.RemoveCake();
+                if (cakeDoneTurn < 0) cakeDoneTurn = Board.FullMove;
+                events.Add(GameEvent.CakeEscaped(at));
+            }
             events.Add(GameEvent.Dialogue(Speakers.Friend, line));
             events.Add(GameEvent.Storm());
             Board.BeginStage3(settings.Layout ?? Stage3Layout.Default, PlayerSide);

@@ -50,6 +50,16 @@ namespace SaturdayGame.Chess
         Soaked,
         /// <summary>一句不用点击就自己消失的提示（例如“卡牌存进了雷暴”）。</summary>
         Notice,
+        /// <summary>蛋糕争夺：蛋糕落在 To。</summary>
+        CakeDropped,
+        /// <summary>蛋糕争夺：蛋糕自己从 From 挪到 To。</summary>
+        CakeMoved,
+        /// <summary>蛋糕争夺：PieceId 走到 To 把蛋糕吃了，Side 是抢到的一方。</summary>
+        CakeTaken,
+        /// <summary>蛋糕争夺：没人抢到，蛋糕从 From 跑掉了。</summary>
+        CakeEscaped,
+        /// <summary>蛋糕争夺：没抢到的一方的棋子往后退一格（From → To）。一方的棋子一起退。</summary>
+        SteppedBack,
     }
 
     /// <summary>规则卡是在什么情况下弹出的。</summary>
@@ -175,6 +185,18 @@ namespace SaturdayGame.Chess
             new GameEvent { Type = GameEventType.Soaked, Squares = squares };
 
         public static GameEvent Notice(string text) => new GameEvent { Type = GameEventType.Notice, Text = text };
+
+        public static GameEvent CakeDropped(Coord at) => new GameEvent { Type = GameEventType.CakeDropped, To = at };
+
+        public static GameEvent CakeMoved(Coord from, Coord to) => new GameEvent { Type = GameEventType.CakeMoved, From = from, To = to };
+
+        public static GameEvent CakeTaken(Piece piece, Coord at) =>
+            new GameEvent { Type = GameEventType.CakeTaken, PieceId = piece.Id, To = at, Side = piece.Side };
+
+        public static GameEvent CakeEscaped(Coord from) => new GameEvent { Type = GameEventType.CakeEscaped, From = from };
+
+        public static GameEvent SteppedBack(Piece piece, Coord from, Coord to) =>
+            new GameEvent { Type = GameEventType.SteppedBack, PieceId = piece.Id, From = from, To = to, Side = piece.Side };
 
         public static GameEvent OpponentSkill(RuleBase rule) =>
             new GameEvent { Type = GameEventType.OpponentSkill, Rule = rule, Stage = rule.Stage };

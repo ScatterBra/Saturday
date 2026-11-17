@@ -13,6 +13,7 @@ namespace SaturdayGame.Chess
     ///   * 城堡里的棋子（朋友的国王、王后）不能动；城堡挡住所有棋子。
     ///     守卫全灭、城门打开后，玩家的棋子可以走进城堡（空格或吃掉里面的国王、王后），走进去就停下。
     ///   * 岩浆格谁都不能落、也不能滑过去（马可以跳过去）。棋子只会被推、拉、炸、滑进岩浆。
+    /// - 蛋糕争夺：蛋糕格对双方都像一枚敌方棋子，能按吃子的走法走上去（兵斜着吃），滑行到这里停下，攻击路线也被它挡住。
     /// </summary>
     public static class MoveGenerator
     {
@@ -119,6 +120,7 @@ namespace SaturdayGame.Chess
                 return board.IsEmpty(to) ? Landing.Enter : Landing.Capture;
             }
             if (board.IsLava(to)) return Landing.Blocked;
+            if (board.IsCake(to)) return Landing.Capture;
             return OccupantCheck(board, piece, from, to);
         }
 

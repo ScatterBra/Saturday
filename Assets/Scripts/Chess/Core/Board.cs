@@ -15,6 +15,12 @@ namespace SaturdayGame.Chess
         readonly bool[] castle = new bool[64];
         readonly List<Piece> pieces = new List<Piece>();
 
+        /// <summary>
+        /// 蛋糕争夺：蛋糕所在的格子，没有蛋糕时为 null。蛋糕不是棋子、不属于任何一方：
+        /// 这一格不算空（推、拉、复活都过不去），谁都能按吃子的走法走上去“吃掉”它；它也挡住滑行和攻击路线。
+        /// </summary>
+        public Coord? Cake { get; private set; }
+
         public Side SideToMove { get; private set; } = Side.White;
         public int FullMove { get; private set; } = 1;
 
@@ -47,7 +53,7 @@ namespace SaturdayGame.Chess
 
         public Piece AddPiece(PieceType type, Side side, Coord at)
         {
-            if (squares[at.Index] != null) throw new InvalidOperationException($"{at} is occupied");
+            if (squares[at.Index] != null || IsCake(at)) throw new InvalidOperationException($"{at} is occupied");
             var piece = new Piece { Id = pieces.Count, Type = type, Side = side, Pos = at, StartPos = at };
             pieces.Add(piece);
             squares[at.Index] = piece;
@@ -59,7 +65,27 @@ namespace SaturdayGame.Chess
         /// <summary>这个格子上的棋子，没有则为 null。</summary>
         public Piece PieceAt(Coord c) => squares[c.Index];
 
-        public bool IsEmpty(Coord c) => squares[c.Index] == null;
+        public bool IsEmpty(Coord c) => squares[c.Index] == null && !IsCake(c);
+
+        public bool IsCake(Coord c) => Cake.HasValue && Cake.Value == c;
+
+        /// <summary>放下蛋糕（空格）。</summary>
+        public void PlaceCake(Coord at)
+        {
+            if (!IsEmpty(at) || lava[at.Index] || castle[at.Index]) throw new InvalidOperationException($"Cannot place the cake on {at}");
+            Cake = at;
+        }
+
+        /// <summary>蛋糕自己挪到另一个空格。</summary>
+        public void MoveCake(Coord to)
+        {
+            if (!Cake.HasValue) throw new InvalidOperationException("There is no cake");
+            if (squares[to.Index] != null || lava[to.Index] || castle[to.Index]) throw new InvalidOperationException($"Cannot move the cake onto {to}");
+            Cake = to;
+        }
+
+        /// <summary>蛋糕没了（跑掉、风暴）。</summary>
+        public void RemoveCake() => Cake = null;
 
         public bool IsLava(Coord c) => lava[c.Index];
 
@@ -142,7 +168,7 @@ namespace SaturdayGame.Chess
         public void Relocate(Piece piece, Coord to)
         {
             if (!piece.OnBoard) throw new InvalidOperationException($"{piece} is not on the board");
-            if (squares[to.Index] != null || lava[to.Index] || castle[to.Index])
+            if (squares[to.Index] != null || IsCake(to) || lava[to.Index] || castle[to.Index])
                 throw new InvalidOperationException($"Cannot move {piece} onto {to}");
             squares[piece.Pos.Index] = null;
             piece.Pos = to;
@@ -161,7 +187,7 @@ namespace SaturdayGame.Chess
         public void RestorePiece(Piece piece, Coord at)
         {
             if (piece.OnBoard) throw new InvalidOperationException($"{piece} is already on the board");
-            if (squares[at.Index] != null || lava[at.Index] || castle[at.Index])
+            if (squares[at.Index] != null || IsCake(at) || lava[at.Index] || castle[at.Index])
                 throw new InvalidOperationException($"Cannot restore onto {at}");
             piece.OnBoard = true;
             piece.Pos = at;
@@ -180,6 +206,7 @@ namespace SaturdayGame.Chess
             Array.Copy(layout.Lava, lava, 64);
             Array.Copy(layout.Heights, height, 64);
             Array.Copy(layout.Castle, castle, 64);
+            Cake = null;
             Stage3 = true;
             Rescuer = rescuer;
             SideToMove = rescuer;
@@ -372,6 +399,12 @@ namespace SaturdayGame.Chess
                 result.Captured = target;
             }
 
+            if (IsCake(move.To))
+            {
+                Cake = null;
+                result.CakeTaken = true;
+            }
+
             squares[move.To.Index] = mover;
             mover.Pos = move.To;
 
@@ -417,6 +450,7 @@ namespace SaturdayGame.Chess
             Array.Copy(lava, copy.lava, 64);
             Array.Copy(height, copy.height, 64);
             Array.Copy(castle, copy.castle, 64);
+            copy.Cake = Cake;
             foreach (var p in pieces)
             {
                 var c = p.Clone();
