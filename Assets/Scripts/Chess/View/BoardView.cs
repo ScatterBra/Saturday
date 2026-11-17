@@ -470,15 +470,10 @@ namespace SaturdayGame.Chess.View
             RebuildCastleModel();
             RebuildLavaEffects();
 
+            // 城堡上方原来有 Castle / Gate open! 的字，已经去掉（城门开了靠吊桥放下和字幕提示）
             if (castleLabel != null) ViewUtil.Destroy(castleLabel);
             castleLabel = null;
-            if (CastleLabelPosition(false, out var labelPosition))
-            {
-                var label = factory.Label(root, labelPosition, 0.05f, "Castle", title: true);
-                label.color = new Color(1f, 0.85f, 0.95f);
-                castleLabel = label.gameObject;
-                RefreshCastleLabel();
-            }
+            RefreshCastleLabel();
 
             ApplyTerrainHeights();
 

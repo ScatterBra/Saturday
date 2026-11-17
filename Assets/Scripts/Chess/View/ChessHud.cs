@@ -153,7 +153,10 @@ namespace SaturdayGame.Chess.View
             var title = Label(left, "Title", "NEW", 44, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(24, -18), new Vector2(-48, 60));
             newHintText = Label(left, "Hint", "", 22, FontStyle.Italic, TextAnchor.UpperLeft, new Vector2(24, -84), new Vector2(-48, 120));
             if (bareDesk) title.color = newHintText.color = DeskInk;
-            cardsRoot = Rect(left, "Cards", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -126), new Vector2(-40, -146));
+            // NEW 标题和下面的说明文字不显示（状态栏已经说了要做什么），规则卡从这一栏顶上开始排
+            title.gameObject.SetActive(false);
+            newHintText.gameObject.SetActive(false);
+            cardsRoot = Rect(left, "Cards", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -24), new Vector2(-40, -44));
             var layout = cardsRoot.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 18;
             layout.childControlHeight = true;
