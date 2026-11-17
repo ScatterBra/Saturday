@@ -334,7 +334,8 @@ namespace SaturdayGame.Chess.View
             var keyboard = Keyboard.current;
             bool canInteract = !busy && !cameraTurning && game.Phase != GamePhase.GameOver;
             bool consumed = ruleBookFocus.Tick(boardCamera.ScreenPointToRay(mouse.position.ReadValue()),
-                mouse.leftButton.wasPressedThisFrame, keyboard != null && keyboard.escapeKey.wasPressedThisFrame, canInteract);
+                mouse.leftButton.wasPressedThisFrame, keyboard != null && keyboard.escapeKey.wasPressedThisFrame, canInteract,
+                LostPieceHover.PointerOver);
             if (consumed)
             {
                 hud.HideTooltip();

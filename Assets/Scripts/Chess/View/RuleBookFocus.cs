@@ -191,18 +191,20 @@ namespace SaturdayGame.Chess.View
         /// <summary>
         /// 每帧调用。返回 true 表示这一帧的鼠标归规则书管（棋盘别再处理点击）。
         /// canInteract = 现在能不能拿起 / 放下（演出、转相机时不行）。
+        /// overPiece = 鼠标停在被吃区里可以点的纸片棋子上（复活）：这时不描黄色轮廓、点击交给那枚棋子，不拿起规则书。
         /// </summary>
-        public bool Tick(Ray ray, bool clicked, bool cancel, bool canInteract)
+        public bool Tick(Ray ray, bool clicked, bool cancel, bool canInteract, bool overPiece = false)
         {
             bool over = Hit(ray);
-            if (outline != null) outline.SetActive(canInteract && !Active && over);
+            bool overBook = over && !overPiece;
+            if (outline != null) outline.SetActive(canInteract && !Active && overBook);
             if (Active)
             {
                 // 举着的时候：点本子外面或按 Esc 放回去；点本子里面交给画布（被吃区的棋子）
                 if (focused && canInteract && ((clicked && !over) || cancel)) focused = false;
                 return true;
             }
-            if (canInteract && clicked && over)
+            if (canInteract && clicked && overBook)
             {
                 focused = true;
                 return true;

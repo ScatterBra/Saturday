@@ -443,6 +443,8 @@ namespace SaturdayGame.Chess.View
                     outline.effectColor = new Color(0.2f, 0.6f, 1f);
                     outline.effectDistance = new Vector2(4, 4);
                     go.AddComponent<Button>().onClick.AddListener(() => LostPieceClicked?.Invoke(id));
+                    // 平时不描边，鼠标停上去才描蓝色轮廓；停在上面时规则书不描黄边、点了也不会被拿起来
+                    go.AddComponent<LostPieceHover>();
                 }
             }
         }
