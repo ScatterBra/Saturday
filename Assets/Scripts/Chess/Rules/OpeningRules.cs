@@ -195,7 +195,10 @@ namespace SaturdayGame.Chess
         }
     }
 
-    /// <summary>主教变成别的东西：每一方的两个主教一个变 Bi's shop、一个变 Bish-bird（谁变哪个随机），之后一直保持。</summary>
+    /// <summary>
+    /// 主教变成别的东西：Bi's shop 和 Bish-bird 两种随机分给双方，每一方只有一个主教变（随机挑一个），
+    /// 另一个保持原样。四个主教里只有两个变体，之后一直保持。
+    /// </summary>
     public sealed class BishopVariantsRule : RuleBase
     {
         /// <summary>主教可能变成的样子（外观 ID）。</summary>
@@ -213,18 +216,15 @@ namespace SaturdayGame.Chess
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {
-            // 每一方各打乱一次，两个主教各拿一种
-            foreach (var side in new[] { ctx.Player, ctx.Opponent })
+            // 两种样子随机分给双方，每一方随机挑一个主教来变
+            var skins = (string[])Skins.Clone();
+            if (ctx.Rng.Next(2) == 0) (skins[0], skins[1]) = (skins[1], skins[0]);
+            var sides = new[] { ctx.Player, ctx.Opponent };
+            for (int k = 0; k < sides.Length; k++)
             {
-                var skins = (string[])Skins.Clone();
-                for (int i = skins.Length - 1; i > 0; i--)
-                {
-                    int j = ctx.Rng.Next(i + 1);
-                    (skins[i], skins[j]) = (skins[j], skins[i]);
-                }
-                int next = 0;
-                foreach (var bishop in ctx.Visible(side, PieceType.Bishop))
-                    ctx.SetSkin(bishop, skins[next++ % skins.Length]);
+                var bishops = ctx.Visible(sides[k], PieceType.Bishop);
+                if (bishops.Count == 0) continue;
+                ctx.SetSkin(bishops[ctx.Rng.Next(bishops.Count)], skins[k % skins.Length]);
             }
 
             ctx.Say(Speakers.Friend, "Bishops are boring. Let them be whatever they want.");
