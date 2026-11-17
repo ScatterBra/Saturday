@@ -13,7 +13,7 @@ namespace SaturdayGame.Chess.Tests
         static GameSettings CakeSettings(int seed) => new GameSettings { Seed = seed, CakeTurn = 1 };
 
         [Test]
-        public void TheCake_DropsInTheMiddle_AndTheQueensGetTheirCostumes()
+        public void TheCake_DropsWhereNobodyCanGrabItInOneMove_AndTheQueensGetTheirCostumes()
         {
             for (int seed = 0; seed < 10; seed++)
             {
@@ -21,7 +21,7 @@ namespace SaturdayGame.Chess.Tests
                 var events = game.DrainEvents();
                 Assert.IsTrue(game.CakeActive);
                 var cake = game.Board.Cake.Value;
-                CollectionAssert.Contains(new[] { C("d4"), C("e4"), C("d5"), C("e5") }, cake);
+                Assert.IsFalse(CakeEscape.ReachableInOneMove(game.Board, cake), "nobody can grab it in one move");
                 Assert.IsTrue(events.Any(e => e.Type == GameEventType.CakeDropped && e.To == cake));
                 Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text == "Let them eat cake!"));
 
@@ -114,16 +114,30 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void AfterTheCake_TheCardComesFiveTurnsLater_AndTheStormTenAfterThat()
         {
-            int reachedStorm = 0, takenByWhite = 0, takenByBlack = 0, escaped = 0;
+            int reachedStorm = 0, takenByWhite = 0, takenByBlack = 0, escaped = 0, safeDrops = 0, drops = 0;
             for (int seed = 0; seed < 30; seed++)
             {
                 var settings = new GameSettings { CakeTurn = 10 };
                 var auto = new GameFlowTests.AutoPlayer(seed, null, 80, settings);
                 var game = auto.Game;
+                bool dropChecked = false;
                 for (int i = 0; i < 2000 && game.Phase != GamePhase.GameOver && !game.InStage3; i++)
                 {
                     Assert.IsFalse(game.StageCardTurn >= 0 && game.CakeDoneTurn < 0, "no card before the cake is decided");
                     auto.Step();
+                    if (!dropChecked && game.CakeActive)
+                    {
+                        // 刚落下的那一刻：双方都不能一步吃到
+                        dropChecked = true;
+                        // 刚落下的那一刻：能一步吃到它的棋子是全棋盘最少的（有吃不到的格子就一定落在那里）
+                        var b = game.Board;
+                        var at = b.Cake.Value;
+                        int least = Enumerable.Range(0, 64).Select(Coord.FromIndex)
+                            .Where(c => c == at || (b.IsEmpty(c) && !b.IsLava(c))).Min(c => CakeEscape.Reachers(b, c));
+                        Assert.AreEqual(least, CakeEscape.Reachers(b, at), $"seed {seed}: the cake landed somewhere too easy");
+                        drops++;
+                        if (least == 0) safeDrops++;
+                    }
                 }
                 if (game.CakeDropTurn >= 0) Assert.AreEqual(10, game.CakeDropTurn);
                 var taken = auto.Events.FirstOrDefault(e => e.Type == GameEventType.CakeTaken);
@@ -139,7 +153,7 @@ namespace SaturdayGame.Chess.Tests
                         Assert.LessOrEqual(game.Stage3StartTurn, game.StageCardTurn + settings.StormDelayAfterCard + 1);
                 }
             }
-            TestContext.Progress.WriteLine($"cake: white took it {takenByWhite}, black took it {takenByBlack}, it ran off {escaped}; {reachedStorm} games reached the storm");
+            TestContext.Progress.WriteLine($"cake: white took it {takenByWhite}, black took it {takenByBlack}, it ran off {escaped}; {reachedStorm} games reached the storm; out of reach on landing {safeDrops}/{drops}");
             Assert.Greater(reachedStorm, 0);
         }
     }

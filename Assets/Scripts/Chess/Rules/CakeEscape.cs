@@ -8,29 +8,51 @@ namespace SaturdayGame.Chess
     /// </summary>
     public static class CakeEscape
     {
-        /// <summary>落点：中间四格（d4、e4、d5、e5）里随机一个空格；都有子就找离中心最近的空格。</summary>
+        /// <summary>
+        /// 落点（不能太简单）：优先选双方都不能一步就吃到的空格；到中局后后、车、象常常把所有空格都盖住，
+        /// 那就选一步能吃到它的棋子最少的空格。同样少的里挑离棋盘中心最近的那一圈，再随机一格。
+        /// </summary>
         public static Coord? DropSquare(Board board, Random rng)
         {
-            var center = new List<Coord>();
-            foreach (var c in new[] { new Coord(3, 3), new Coord(4, 3), new Coord(3, 4), new Coord(4, 4) })
-                if (CanStand(board, c)) center.Add(c);
-            if (center.Count > 0) return center[rng.Next(center.Count)];
-
-            Coord? best = null;
+            var pool = new List<Coord>();
+            int bestReach = int.MaxValue;
             double bestDistance = double.MaxValue;
             for (int i = 0; i < 64; i++)
             {
                 var c = Coord.FromIndex(i);
                 if (!CanStand(board, c)) continue;
-                double d = Math.Abs(c.X - 3.5) + Math.Abs(c.Y - 3.5) + rng.NextDouble() * 0.01;
-                if (d < bestDistance)
+                int reach = Reachers(board, c);
+                double d = CenterDistance(c);
+                bool better = reach < bestReach || (reach == bestReach && d < bestDistance - 1e-6);
+                if (better)
                 {
+                    bestReach = reach;
                     bestDistance = d;
-                    best = c;
+                    pool.Clear();
                 }
+                if (reach == bestReach && Math.Abs(d - bestDistance) <= 1e-6) pool.Add(c);
             }
-            return best;
+            return pool.Count > 0 ? pool[rng.Next(pool.Count)] : (Coord?)null;
         }
+
+        /// <summary>离中心的距离（中间四格都是 1）。</summary>
+        static double CenterDistance(Coord c) => Math.Abs(c.X - 3.5) + Math.Abs(c.Y - 3.5);
+
+        /// <summary>蛋糕放在 c 上，双方一共有几枚棋子一步就能吃到它。</summary>
+        public static int Reachers(Board board, Coord c)
+        {
+            var next = board.Clone();
+            if (next.Cake.HasValue) next.RemoveCake();
+            next.PlaceCake(c);
+            var pieces = new HashSet<int>();
+            foreach (var side in new[] { Side.White, Side.Black })
+                foreach (var move in MoveGenerator.Generate(next, side))
+                    if (move.To == c) pieces.Add(move.PieceId);
+            return pieces.Count;
+        }
+
+        /// <summary>蛋糕放在 c 上，任何一方有没有一步就能吃到它的走法。</summary>
+        public static bool ReachableInOneMove(Board board, Coord c) => Reachers(board, c) > 0;
 
         /// <summary>
         /// 蛋糕这一轮往哪跑：周围八格里的空格，离最近的棋子越远越好（同样远随机挑）；
