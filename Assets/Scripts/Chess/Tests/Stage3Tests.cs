@@ -161,11 +161,13 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void TheStorm_InAGame_TalksAboutTheLava_AndSetsUpTheThunderBar()
+        public void TheStorm_InAGame_ShowsTheNewRules_AndSetsUpTheThunderBar()
         {
             var game = Stage3Game(5);
             var events = game.DrainEvents();
-            Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text.Contains("lava")));
+            int line = events.FindIndex(e => e.Type == GameEventType.Dialogue && e.Text.Contains("chosen one is here"));
+            Assert.GreaterOrEqual(line, 0, "you answer the friend before reading the new rules");
+            Assert.AreEqual(GameEventType.ShowRuleBook, events[line + 1].Type, "the rule book comes up right after that line");
             Assert.AreEqual(14, game.InitialGuards);
             Assert.AreEqual(7, game.ThunderMax, "half the guards at the start of stage 3");
             Assert.AreEqual(0, game.ThunderCharge);

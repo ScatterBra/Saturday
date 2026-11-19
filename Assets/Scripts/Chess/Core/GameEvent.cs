@@ -62,6 +62,8 @@ namespace SaturdayGame.Chess
         SteppedBack,
         /// <summary>棋子自己说话（PieceId 头顶冒气泡，Text 是内容），不进对白框、不用点击。例如蛋糕落下时两个王后喊话。</summary>
         PieceSpoke,
+        /// <summary>把规则书举到镜头前给玩家看（第三阶段开始时强制看一下新规则），玩家放回去之后才继续。</summary>
+        ShowRuleBook,
     }
 
     /// <summary>规则卡是在什么情况下弹出的。</summary>
@@ -192,6 +194,8 @@ namespace SaturdayGame.Chess
             new GameEvent { Type = GameEventType.Soaked, Squares = squares };
 
         public static GameEvent Notice(string text) => new GameEvent { Type = GameEventType.Notice, Text = text };
+
+        public static GameEvent ShowRuleBook() => new GameEvent { Type = GameEventType.ShowRuleBook };
 
         public static GameEvent CakeDropped(Coord at) => new GameEvent { Type = GameEventType.CakeDropped, To = at };
 

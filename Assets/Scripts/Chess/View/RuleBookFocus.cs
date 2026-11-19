@@ -212,6 +212,9 @@ namespace SaturdayGame.Chess.View
             return false;
         }
 
+        /// <summary>不用点，直接举到镜头前（第三阶段开始时强制看一下规则）。放回去照常：点本子外面或按 Esc。</summary>
+        public void PickUp() => focused = true;
+
         /// <summary>马上放回桌上（重开一局时用）。</summary>
         public void PutBack()
         {

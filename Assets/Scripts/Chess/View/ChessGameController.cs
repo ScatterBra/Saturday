@@ -140,6 +140,8 @@ namespace SaturdayGame.Chess.View
         bool cameraTurning;
         /// <summary>规则书：鼠标停上去描边，点一下举到镜头前，点外面放回去。</summary>
         RuleBookFocus ruleBookFocus;
+        /// <summary>演出里强制举起了规则书（ShowRuleBook），这时虽然在演出中，也允许玩家把它放回去。</summary>
+        bool forcedRuleBook;
         /// <summary>这一局相机已经转到中间视角了（只转一次）。</summary>
         bool midViewShown;
         /// <summary>可以右键拖动转视角了（中间视角出现后、第三阶段）。</summary>
@@ -349,6 +351,7 @@ namespace SaturdayGame.Chess.View
             ApplyStageLighting(false);
             hud.ResetForNewGame();
             if (ruleBookFocus != null) ruleBookFocus.PutBack();
+            forcedRuleBook = false;
             hud.SetStorm(0);
             // 上一局转过的相机回到场景里设的角度，棋子重新平躺
             FaceCamera.FollowCameraPitch = false;
@@ -405,7 +408,8 @@ namespace SaturdayGame.Chess.View
             var mouse = Mouse.current;
             if (ruleBookFocus == null || mouse == null || boardCamera == null) return false;
             var keyboard = Keyboard.current;
-            bool canInteract = !busy && !cameraTurning && game.Phase != GamePhase.GameOver;
+            // 演出里强制举起规则书时，玩家也要能把它放回去
+            bool canInteract = (!busy || forcedRuleBook) && !cameraTurning && game.Phase != GamePhase.GameOver;
             bool consumed = ruleBookFocus.Tick(boardCamera.ScreenPointToRay(mouse.position.ReadValue()),
                 mouse.leftButton.wasPressedThisFrame, keyboard != null && keyboard.escapeKey.wasPressedThisFrame, canInteract,
                 LostPieceHover.PointerOver);
@@ -952,6 +956,17 @@ namespace SaturdayGame.Chess.View
                         board.Highlight(null, null, null, lastMove);
                         hud.ShowCaption(Speakers.Friend, $"*the queen prepares {e.Rule.Title}*");
                         yield return new WaitForSeconds(dialogueDuration);
+                        break;
+                    case GameEventType.ShowRuleBook:
+                        // 规则书自己举起来，等玩家看完放回去（点本子外面或 Esc）再继续。自动跳过对白时不举
+                        if (ruleBookFocus != null && !autoContinueDialogue)
+                        {
+                            hud.HideCaption();
+                            ruleBookFocus.PickUp();
+                            forcedRuleBook = true;
+                            while (ruleBookFocus.Active) yield return null;
+                            forcedRuleBook = false;
+                        }
                         break;
                     case GameEventType.Notice:
                         // 提示：字幕里不带说话人，和对白一样点一下才继续

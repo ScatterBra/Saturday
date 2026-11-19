@@ -179,7 +179,7 @@ namespace SaturdayGame.Chess.View
             // 规则多了就自动缩小字号，不会压到下面的被吃区
             ruleBookText.resizeTextForBestFit = true;
             ruleBookText.resizeTextMinSize = 12;
-            ruleBookText.resizeTextMaxSize = 22;
+            ruleBookText.resizeTextMaxSize = RuleBookFontSize;
             ruleBookText.verticalOverflow = VerticalWrapMode.Truncate;
             ruleBookText.rectTransform.anchorMin = new Vector2(0, 0.36f);
             ruleBookText.rectTransform.sizeDelta = new Vector2(-(bookLeft + bookRight), -110);
@@ -469,12 +469,19 @@ namespace SaturdayGame.Chess.View
 
         // ---------- 内部 ----------
 
+        /// <summary>规则书正文最大字号（第一、二阶段）；规则多了会自动缩小。</summary>
+        const int RuleBookFontSize = 22;
+        /// <summary>第三阶段规则书正文最大字号。</summary>
+        const int Stage3RuleBookFontSize = 34;
+
         /// <summary>
         /// 规则书只写一直生效的规则：基本规则（第三阶段换成城堡营救的规则）+ 生效中的常驻规则（各一两句）。
         /// 一次性技能的说明只在规则卡上；棋子的细节在悬浮窗里。
         /// </summary>
         void RefreshRuleBook()
         {
+            // 第三阶段只写风暴后的规则，字大一点（放不下时自动缩小）
+            ruleBookText.resizeTextMaxSize = stage3 ? Stage3RuleBookFontSize : RuleBookFontSize;
             var sb = new StringBuilder();
             if (!stage3)
             {
@@ -488,7 +495,7 @@ namespace SaturdayGame.Chess.View
             {
                 sb.Append("<b>After the storm:</b>\n");
                 sb.Append("  • the king and queen hide in the castle\n");
-                sb.Append("  • take out every guard, then walk any piece in\n");
+                sb.Append("  • take out every guard, then walk any piece in to take the castle!\n");
                 sb.Append("  • lose all your pieces and you lose\n");
                 sb.Append("  • no check, no coming back, kings can be taken\n");
                 sb.Append("  • nobody can step on lava; whatever falls in is gone\n");
@@ -497,11 +504,13 @@ namespace SaturdayGame.Chess.View
                 sb.Append("  • take enemy pieces to charge the thunderstorm\n");
                 sb.Append("  • skills and thunder take your turn; cards don't\n");
             }
-            foreach (var rule in ruleBook)
-            {
-                sb.Append($"\n<b>{rule.Title}</b>\n");
-                sb.Append($"{rule.RuleBookText}\n");
-            }
+            // 第一、二阶段的常驻规则（主教、车）第三阶段不再列出来
+            if (!stage3)
+                foreach (var rule in ruleBook)
+                {
+                    sb.Append($"\n<b>{rule.Title}</b>\n");
+                    sb.Append($"{rule.RuleBookText}\n");
+                }
             ruleBookText.text = sb.ToString();
         }
 

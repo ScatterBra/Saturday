@@ -855,7 +855,10 @@ namespace SaturdayGame.Chess
             events.Add(GameEvent.StageStarted(2));
             events.Add(GameEvent.BoardRebuilt());
             // 城堡、守卫的提示直接显示在屏幕上；象和马有技能用闪光提示，这里不再说
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "Mind the lava. Whatever falls in is gone. And no coming back this time."));
+            events.Add(GameEvent.Dialogue(Speakers.Friend, "This is the final chapter. Only the chosen one may read the sacred rule book."));
+            events.Add(GameEvent.Dialogue(Speakers.You, "Then step aside. The chosen one is here."));
+            // 点掉这句之后规则书自己举起来，让玩家看一眼风暴后的规则
+            events.Add(GameEvent.ShowRuleBook());
         }
 
         /// <summary>
