@@ -29,7 +29,8 @@ namespace SaturdayGame.Chess
 
     /// <summary>
     /// 自己的一匹马变成龙，烧掉它身边 Reach 格以内的一个敌方兵、马或象，然后变回原来的样子。
-    /// 玩家自己选：先选马（只有一匹马能喷时直接用它），再选烧谁；两步都能跳过（跳过就当没用）。
+    /// 玩家自己选：先选马（只有一匹马能喷时直接用它），再选烧谁。
+    /// 第二阶段的卡选了就得用，不能取消（卡出现时可以整组 Skip）；第三阶段马的技能选目标时可以取消。
     /// 龙火是火：烧到潮湿的棋子会爆炸（RuleContext.Burn）。冻住的马喷不了火，城堡里的棋子烧不到。
     /// 第二阶段是一次性的卡；第三阶段是马的常驻技能（ChessGame.UseSkill），有冷却。
     /// </summary>
@@ -55,9 +56,9 @@ namespace SaturdayGame.Chess
             {
                 var pickKnight = new TargetRequest
                 {
-                    Prompt = "Pick a knight to turn into a dragon, or skip.",
+                    Prompt = "Pick a knight to turn into a dragon.",
                     Options = knights.ConvertAll(k => k.Pos),
-                    AllowSkip = true,
+                    AllowSkip = ctx.Board.Stage3,
                 };
                 yield return pickKnight;
                 if (!pickKnight.Result.HasValue) yield break;
@@ -67,9 +68,9 @@ namespace SaturdayGame.Chess
             var victims = Targets(ctx, dragon);
             var pickVictim = new TargetRequest
             {
-                Prompt = ctx.Board.Stage3 ? "Click a red enemy to burn it. Click elsewhere to cancel." : "Pick what the dragon burns, or skip.",
+                Prompt = ctx.Board.Stage3 ? "Click a red enemy to burn it. Click elsewhere to cancel." : "Pick what the dragon burns.",
                 Options = victims.ConvertAll(v => v.Pos),
-                AllowSkip = true,
+                AllowSkip = ctx.Board.Stage3,
                 Origin = dragon.Pos,
             };
             yield return pickVictim;
@@ -107,7 +108,8 @@ namespace SaturdayGame.Chess
     }
 
     /// <summary>
-    /// 复活自己一枚被吃掉的棋子（王以外都行）：玩家先在规则书的被吃区里挑棋子，再在自己那半边棋盘上挑位置，两步都能跳过。
+    /// 复活自己一枚被吃掉的棋子（王以外都行）：玩家先在规则书的被吃区里挑棋子，再在自己那半边棋盘上挑位置。
+    /// 卡选了就得用，两步都不能取消（卡出现时可以整组 Skip），免得误点右键白白浪费一次复活。
     /// 复活后的样子：本来有外观的（消防栓、青蛙、主教变体）保持原样；有蜡笔图的（兵、马、车、后）画成蜡笔版；其他的（普通的象）是纸片版。
     /// 第 10 回合的选卡、被将军时的救急技能里有它；第三阶段不能复活。
     /// </summary>
@@ -130,9 +132,8 @@ namespace SaturdayGame.Chess
             if (candidates.Count == 0) yield break;
             var pick = new TargetRequest
             {
-                Prompt = "Pick a lost piece to bring back (in the rule book), or skip.",
+                Prompt = "Pick a lost piece to bring back (in the rule book).",
                 PieceOptions = candidates.ConvertAll(p => p.Id),
-                AllowSkip = true,
             };
             yield return pick;
             if (!pick.PieceResult.HasValue) yield break;
@@ -141,9 +142,8 @@ namespace SaturdayGame.Chess
             string skin = LookAfterRevival(piece);
             var place = new TargetRequest
             {
-                Prompt = $"Pick where your {piece.Type.ToString().ToLower()} comes back (your half of the board), or skip.",
+                Prompt = $"Pick where your {piece.Type.ToString().ToLower()} comes back (your half of the board).",
                 Options = RevivalPlacement.Squares(ctx.Board, piece),
-                AllowSkip = true,
                 PreviewPieceId = piece.Id,
                 PreviewSkin = skin,
             };

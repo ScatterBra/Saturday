@@ -301,6 +301,7 @@ namespace SaturdayGame.Chess.Tests
             var requests = new DragonKnightRule().Activate(ctx).GetEnumerator();
             Assert.IsTrue(requests.MoveNext());
             CollectionAssert.AreEquivalent(new[] { C("d4"), C("a1") }, requests.Current.Options);
+            Assert.IsFalse(requests.Current.AllowSkip, "a stage-2 card has to be used once picked");
             requests.Current.Result = null;
             Assert.IsFalse(requests.MoveNext());
             Assert.IsFalse(ctx.Acted);
@@ -344,10 +345,10 @@ namespace SaturdayGame.Chess.Tests
             var (pick, place) = Comeback(board, queen, "d4");
 
             Assert.IsTrue(pick.IsPieceRequest);
-            Assert.IsTrue(pick.AllowSkip);
+            Assert.IsFalse(pick.AllowSkip, "once the card is picked it has to be used");
             Assert.AreEqual(3, pick.PieceOptions.Count, "any lost piece can be picked, even the queen");
             Assert.IsFalse(place.IsPieceRequest);
-            Assert.IsTrue(place.AllowSkip);
+            Assert.IsFalse(place.AllowSkip);
             Assert.AreEqual(queen.Id, place.PreviewPieceId);
             Assert.IsTrue(place.Options.All(c => c.Y <= 3 && board.IsEmpty(c) || c == C("d4")), "only free squares on the player's half");
             CollectionAssert.DoesNotContain(place.Options, C("d5"));
