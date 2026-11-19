@@ -29,6 +29,14 @@ namespace SaturdayGame.Chess.View
         };
         [Tooltip("到这个回合朋友掀起风暴，进入第三阶段（开了蛋糕争夺时不用它，见 Storm Delay After Card）")]
         public int stormTurn = 20;
+        [Header("Music")]
+        [Tooltip("第一、二阶段的背景音乐：相机第一次转到斜视角（第一个 3D 模型出现）之后开始循环播放，掀起风暴时淡出。留空就不放")]
+        public AudioClip stage1Music;
+        [Range(0f, 1f)] public float stage1MusicVolume = 0.6f;
+        [Tooltip("第一次播放从音乐的第几秒开始（跳过开头）；循环回来时还是从头播")]
+        public float stage1MusicStartAt = 0f;
+        [Tooltip("掀起风暴时第一阶段音乐淡出用多久（秒）")]
+        public float stage1MusicFadeOut = 1.5f;
         [Header("Cake")]
         [Tooltip("这个回合棋盘中间掉下一块会跑的蛋糕，双方抢，没抢到的一方全体后退一格（0 = 关掉，回到固定的选卡、风暴回合）")]
         public int cakeTurn = 10;
@@ -223,11 +231,65 @@ namespace SaturdayGame.Chess.View
             yield return cameraFit.TurnTo(pitch, midFieldOfView, midZoom, cameraTurnDuration);
             cameraTurning = false;
             orbitUnlocked = true;
+            PlayStage1Music();
+        }
+
+        // ---------- 背景音乐 ----------
+
+        AudioSource stage1MusicSource;
+        Coroutine stage1MusicFade;
+
+        /// <summary>第一阶段音乐从头开始循环播放。</summary>
+        void PlayStage1Music()
+        {
+            if (stage1Music == null) return;
+            if (stage1MusicSource == null)
+            {
+                stage1MusicSource = gameObject.AddComponent<AudioSource>();
+                stage1MusicSource.playOnAwake = false;
+                stage1MusicSource.spatialBlend = 0f;
+            }
+            if (stage1MusicFade != null) StopCoroutine(stage1MusicFade);
+            stage1MusicFade = null;
+            stage1MusicSource.clip = stage1Music;
+            stage1MusicSource.loop = true;
+            stage1MusicSource.time = Mathf.Clamp(stage1MusicStartAt, 0f, Mathf.Max(0f, stage1Music.length - 0.01f));
+            stage1MusicSource.volume = stage1MusicVolume;
+            stage1MusicSource.Play();
+        }
+
+        /// <summary>停掉第一阶段音乐；fade 为 true 时慢慢淡出。</summary>
+        void StopStage1Music(bool fade)
+        {
+            if (stage1MusicSource == null || !stage1MusicSource.isPlaying) return;
+            if (stage1MusicFade != null) StopCoroutine(stage1MusicFade);
+            stage1MusicFade = null;
+            if (!fade || stage1MusicFadeOut <= 0f)
+            {
+                stage1MusicSource.Stop();
+                return;
+            }
+            stage1MusicFade = StartCoroutine(FadeOutStage1Music());
+        }
+
+        IEnumerator FadeOutStage1Music()
+        {
+            float start = stage1MusicSource.volume;
+            for (float t = 0f; t < 1f; t += Time.deltaTime / stage1MusicFadeOut)
+            {
+                stage1MusicSource.volume = start * (1f - t);
+                yield return null;
+            }
+            stage1MusicSource.Stop();
+            stage1MusicSource.volume = stage1MusicVolume;
+            stage1MusicFade = null;
         }
 
         public void NewGame()
         {
             StopAllCoroutines();
+            stage1MusicFade = null;
+            StopStage1Music(false);
             if (stage3Cutscene != null)
             {
                 stage3Cutscene.Abort();
@@ -857,6 +919,8 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(effectDuration);
                         break;
                     case GameEventType.Storm:
+                        // 第一阶段的音乐淡出，第三阶段有自己的音乐（过场里放）
+                        StopStage1Music(true);
                         // 有开场过场就交给过场演（在 BoardRebuilt 里播）
                         if (stage3Cutscene != null && stage3Cutscene.isActiveAndEnabled && stage3Cutscene.play && boardCamera != null)
                         {

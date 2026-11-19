@@ -1383,6 +1383,14 @@ MonoBehaviour:
   - Turn: 7
     RuleId: fire_hydrant
   stormTurn: 20
+  stage1Music: {fileID: 8300000, guid: 2685e52acb928d54aaafb9a3c39c71b0, type: 3}
+  stage1MusicVolume: 0.6
+  stage1MusicStartAt: 0
+  stage1MusicFadeOut: 1.5
+  cakeTurn: 10
+  cakeMaxRounds: 8
+  cardDelayAfterCake: 5
+  stormDelayAfterCard: 10
   lavaSquares: 5
   stage3SkillEvery: 5
   friendSkillTurns: 0200000007000000
