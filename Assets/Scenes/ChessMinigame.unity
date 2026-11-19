@@ -1526,7 +1526,8 @@ MonoBehaviour:
     volume: 1
     pitchJitter: 0
   beam:
-    clips: []
+    clips:
+    - {fileID: 8300000, guid: 3e61596db8c90a144ab74ad982ce525f, type: 3}
     volume: 1
     pitchJitter: 0
   thunder:
