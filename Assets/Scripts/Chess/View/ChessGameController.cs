@@ -703,8 +703,11 @@ namespace SaturdayGame.Chess.View
                 var options = result.CastleTaken ? new List<HydrantSpray.Result>() : FireHydrantRule.EffectCandidates(next, next.GetPiece(move.PieceId));
                 if (options.Count > 0) preview = options[Random.Range(0, options.Count)];
             }
+            // 箭头颜色：消防栓喷水是蓝的，青蛙舌头是绿的（会掉进岩浆时 BoardView 画成红的）
+            var arrow = selected.Skin == FireHydrantRule.Hydrant ? new Color(0.25f, 0.6f, 1f) : new Color(0.35f, 0.8f, 0.3f);
             board.Highlight(selected.Pos, selectedMoves, null, lastMove, DangerSquare(),
-                preview.HasValue ? (preview.Value.Piece.Pos, preview.Value.To, preview.Value.Burns) : ((Coord, Coord, bool)?)null);
+                preview.HasValue ? (preview.Value.Piece.Pos, preview.Value.To, preview.Value.Burns) : ((Coord, Coord, bool)?)null,
+                effectArrow: arrow);
         }
 
         /// <summary>复活时挑位置：鼠标停在哪个可选格子上，就在那里显示这枚棋子复活后的样子。</summary>

@@ -1288,9 +1288,12 @@ namespace SaturdayGame.Chess.View
         /// </param>
         /// <param name="affected">技能预览：会被打到的格子（敌人红、自己人黄、空格淡红）。</param>
         /// <param name="moveLike">像走法一样显示的技能目标（象的光束）：空格绿、敌人红、自己人橙。</param>
+        /// <param name="effectArrow">effect 的箭头颜色（消防栓蓝、青蛙绿）；会掉进岩浆时箭头一律红色。</param>
         public void Highlight(Coord? selected, IEnumerable<Move> moves, IEnumerable<Coord> pickOptions, Move? lastMove, Coord? danger = null,
-            (Coord From, Coord To, bool Burns)? effect = null, IEnumerable<Coord> affected = null, IEnumerable<Coord> moveLike = null)
+            (Coord From, Coord To, bool Burns)? effect = null, IEnumerable<Coord> affected = null, IEnumerable<Coord> moveLike = null,
+            Color? effectArrow = null)
         {
+            ShowEffectArrow(effect, effectArrow);
             var colors = new Color[64];
             var marks = new Color[64]; // 有棋盘图时的色块，alpha = 0 表示不显示
             for (int i = 0; i < 64; i++)
@@ -1380,6 +1383,84 @@ namespace SaturdayGame.Chess.View
                     overlays[i].color = marks[i];
                 }
             }
+        }
+
+        // ---------- 消防栓、青蛙预览的箭头 ----------
+
+        GameObject effectArrow;
+        Mesh effectArrowMesh;
+        const float ArrowShaftWidth = 0.06f, ArrowHeadLength = 0.22f, ArrowHeadWidth = 0.24f;
+        /// <summary>箭头两头离格子中心留的空：起点让开被推的棋子脚下一点，箭头尖停在落点格子里。</summary>
+        const float ArrowStartGap = 0.28f, ArrowEndGap = 0.18f;
+
+        /// <summary>
+        /// 被推开、拉过来的棋子从 From 指到 To 的扁平箭头，平铺在格子上（不跟着镜头转）。
+        /// 第三阶段地形有高低：箭头抬到沿途最高的那一格上面，不插进地里。effect 为空就藏起来。
+        /// </summary>
+        void ShowEffectArrow((Coord From, Coord To, bool Burns)? effect, Color? color)
+        {
+            if (!effect.HasValue || effect.Value.From == effect.Value.To)
+            {
+                if (effectArrow != null) effectArrow.SetActive(false);
+                return;
+            }
+            if (effectArrow == null)
+            {
+                effectArrow = factory.Primitive(PrimitiveType.Quad, root, Vector3.zero, Vector3.one);
+                effectArrow.name = "Effect Arrow";
+                effectArrowMesh = new Mesh { name = "Effect Arrow" };
+                effectArrow.GetComponent<MeshFilter>().sharedMesh = effectArrowMesh;
+            }
+
+            var from = effect.Value.From;
+            var to = effect.Value.To;
+            var start = SquareCenter(from);
+            var end = SquareCenter(to);
+            var flat = end - start;
+            float length = flat.magnitude - ArrowStartGap - ArrowEndGap;
+            var dir = flat.normalized;
+
+            // 沿途最高的一格（推开最多 2 格，直线或斜线，一格一格走过去）
+            float top = 0f;
+            int dx = System.Math.Sign(to.X - from.X), dy = System.Math.Sign(to.Y - from.Y);
+            for (var c = from; ; c = new Coord(c.X + dx, c.Y + dy))
+            {
+                top = Mathf.Max(top, TopOf(c));
+                if (c == to || !c.IsValid) break;
+            }
+
+            BuildArrowMesh(effectArrowMesh, Mathf.Max(ArrowHeadLength, length));
+            var t = effectArrow.transform;
+            t.localPosition = start + dir * ArrowStartGap + Vector3.up * (top + 0.03f);
+            t.localRotation = Quaternion.LookRotation(dir, Vector3.up);
+            t.localScale = Vector3.one;
+            factory.SetColor(effectArrow, effect.Value.Burns ? Danger : color ?? EffectTarget);
+            effectArrow.SetActive(true);
+        }
+
+        /// <summary>躺平的箭头（XZ 平面，从原点指向 +Z，总长 length）：一根杆子加一个三角形的头，正反两面都画。</summary>
+        static void BuildArrowMesh(Mesh mesh, float length)
+        {
+            float shaftEnd = Mathf.Max(0f, length - ArrowHeadLength);
+            float w = ArrowShaftWidth / 2f, hw = ArrowHeadWidth / 2f;
+            var v = new[]
+            {
+                new Vector3(-w, 0, 0), new Vector3(w, 0, 0), new Vector3(w, 0, shaftEnd), new Vector3(-w, 0, shaftEnd),
+                new Vector3(-hw, 0, shaftEnd), new Vector3(hw, 0, shaftEnd), new Vector3(0, 0, length),
+            };
+            var up = new[] { 0, 3, 2, 0, 2, 1, 4, 6, 5 };
+            var tris = new int[up.Length * 2];
+            for (int i = 0; i < up.Length; i += 3)
+            {
+                tris[i] = up[i]; tris[i + 1] = up[i + 1]; tris[i + 2] = up[i + 2];
+                // 反面：同样三个点倒过来
+                tris[up.Length + i] = up[i]; tris[up.Length + i + 1] = up[i + 2]; tris[up.Length + i + 2] = up[i + 1];
+            }
+            mesh.Clear();
+            mesh.vertices = v;
+            mesh.triangles = tris;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
         }
 
         /// <summary>一直标着的格子（王后预告要打的格子），下次 Highlight 时生效。</summary>
