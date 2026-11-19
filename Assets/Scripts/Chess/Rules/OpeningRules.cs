@@ -19,12 +19,12 @@ namespace SaturdayGame.Chess
         public const string Frog = "frog";
 
         public override string Id => "fire_hydrant";
-        public override string Title => "Hydrants and Frogs";
+        public override string Title => "Rooks";
         public override string Description =>
             "Your a-rook is a fire hydrant and your h-rook is a frog. Your friend's are the other way round. " +
             "A hydrant that lands sprays the closest enemy next to it up to 2 squares away. " +
             "A frog that lands eats the closest enemy in a straight line, up to 3 squares away (not the king). After 3 it's stuffed and lies down for a while.";
-        public override string RuleBookText => "Hydrants spray enemies away. Frogs eat them, until they're stuffed. Hover over one to see how.";
+        public override string RuleBookText => "Hydrants spray enemies away. Frogs eat them, until they're stuffed.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 0;
 
@@ -228,7 +228,7 @@ namespace SaturdayGame.Chess
         public static readonly string[] Skins = { "fish_shop", "bishbird" };
 
         public override string Id => "bishop_variants";
-        public override string Title => "Bishops Can Be Anything";
+        public override string Title => "Bishops";
         public override string Description => "Every bishop picked something else to be: a fish shop or a bird. They stay that way.";
         public override string RuleBookText => "Bishops picked new looks. They still move like bishops.";
         public override RuleKind Kind => RuleKind.Cosmetic;
@@ -252,6 +252,8 @@ namespace SaturdayGame.Chess
 
             ctx.Say(Speakers.Friend, "Bishops are boring. Let them be whatever they want.");
             ctx.Say(Speakers.You, "...Is that one a bird?");
+            // 提示（字幕里不带说话人，停一会儿自己过去）：第一次有棋子换样子，告诉玩家鼠标停上去能看本事
+            ctx.Emit(GameEvent.Notice("Hover over pieces to see their capabilities."));
             yield break;
         }
     }

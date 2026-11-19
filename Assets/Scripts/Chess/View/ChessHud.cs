@@ -482,7 +482,7 @@ namespace SaturdayGame.Chess.View
                 sb.Append("  • get checkmated and you lose\n");
                 sb.Append("  • in check? you may use a skill\n");
                 sb.Append("  • no castling, no en passant\n");
-                sb.Append("  • pawns always become queens\n");
+                sb.Append("  • pawns always promote to queens\n");
             }
             else
             {
@@ -502,7 +502,6 @@ namespace SaturdayGame.Chess.View
                 sb.Append($"\n<b>{rule.Title}</b>\n");
                 sb.Append($"{rule.RuleBookText}\n");
             }
-            if (!stage3) sb.Append("\n<i>(the rest of the pages are blank)</i>");
             ruleBookText.text = sb.ToString();
         }
 

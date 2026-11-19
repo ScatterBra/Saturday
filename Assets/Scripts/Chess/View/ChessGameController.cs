@@ -954,8 +954,9 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.Notice:
+                        // 提示：字幕里不带说话人，和对白一样点一下才继续
                         hud.ShowCaption(null, e.Text);
-                        yield return new WaitForSeconds(dialogueDuration);
+                        yield return WaitForClick();
                         break;
                     case GameEventType.Captured:
                         // 青蛙的舌头：猎物被拖到青蛙脚下再消失
