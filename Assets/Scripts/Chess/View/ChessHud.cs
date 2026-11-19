@@ -596,6 +596,37 @@ namespace SaturdayGame.Chess.View
             tooltipRoot.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// 棋子头顶的说话气泡（棋子自己说话，不进对白框）：纸色小框里一句话。位置每帧用 PlaceSpeech 跟着棋子走，用完 Destroy。
+        /// </summary>
+        public RectTransform ShowSpeech(string text)
+        {
+            var bubble = Panel((RectTransform)transform, "Speech Bubble", Vector2.zero, Vector2.zero, new Vector2(0.5f, 0f), Vector2.zero, new Vector2(320, 0), Paper);
+            bubble.GetComponent<Image>().raycastTarget = false;
+            var layout = bubble.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(16, 16, 8, 10);
+            layout.childControlHeight = true;
+            layout.childControlWidth = true;
+            layout.childForceExpandHeight = false;
+            var fitter = bubble.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var outline = bubble.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.16f, 0.12f, 0.1f, 0.8f);
+            outline.effectDistance = new Vector2(2, -2);
+            Label(bubble, "Text", text, 24, FontStyle.Normal, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero);
+            // 压在字幕、提示框下面
+            if (tooltipRoot != null) bubble.SetSiblingIndex(tooltipRoot.GetSiblingIndex());
+            return bubble;
+        }
+
+        /// <summary>把气泡的底边中点放到 screenPosition（屏幕像素）上方一点。</summary>
+        public void PlaceSpeech(RectTransform bubble, Vector2 screenPosition)
+        {
+            var canvasRect = (RectTransform)transform;
+            float scale = canvasRect.lossyScale.x > 0f ? canvasRect.lossyScale.x : 1f;
+            bubble.anchoredPosition = screenPosition / scale + new Vector2(0f, 12f);
+        }
+
         /// <summary>规则卡的几张底图打乱顺序；没有配图时为空。</summary>
         List<Sprite> ShuffledCardSprites()
         {

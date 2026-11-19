@@ -161,11 +161,10 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void TheStorm_InAGame_TalksAboutTheCastleAndTheLava_AndSetsUpTheThunderBar()
+        public void TheStorm_InAGame_TalksAboutTheLava_AndSetsUpTheThunderBar()
         {
             var game = Stage3Game(5);
             var events = game.DrainEvents();
-            Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text.Contains("castle")));
             Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text.Contains("lava")));
             Assert.AreEqual(14, game.InitialGuards);
             Assert.AreEqual(7, game.ThunderMax, "half the guards at the start of stage 3");

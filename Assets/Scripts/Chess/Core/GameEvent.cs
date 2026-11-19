@@ -60,6 +60,8 @@ namespace SaturdayGame.Chess
         CakeEscaped,
         /// <summary>蛋糕争夺：没抢到的一方的棋子往后退一格（From → To）。一方的棋子一起退。</summary>
         SteppedBack,
+        /// <summary>棋子自己说话（PieceId 头顶冒气泡，Text 是内容），不进对白框、不用点击。例如蛋糕落下时两个王后喊话。</summary>
+        PieceSpoke,
     }
 
     /// <summary>规则卡是在什么情况下弹出的。</summary>
@@ -142,6 +144,9 @@ namespace SaturdayGame.Chess
 
         public static GameEvent Dialogue(string speaker, string text) =>
             new GameEvent { Type = GameEventType.Dialogue, Speaker = speaker, Text = text };
+
+        public static GameEvent PieceSpoke(Piece piece, string text) =>
+            new GameEvent { Type = GameEventType.PieceSpoke, PieceId = piece.Id, Side = piece.Side, To = piece.Pos, Text = text };
 
         public static GameEvent GameOver(Side? winner, string text) =>
             new GameEvent { Type = GameEventType.GameOver, Winner = winner, Text = text };

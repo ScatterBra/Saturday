@@ -23,7 +23,7 @@ namespace SaturdayGame.Chess.Tests
                 var cake = game.Board.Cake.Value;
                 Assert.IsFalse(CakeEscape.ReachableInOneMove(game.Board, cake), "nobody can grab it in one move");
                 Assert.IsTrue(events.Any(e => e.Type == GameEventType.CakeDropped && e.To == cake));
-                Assert.IsTrue(events.Any(e => e.Type == GameEventType.Dialogue && e.Text == "Let them eat cake!"));
+                Assert.AreEqual(2, events.Count(e => e.Type == GameEventType.PieceSpoke), "both queens shout for the cake");
 
                 var white = game.Board.PiecesOf(Side.White).First(p => p.Type == PieceType.Queen).Skin;
                 var black = game.Board.PiecesOf(Side.Black).First(p => p.Type == PieceType.Queen).Skin;

@@ -37,6 +37,10 @@ namespace SaturdayGame.Chess.View
         public float stage1MusicStartAt = 0f;
         [Tooltip("掀起风暴时第一阶段音乐淡出用多久（秒）")]
         public float stage1MusicFadeOut = 1.5f;
+        [Tooltip("棋子头顶的说话气泡停多久（秒）")]
+        public float speechDuration = 3f;
+        [Tooltip("一个气泡冒出来后，等多久再演下一件事（下一句气泡、棋子后退……）")]
+        public float speechGap = 1.5f;
         [Header("Cake")]
         [Tooltip("这个回合棋盘中间掉下一块会跑的蛋糕，双方抢，没抢到的一方全体后退一格（0 = 关掉，回到固定的选卡、风暴回合）")]
         public int cakeTurn = 10;
@@ -290,6 +294,9 @@ namespace SaturdayGame.Chess.View
         {
             StopAllCoroutines();
             thunderVanished.Clear();
+            foreach (var bubble in speechBubbles)
+                if (bubble != null) ViewUtil.Destroy(bubble.gameObject);
+            speechBubbles.Clear();
             stage1MusicFade = null;
             StopStage1Music(false);
             if (stage3Cutscene != null)
@@ -531,6 +538,26 @@ namespace SaturdayGame.Chess.View
         }
 
         Coroutine cardHint;
+
+        readonly List<RectTransform> speechBubbles = new List<RectTransform>();
+
+        /// <summary>棋子头顶的气泡：跟着棋子走（镜头转、棋子动都跟着），duration 秒后消失。</summary>
+        IEnumerator SpeechBubble(int pieceId, string text, float duration)
+        {
+            var bubble = hud.ShowSpeech(text);
+            speechBubbles.Add(bubble);
+            for (float t = 0f; t < duration && bubble != null; t += Time.deltaTime)
+            {
+                bool shown = board.TryGetPieceTop(pieceId, out var top);
+                var screen = shown ? boardCamera.WorldToScreenPoint(top) : Vector3.zero;
+                shown &= screen.z > 0f;
+                bubble.gameObject.SetActive(shown);
+                if (shown) hud.PlaceSpeech(bubble, screen);
+                yield return null;
+            }
+            speechBubbles.Remove(bubble);
+            if (bubble != null) ViewUtil.Destroy(bubble.gameObject);
+        }
 
         /// <summary>点了灰掉的卡：字幕里说一下为什么现在用不了，过几秒自己收起。</summary>
         void ShowCardUnavailable(RuleBase rule)
@@ -852,6 +879,11 @@ namespace SaturdayGame.Chess.View
                         // 没抢到蛋糕的一方一起往后退：每枚只等一小会儿
                         StartCoroutine(board.AnimatePush(e.PieceId, e.To, effectDuration * 1.5f));
                         yield return new WaitForSeconds(0.03f);
+                        break;
+                    case GameEventType.PieceSpoke:
+                        // 棋子自己说话：头顶冒个气泡，过一会儿自己消失，不用点
+                        StartCoroutine(SpeechBubble(e.PieceId, e.Text, speechDuration));
+                        yield return new WaitForSeconds(speechGap);
                         break;
                     case GameEventType.Pushed:
                         // 推子的是消防栓就是喷水，是青蛙就是舌头

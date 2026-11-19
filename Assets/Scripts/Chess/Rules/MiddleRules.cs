@@ -88,7 +88,6 @@ namespace SaturdayGame.Chess
             ctx.Say(Speakers.You, victim.IsWet ? "Dragon fire! ...Wait, that one's wet." : "Dragon fire!");
             ctx.Burn(victim, dragon);
             ctx.RevertSkin(dragon, originalSkin);
-            ctx.Say(Speakers.Friend, "That's so unfair. I love it.");
         }
 
         /// <summary>能喷火的马：没冻住，身边够得着至少一个目标。</summary>

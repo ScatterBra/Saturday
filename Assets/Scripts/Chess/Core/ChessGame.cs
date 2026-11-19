@@ -563,8 +563,7 @@ namespace SaturdayGame.Chess
                         gateAnnounced = true;
                         plannedFriendSkill = null;
                         events.Add(GameEvent.GateOpened());
-                        events.Add(GameEvent.Dialogue(Speakers.Friend, "No guards left... Fine. The gate is open."));
-                        events.Add(GameEvent.Dialogue(Speakers.Friend, "Walk any piece into the castle and it's yours."));
+                        events.Add(GameEvent.Dialogue(Speakers.You, "Finally!"));
                     }
                 }
 
@@ -587,7 +586,7 @@ namespace SaturdayGame.Chess
                         events.Add(GameEvent.StageStarted(stage));
                         var pool = RuleCatalog.CreatePool(stage);
                         // 规则池是空的（第一阶段）：只宣布进入新阶段，规则之后按回合表自动生效
-                        if (pool.Count == 0) events.Add(GameEvent.Dialogue(Speakers.Friend, StageLine(stage)));
+                        if (pool.Count == 0) { if (StageLine(stage) != null) events.Add(GameEvent.Dialogue(Speakers.Friend, StageLine(stage))); }
                         else if (Offer(OfferKind.StageCard, stage, pool, StageLine(stage))) return;
                         continue;
                     }
@@ -605,7 +604,7 @@ namespace SaturdayGame.Chess
                     if (InStage3 && !Board.GateOpen && Board.FullMove >= nextStage3Offer)
                     {
                         nextStage3Offer = Board.FullMove + Math.Max(1, settings.Stage3SkillEvery);
-                        if (Offer(OfferKind.Stage3, 2, Stage3Cards(), "Need a hand? Pick a card.")) return;
+                        if (Offer(OfferKind.Stage3, 2, Stage3Cards(), null)) return;
                         continue;
                     }
 
@@ -722,7 +721,7 @@ namespace SaturdayGame.Chess
             offers = pool;
             disabledOffers = disabled;
             offerKind = kind;
-            events.Add(GameEvent.Dialogue(Speakers.Friend, line));
+            if (line != null) events.Add(GameEvent.Dialogue(Speakers.Friend, line));
             events.Add(GameEvent.RulesOffered(stage, kind, offers));
             Phase = GamePhase.ChoosingRule;
             return true;
@@ -787,8 +786,18 @@ namespace SaturdayGame.Chess
                     events.Add(GameEvent.AppearanceChanged(queen, queen.Skin));
                 }
 
-            events.Add(GameEvent.Dialogue(playerIsMarie ? Speakers.You : Speakers.Friend, "Let them eat cake!"));
-            events.Add(GameEvent.Dialogue(Speakers.Friend, $"Cake! Any piece can grab it, but it runs a step every turn. Whoever misses it backs off. {settings.CakeMaxRounds} turns, go!"));
+            // 两个王后自己喊话（气泡冒在棋子头顶，不进对白框）：朋友的先喊，你的接着喊
+            var theirQueen = FirstOf(OpponentSide, PieceType.Queen);
+            var ourQueen = FirstOf(PlayerSide, PieceType.Queen);
+            if (theirQueen != null) events.Add(GameEvent.PieceSpoke(theirQueen, "Hey! I want that cake!"));
+            if (ourQueen != null) events.Add(GameEvent.PieceSpoke(ourQueen, "I want it too! Go grab it for me!"));
+        }
+
+        Piece FirstOf(Side side, PieceType type)
+        {
+            foreach (var p in Board.PiecesOf(side))
+                if (p.Type == type) return p;
+            return null;
         }
 
         /// <summary>有人吃到了蛋糕：没抢到的一方所有棋子往自己底线退一格。</summary>
@@ -800,12 +809,15 @@ namespace SaturdayGame.Chess
             if (eater.Side == PlayerSide)
             {
                 events.Add(GameEvent.Dialogue(Speakers.You, "Mine!"));
-                events.Add(GameEvent.Dialogue(Speakers.Friend, "Hey, that was MY cake! ...Fine. Everybody back up."));
+                events.Add(GameEvent.Dialogue(Speakers.Friend, "Hey, that was MY cake!"));
             }
             else
             {
-                events.Add(GameEvent.Dialogue(Speakers.Friend, "Mine! Now back off, all of you."));
+                events.Add(GameEvent.Dialogue(Speakers.Friend, "Mine!"));
             }
+            // 没抢到的一方：国王自己发火，把军队撤回来（气泡在国王头顶）
+            var loserKing = Board.King(loser);
+            if (loserKing != null) events.Add(GameEvent.PieceSpoke(loserKing, "You useless commander! I'm pulling all my troops back!"));
             foreach (var (piece, from) in CakeEscape.StepBack(Board, loser))
                 events.Add(GameEvent.SteppedBack(piece, from, piece.Pos));
         }
@@ -842,9 +854,8 @@ namespace SaturdayGame.Chess
             beamReadyTurn = dragonReadyTurn = 0;
             events.Add(GameEvent.StageStarted(2));
             events.Add(GameEvent.BoardRebuilt());
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "My king and queen are safe in the castle. Get rid of every last guard if you want in."));
+            // 城堡、守卫的提示直接显示在屏幕上；象和马有技能用闪光提示，这里不再说
             events.Add(GameEvent.Dialogue(Speakers.Friend, "Mind the lava. Whatever falls in is gone. And no coming back this time."));
-            events.Add(GameEvent.Dialogue(Speakers.Friend, "Oh, and the storm got into your bishops and knights. Check your skills."));
         }
 
         /// <summary>
@@ -906,7 +917,8 @@ namespace SaturdayGame.Chess
             switch (stage)
             {
                 case 0: return "Wait. We don't have to play like that. From now on, house rules. You'll see.";
-                default: return "Your turn to change something.";
+                // 第二阶段选卡直接弹卡，不说话
+                default: return null;
             }
         }
 

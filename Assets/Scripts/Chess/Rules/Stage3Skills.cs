@@ -66,7 +66,7 @@ namespace SaturdayGame.Chess
                 ctx.Kill(piece, "beam", bishop);
                 hit++;
             }
-            ctx.Say(Speakers.Friend, hit == 0 ? "You missed. Everything." : "Bishops shoot lasers now?!");
+            ctx.Say(Speakers.Friend, hit == 0 ? "You missed. Everything." : "Hey, that's brutal!");
         }
 
         static List<Piece> Bishops(RuleContext ctx)

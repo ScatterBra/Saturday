@@ -43,8 +43,8 @@ namespace SaturdayGame.Chess
             foreach (var side in new[] { ctx.Player, ctx.Opponent })
                 foreach (var rook in ctx.Visible(side, PieceType.Rook))
                     ctx.SetSkin(rook, SkinFor(rook, ctx.Player));
-            ctx.Say(Speakers.Friend, "Rooks got jobs. Hydrants spray enemies away, frogs eat them.");
-            ctx.Say(Speakers.You, "Don't stand too close to either. Got it.");
+            ctx.Say(Speakers.You, "Fine. If you get to change the rules, so do I!");
+            ctx.Say(Speakers.You, "Hydrants and frogs. Don't stand too close to either. Got it?");
             yield break;
         }
 
@@ -252,7 +252,6 @@ namespace SaturdayGame.Chess
 
             ctx.Say(Speakers.Friend, "Bishops are boring. Let them be whatever they want.");
             ctx.Say(Speakers.You, "...Is that one a bird?");
-            ctx.Say(Speakers.Friend, "It's still a bishop. It just wants to be a bird.");
             yield break;
         }
     }
