@@ -35,6 +35,9 @@ namespace SaturdayGame.Chess
 
         public bool IsWet => WetTurns > 0;
 
+        /// <summary>青蛙用舌头吃了几个（吃满 FrogTongue.FullAfter 个就撑倒，躺下时清零）。</summary>
+        public int FrogMeals;
+
         /// <summary>在棋盘上。</summary>
         public bool IsVisible => OnBoard;
 

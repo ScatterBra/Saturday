@@ -8,8 +8,8 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 车变成消防栓和青蛙：玩家 a 列的车（按开局位置算）变消防栓、h 列的变青蛙，朋友的反过来（a 列青蛙、h 列消防栓）。
     /// 消防栓每次落地，把紧挨着它的一枚对方棋子（王也算）喷开，最多两格（HydrantSpray）。
-    /// 青蛙每次落地，用舌头把直线上最近的一枚敌方棋子（王也算）拉近一格（FrogTongue）。
-    /// 走法都和车一样。第三阶段也生效，推、拉到岩浆格上的棋子会烧掉（王也一样）；城堡里的棋子推不动、拉不动。
+    /// 青蛙每次落地（这一步本身没吃子时），用舌头吃掉直线上最近的一枚敌方棋子（王除外），吃满 3 个就撑倒躺几回合（FrogTongue）。
+    /// 走法都和车一样。第三阶段也生效，推到岩浆格上的棋子会烧掉（王也一样）；城堡里的棋子推不动、吃不到。
     /// 同样近的目标有好几个时随机挑一个；玩家走的那一步会用预览里显示的那个（RuleContext.PreferredTargetId）。
     /// Id 沿用 fire_hydrant，场景里的回合表不用改。
     /// </summary>
@@ -23,8 +23,8 @@ namespace SaturdayGame.Chess
         public override string Description =>
             "Your a-rook is a fire hydrant and your h-rook is a frog. Your friend's are the other way round. " +
             "A hydrant that lands sprays the closest enemy next to it up to 2 squares away. " +
-            "A frog that lands pulls the closest enemy in a straight line, up to 3 squares away, one step closer.";
-        public override string RuleBookText => "Hydrants spray enemies away. Frogs pull enemies closer. Hover over one to see how.";
+            "A frog that lands eats the closest enemy in a straight line, up to 3 squares away (not the king). After 3 it's stuffed and lies down for a while.";
+        public override string RuleBookText => "Hydrants spray enemies away. Frogs eat them, until they're stuffed. Hover over one to see how.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 0;
 
@@ -43,14 +43,15 @@ namespace SaturdayGame.Chess
             foreach (var side in new[] { ctx.Player, ctx.Opponent })
                 foreach (var rook in ctx.Visible(side, PieceType.Rook))
                     ctx.SetSkin(rook, SkinFor(rook, ctx.Player));
-            ctx.Say(Speakers.Friend, "Rooks got jobs. Hydrants spray enemies away, frogs pull them closer.");
+            ctx.Say(Speakers.Friend, "Rooks got jobs. Hydrants spray enemies away, frogs eat them.");
             ctx.Say(Speakers.You, "Don't stand too close to either. Got it.");
             yield break;
         }
 
         /// <summary>
-        /// 这枚棋子（站在现在的位置）落地时可以喷或拉的目标：最近的那一组，可能有好几个同样近的。
-        /// 不是消防栓、青蛙时为空。表现层用它在玩家走之前预览结果。
+        /// 这枚棋子（站在现在的位置）落地时可以喷或吃的目标：最近的那一组，可能有好几个同样近的。
+        /// 不是消防栓、青蛙时为空。表现层用它在玩家走之前预览结果（青蛙这一步本身吃了子时，表现层自己不显示）。
+        /// 青蛙的结果：Piece = 要吃的棋子，To = 青蛙自己的位置（预览的箭头从猎物指向青蛙）。
         /// </summary>
         public static List<HydrantSpray.Result> EffectCandidates(Board board, Piece mover)
         {
@@ -62,23 +63,45 @@ namespace SaturdayGame.Chess
 
         public override void OnPieceMoved(RuleContext ctx, Piece mover, Coord from)
         {
+            // 青蛙这一步本身吃了子，就不再用舌头
+            if (mover.Skin == Frog && ctx.MoveCaptured) return;
             var options = EffectCandidates(ctx.Board, mover);
             if (options.Count == 0) return;
             var pick = options[ctx.Rng.Next(options.Count)];
             foreach (var option in options)
                 if (option.Piece.Id == ctx.PreferredTargetId) pick = option;
-            ctx.Push(pick.Piece, pick.To, mover);
+            if (mover.Skin == Frog) FrogTongue.Eat(ctx, mover, pick.Piece);
+            else ctx.Push(pick.Piece, pick.To, mover);
         }
     }
 
     /// <summary>
-    /// 青蛙的舌头：沿八个方向看出去，每个方向上碰到的第一枚棋子如果是敌方的、离青蛙 2–MaxReach 格，就能把它往青蛙这边拉一格。
-    /// 最近的优先；同样近的有好几枚时随机挑一枚。紧挨着的拉不动，而且会挡住这个方向。
-    /// 拉过去的那一格是岩浆就掉进去烧掉。城堡里的棋子拉不动。
+    /// 青蛙的舌头（2026-11-19 改，原来是把敌人拉近一格）：沿八个方向看出去，每个方向上碰到的第一枚棋子如果是敌方的、
+    /// 离青蛙 MaxReach 格以内，就能用舌头把它吃掉（算被吃，进被吃区）。王吃不了，城堡里的吃不到。
+    /// 最近的优先；同样近时优先斜向的；还一样就随机挑一枚。青蛙这一步本身吃了子就不用舌头（见 FireHydrantRule.OnPieceMoved）。
+    /// 舌头吃满 FullAfter 个就撑倒：躺 NapTurns 回合不能动（冻结外观 Stuffed），起来后重新计数。
     /// </summary>
     public static class FrogTongue
     {
         public const int MaxReach = 3;
+        /// <summary>舌头吃满几个就撑倒。</summary>
+        public const int FullAfter = 3;
+        /// <summary>撑倒后躺几个（自己一方的）回合。</summary>
+        public const int NapTurns = 3;
+        /// <summary>撑倒时的冻结外观。</summary>
+        public const string Stuffed = "stuffed";
+
+        /// <summary>舌头吃掉 victim；吃满了就撑倒。</summary>
+        public static void Eat(RuleContext ctx, Piece frog, Piece victim)
+        {
+            ctx.Kill(victim, "eaten", frog);
+            frog.FrogMeals++;
+            if (frog.FrogMeals < FullAfter) return;
+            frog.FrogMeals = 0;
+            ctx.Freeze(frog, NapTurns, Stuffed);
+            if (frog.Side == ctx.Player) ctx.Say(Speakers.Friend, "Your frog ate too much. It's lying down now.");
+            else ctx.Say(Speakers.You, "Your frog's stuffed. Ha.");
+        }
 
         static readonly Coord[] Directions =
         {
@@ -92,22 +115,22 @@ namespace SaturdayGame.Chess
             return options.Count > 0 ? options[rng.Next(options.Count)] : (HydrantSpray.Result?)null;
         }
 
-        /// <summary>最近的那一组目标。</summary>
+        /// <summary>舌头能吃的最近那一组目标（同样近时只留斜向的）。To = 青蛙自己的位置。</summary>
         public static List<HydrantSpray.Result> Candidates(Board board, Piece frog)
         {
-            for (int distance = 2; distance <= MaxReach; distance++)
+            for (int distance = 1; distance <= MaxReach; distance++)
             {
-                var options = new List<HydrantSpray.Result>();
+                var straight = new List<HydrantSpray.Result>();
+                var diagonal = new List<HydrantSpray.Result>();
                 foreach (var dir in Directions)
                 {
                     var target = FirstPiece(board, frog.Pos, dir, out int at);
-                    if (target == null || at != distance || target.Side == frog.Side || board.InCastle(target)) continue;
-                    var to = target.Pos - dir;
-                    if (board.IsCastle(to)) continue;
-                    bool burns = board.IsLava(to);
-                    options.Add(new HydrantSpray.Result { Piece = target, To = to, Burns = burns });
+                    if (target == null || at != distance || target.Side == frog.Side || target.Type == PieceType.King || board.InCastle(target)) continue;
+                    var option = new HydrantSpray.Result { Piece = target, To = frog.Pos, Burns = false };
+                    (dir.X != 0 && dir.Y != 0 ? diagonal : straight).Add(option);
                 }
-                if (options.Count > 0) return options;
+                if (diagonal.Count > 0) return diagonal;
+                if (straight.Count > 0) return straight;
             }
             return new List<HydrantSpray.Result>();
         }

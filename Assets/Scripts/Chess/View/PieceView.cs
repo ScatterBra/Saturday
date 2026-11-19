@@ -57,6 +57,8 @@ namespace SaturdayGame.Chess.View
             Refresh(piece);
         }
 
+        bool lyingDown;
+
         /// <param name="stage3">棋盘已经是第三阶段：配了第三阶段模型的棋子换成 3D 模型。</param>
         public void Refresh(Piece piece, bool stage3 = false)
         {
@@ -100,16 +102,25 @@ namespace SaturdayGame.Chess.View
             if (sprite != null && useSprite) sprite.color *= wet;
 
             // 冰冻不用头顶的小方块，用插着的冰枪 + 地上的回合数表示
-            frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen && !ice);
-            iceTurns.gameObject.SetActive(ice);
-            if (ice) iceTurns.text = piece.FrozenTurns.ToString();
+            // 吃撑躺倒的青蛙也一样：不要小方块，地上写还要躺几回合
+            bool stuffed = piece.IsFrozen && piece.FrozenSkin == FrogTongue.Stuffed;
+            frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen && !ice && !stuffed);
+            iceTurns.gameObject.SetActive(ice || stuffed);
+            if (ice || stuffed) iceTurns.text = piece.FrozenTurns.ToString();
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
+
+            // 吃撑的青蛙躺倒在棋盘上；起来时扶正（只在状态变了时改，免得打断别的动画里的转动）
+            if (stuffed != lyingDown)
+            {
+                lyingDown = stuffed;
+                Root.transform.localRotation = stuffed ? Quaternion.Euler(0f, 0f, 80f) : Quaternion.identity;
+            }
 
             letter.text = PieceValues.Letter(piece.Type);
             letter.color = white ? WhiteInk : BlackInk;
 
             string text = skin ?? "";
-            if (piece.IsFrozen && !ice)
+            if (piece.IsFrozen && !ice && !stuffed)
             {
                 // 冻结外观有图时只显示剩余回合数
                 string frozen = resolved.ShowsFrozen ? piece.FrozenTurns.ToString() : $"{piece.FrozenSkin} {piece.FrozenTurns}";

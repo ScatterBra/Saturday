@@ -47,8 +47,8 @@ namespace SaturdayGame.Chess.View
                     break;
                 case FireHydrantRule.Frog:
                     info.Title = "Frog";
-                    info.Body = $"{moves} Every time it lands, it pulls the closest enemy in a straight line (2-{FrogTongue.MaxReach} squares away) one step closer.";
-                    if (stage3) info.Body += " Pull one into lava and it's gone.";
+                    info.Body = $"{moves} Every time it lands without taking anything, its tongue eats the closest enemy in a straight line, up to {FrogTongue.MaxReach} squares away (diagonals first, never the king). After {FrogTongue.FullAfter} it's stuffed and lies down for {FrogTongue.NapTurns} turns.";
+                    if (!piece.IsFrozen && piece.FrogMeals > 0) info.Status = $"Ate {piece.FrogMeals}/{FrogTongue.FullAfter}.";
                     break;
                 case "bishbird":
                     info.Title = SkinName(piece.Skin);
@@ -121,6 +121,9 @@ namespace SaturdayGame.Chess.View
                         break;
                     case IceLanceRule.Ice:
                         info.Status = Join(info.Status, $"Frozen solid. Can't move for {turns}.");
+                        break;
+                    case FrogTongue.Stuffed:
+                        info.Status = Join(info.Status, $"Stuffed. Lying down for {turns}.");
                         break;
                     default:
                         info.Status = Join(info.Status, $"Can't move for {turns}.");

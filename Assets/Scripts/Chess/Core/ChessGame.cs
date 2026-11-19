@@ -282,7 +282,7 @@ namespace SaturdayGame.Chess
         bool IsMovePhase => Phase == GamePhase.PlayerTurn || Phase == GamePhase.OpponentTurn;
 
         /// <param name="effectTargetId">
-        /// 走的是消防栓或青蛙时，落地后喷谁、拉谁（玩家在预览里看到的那枚棋子的 Id）；
+        /// 走的是消防栓或青蛙时，落地后喷谁、吃谁（玩家在预览里看到的那枚棋子的 Id）；
         /// 为 null 或者已经不是可选目标时，在同样近的目标里随机挑。
         /// </param>
         public MoveResult PlayMove(Move move, int? effectTargetId = null)
@@ -313,8 +313,10 @@ namespace SaturdayGame.Chess
             }
 
             ctx.PreferredTargetId = effectTargetId;
+            ctx.MoveCaptured = result.Captured != null;
             foreach (var rule in activeRules) rule.OnPieceMoved(ctx, mover, move.From);
             ctx.PreferredTargetId = null;
+            ctx.MoveCaptured = false;
 
             bool storm = false;
             string stormLine = null;

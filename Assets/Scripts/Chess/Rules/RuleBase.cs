@@ -128,6 +128,9 @@ namespace SaturdayGame.Chess
         /// </summary>
         public int? PreferredTargetId;
 
+        /// <summary>刚走的这一步本身吃了子（OnPieceMoved 时有效）。青蛙这一步吃了子就不再用舌头。</summary>
+        public bool MoveCaptured;
+
         /// <summary>
         /// 技能真的放出去了（没有在点选时跳过）。第三阶段的常驻技能放出去就结束这一回合、开始冷却；
         /// 手里的卡放出去才算用掉。由 ChessGame 在每次放技能前清零。

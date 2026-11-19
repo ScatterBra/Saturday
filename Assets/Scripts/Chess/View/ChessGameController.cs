@@ -700,7 +700,10 @@ namespace SaturdayGame.Chess.View
                 var move = selectedMoves.First(m => m.To == hovered.Value);
                 var next = game.Board.Clone();
                 var result = next.Apply(move);
-                var options = result.CastleTaken ? new List<HydrantSpray.Result>() : FireHydrantRule.EffectCandidates(next, next.GetPiece(move.PieceId));
+                var mover = next.GetPiece(move.PieceId);
+                // 青蛙这一步本身就吃了子：不用舌头，没有预览
+                bool frogAte = result.Captured != null && mover.Skin == FireHydrantRule.Frog;
+                var options = result.CastleTaken || frogAte ? new List<HydrantSpray.Result>() : FireHydrantRule.EffectCandidates(next, mover);
                 if (options.Count > 0) preview = options[Random.Range(0, options.Count)];
             }
             // 箭头颜色：消防栓喷水是蓝的，青蛙舌头是绿的（会掉进岩浆时 BoardView 画成红的）
@@ -916,6 +919,14 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.Captured:
+                        // 青蛙的舌头：猎物被拖到青蛙脚下再消失
+                        if (e.Text == "eaten" && e.SourcePieceId >= 0)
+                        {
+                            PlaySound(s => s.frog);
+                            yield return board.AnimatePush(e.PieceId, game.Board.GetPiece(e.SourcePieceId).Pos, effectDuration);
+                            yield return board.AnimateCapture(e.PieceId, false, effectDuration * 0.6f);
+                            break;
+                        }
                         // 雷暴劈到的已经跟着爆炸一起消失了
                         if (thunderVanished.Remove(e.PieceId)) break;
                         bool burned = e.Text == "burned" || e.Text == "lava";

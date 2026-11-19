@@ -55,34 +55,62 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void Frog_PullsTheClosestEnemyInALineOneStepCloser()
+        public void Frog_EatsTheClosestEnemyInALine()
         {
             var board = Setup("Rd4", "pd7", "nf6");
             var events = new List<GameEvent>();
             Tongue(board, "d4", 1, events);
-            var knight = board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Knight);
-            Assert.AreEqual(C("e5"), knight.Pos, "the diagonal knight two squares away is closer than the pawn three squares up");
-            Assert.AreEqual(C("d7"), board.AllPieces.First(p => p.OnBoard && p.Type == PieceType.Pawn).Pos);
-            var pull = events.Single(e => e.Type == GameEventType.Pushed);
-            Assert.AreEqual(C("f6"), pull.From);
-            Assert.AreEqual(C("e5"), pull.To);
+            Assert.IsNull(board.PieceAt(C("f6")), "the diagonal knight two squares away is closer than the pawn three squares up");
+            Assert.IsNotNull(board.PieceAt(C("d7")));
+            var eaten = events.Single(e => e.Type == GameEventType.Captured);
+            Assert.AreEqual("eaten", eaten.Text);
+            Assert.AreEqual(1, board.PieceAt(C("d4")).FrogMeals);
         }
 
         [Test]
-        public void Frog_IgnoresFriendsAdjacentPiecesAndBlockedLines()
+        public void Frog_OnATie_EatsTheDiagonalOne_NeverTheKing_AndNotWhenTheMoveAlreadyTookSomething()
         {
-            // 自己的棋子不拉；紧挨着的敌人拉不动，也挡住后面
-            var board = Setup("Rd4", "Pd6", "pe4", "pg4", "pa4");
+            var board = Setup("Rd4", "pd5", "pe5");
             Tongue(board, "d4");
-            Assert.AreEqual(C("d6"), board.PieceAt(C("d6"))?.Pos, "own pawn stays");
-            Assert.IsNotNull(board.PieceAt(C("g4")), "the pawn behind the adjacent one is blocked");
-            Assert.IsNull(board.PieceAt(C("a4")), "the open line on the left gets pulled");
-            Assert.IsNotNull(board.PieceAt(C("b4")));
+            Assert.IsNotNull(board.PieceAt(C("d5")), "straight neighbour is left");
+            Assert.IsNull(board.PieceAt(C("e5")), "the diagonal neighbour is eaten first");
 
-            // 超过 3 格够不着
+            board = Setup("Rd4", "kd5", "pd7");
+            Tongue(board, "d4");
+            Assert.IsNotNull(board.King(Side.Black), "kings can't be eaten");
+            Assert.IsNotNull(board.PieceAt(C("d7")), "the king blocks that line");
+
+            // 自己的棋子不吃、挡住后面；超过 3 格够不着
+            board = Setup("Rd4", "Pd6", "pd7", "pa4");
+            Tongue(board, "d4");
+            Assert.IsNotNull(board.PieceAt(C("d7")));
+            Assert.IsNull(board.PieceAt(C("a4")));
             board = Setup("Rd1", "pd5");
             Tongue(board, "d1");
             Assert.IsNotNull(board.PieceAt(C("d5")));
+
+            // 这一步本身吃了子：不用舌头
+            board = Setup("Rd4", "pd6");
+            var rook = board.PieceAt(C("d4"));
+            rook.Skin = "frog";
+            var ctx = Context(board, 1);
+            ctx.MoveCaptured = true;
+            new FireHydrantRule().OnPieceMoved(ctx, rook, rook.Pos);
+            Assert.IsNotNull(board.PieceAt(C("d6")));
+        }
+
+        [Test]
+        public void Frog_AfterThreeMeals_IsStuffed_LiesDown_ThenStartsCountingAgain()
+        {
+            var board = Setup("Rd4", "pd6", "pb4", "pf2", "pg7");
+            var frog = board.PieceAt(C("d4"));
+            for (int i = 0; i < 3; i++) Tongue(board, "d4", i);
+            Assert.AreEqual(1, board.PiecesOf(Side.Black).Count(p => p.Type == PieceType.Pawn), "three of the four pawns are eaten");
+            Assert.IsNotNull(board.PieceAt(C("g7")), "g7 is the farthest, so it is left");
+            Assert.IsTrue(frog.IsFrozen);
+            Assert.AreEqual(FrogTongue.Stuffed, frog.FrozenSkin);
+            Assert.AreEqual(FrogTongue.NapTurns, frog.FrozenTurns);
+            Assert.AreEqual(0, frog.FrogMeals);
         }
 
         [Test]
@@ -90,7 +118,7 @@ namespace SaturdayGame.Chess.Tests
         {
             var board = Setup("Rd4", "Pd5");
             Tongue(board, "d4");
-            Assert.IsNotNull(board.PieceAt(C("d5")), "a frog never sprays its neighbour");
+            Assert.IsNotNull(board.PieceAt(C("d5")), "a frog never sprays (or eats) its own neighbour");
 
             board = Setup("Rd4", "pd6");
             Spray(board, "d4");
