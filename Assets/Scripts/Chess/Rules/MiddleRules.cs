@@ -16,9 +16,12 @@ namespace SaturdayGame.Chess
         public override int Stage => 1;
 
         public override bool IsAvailable(RuleContext ctx) => ctx.Visible(ctx.Opponent, PieceType.Pawn).Count > 0;
+        public override string UnavailableReason => "Your friend has no pawns left to turn into trees.";
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {
+            // 算作用掉了：第三阶段的卡没标 Acted 会被当成“选目标时取消”，又弹回这组卡
+            ctx.Acted = true;
             foreach (var pawn in ctx.Visible(ctx.Opponent, PieceType.Pawn))
                 ctx.Freeze(pawn, FreezeTurns, "tree");
             ctx.Say(Speakers.Friend, "Hey! My pawns are trees!");
@@ -46,6 +49,7 @@ namespace SaturdayGame.Chess
         public override int Stage => 1;
 
         public override bool IsAvailable(RuleContext ctx) => Dragons(ctx).Count > 0;
+        public override string UnavailableReason => $"None of your knights has an enemy pawn, knight or bishop within {Reach} squares.";
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {
@@ -125,6 +129,7 @@ namespace SaturdayGame.Chess
         public override int Stage => 1;
 
         public override bool IsAvailable(RuleContext ctx) => Candidates(ctx).Count > 0;
+        public override string UnavailableReason => "You haven't lost anything you could bring back.";
 
         public override IEnumerable<TargetRequest> Activate(RuleContext ctx)
         {

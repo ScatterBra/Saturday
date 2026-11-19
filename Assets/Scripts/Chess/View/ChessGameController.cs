@@ -181,6 +181,7 @@ namespace SaturdayGame.Chess.View
             board = new BoardView(transform, factory, desk);
             hud = ChessHud.Create(transform, boardCamera, pieceArt, desk, titleFont, bodyFont);
             hud.RuleCardClicked += ChooseRule;
+            hud.DisabledCardClicked += ShowCardUnavailable;
             hud.SkipClicked += Skip;
             hud.LostPieceClicked += id => ResolvePiece(id);
             hud.SkillClicked += UseSkill;
@@ -288,6 +289,7 @@ namespace SaturdayGame.Chess.View
         public void NewGame()
         {
             StopAllCoroutines();
+            thunderVanished.Clear();
             stage1MusicFade = null;
             StopStage1Music(false);
             if (stage3Cutscene != null)
@@ -526,6 +528,24 @@ namespace SaturdayGame.Chess.View
             hud.ShowSkip(false);
             game.ChooseRule(index);
             StartCoroutine(PlayEvents(game.DrainEvents()));
+        }
+
+        Coroutine cardHint;
+
+        /// <summary>点了灰掉的卡：字幕里说一下为什么现在用不了，过几秒自己收起。</summary>
+        void ShowCardUnavailable(RuleBase rule)
+        {
+            if (busy || game.Phase != GamePhase.ChoosingRule) return;
+            if (cardHint != null) StopCoroutine(cardHint);
+            cardHint = StartCoroutine(CardHint(rule.UnavailableReason));
+        }
+
+        IEnumerator CardHint(string text)
+        {
+            hud.ShowCaption(null, text);
+            yield return new WaitForSeconds(2.5f);
+            if (!busy) hud.HideCaption();
+            cardHint = null;
         }
 
         /// <summary>Skip 按钮：跳过可选的技能卡，或跳过可选的点选。</summary>
@@ -789,6 +809,9 @@ namespace SaturdayGame.Chess.View
             if (sounds != null) sounds.Play(pick(sounds));
         }
 
+        /// <summary>雷暴劈到、已经跟着爆炸一起演完消失的棋子（它们的 Captured 事件跳过）。</summary>
+        readonly HashSet<int> thunderVanished = new HashSet<int>();
+
         IEnumerator PlayEvents(List<GameEvent> events)
         {
             busy = true;
@@ -852,6 +875,17 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.Thunder:
                         PlaySound(s => s.thunder.clips.Length > 0 ? s.thunder : s.burn);
                         yield return board.AnimateThunder(e.Squares, effectDuration * 2.5f);
+                        // 闪完电：范围正中间炸一下，被劈到的棋子同时消失（后面的 Captured 事件就不再一个一个演）
+                        board.PlayThunderBlast(e.Squares);
+                        int after = events.IndexOf(e) + 1;
+                        for (int k = after; k < events.Count; k++)
+                        {
+                            var hit = events[k];
+                            if (hit.Type != GameEventType.Captured || hit.Text != "thunder") continue;
+                            thunderVanished.Add(hit.PieceId);
+                            StartCoroutine(board.AnimateCapture(hit.PieceId, false, effectDuration));
+                        }
+                        if (thunderVanished.Count > 0) yield return new WaitForSeconds(effectDuration);
                         break;
                     case GameEventType.Soaked:
                         PlaySound(s => s.rain.clips.Length > 0 ? s.rain : s.hydrant);
@@ -879,6 +913,8 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(dialogueDuration);
                         break;
                     case GameEventType.Captured:
+                        // 雷暴劈到的已经跟着爆炸一起消失了
+                        if (thunderVanished.Remove(e.PieceId)) break;
                         bool burned = e.Text == "burned" || e.Text == "lava";
                         if (burned) PlaySound(s => s.burn);
                         yield return board.AnimateCapture(e.PieceId, burned, effectDuration);
@@ -988,7 +1024,7 @@ namespace SaturdayGame.Chess.View
                     case GameEventType.RulesOffered:
                         yield return ReturnToFront();
                         hud.SetSkipLabel("Skip");
-                        hud.ShowOffers(e.Rules, e.OfferKind);
+                        hud.ShowOffers(e.Rules, e.OfferKind, game.DisabledOffers);
                         // 从上到下一张一张飞进来，每张一声
                         yield return hud.FlyInCards(cardFlyDuration, () => PlaySound(s => s.paperPopup));
                         // 第三阶段的卡不给跳过，挑一张用
@@ -1015,12 +1051,16 @@ namespace SaturdayGame.Chess.View
                 }
                 // 树被吃掉、掉进岩浆：和出现时一样播种树的音效
                 if (board.ConsumeTreeVanished()) PlaySound(s => s.tree);
+                // 冰冻到期、冰枪碎掉也一样：几根一起碎只播一次
+                if (board.ConsumeIceShattered()) PlaySound(s => s.iceShatter);
             }
             // 对白播完就收起字幕，不挡住棋盘
             hud.HideCaption();
             board.SyncAll();
             // 树变回兵（冻结到期）在这里刷出来；好几棵同时变回也只播一次
             if (board.ConsumeTreeVanished()) PlaySound(s => s.tree);
+            // 冰冻到期、冰枪碎掉也一样：几根一起碎只播一次
+            if (board.ConsumeIceShattered()) PlaySound(s => s.iceShatter);
             bool pickingPiece = game.Phase == GamePhase.ChoosingTarget && game.PendingTarget.IsPieceRequest;
             hud.SetLostPieces(game.Board.CapturedOf(game.PlayerSide), pickingPiece ? game.PendingTarget.PieceOptions.ToList() : null);
             board.SetWarnings(game.FriendTelegraph);

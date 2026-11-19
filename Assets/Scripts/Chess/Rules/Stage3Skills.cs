@@ -107,8 +107,9 @@ namespace SaturdayGame.Chess
     }
 
     /// <summary>
-    /// 雷暴大招：从棋盘上空的雷云劈下来，选一个 4 × 4 的范围，范围里朋友的棋子全部消灭，不伤自己人，打不进城堡。
-    /// 积累条满了才能放，一局一次（ChessGame 管积累条）。
+    /// 雷暴大招：从棋盘上空的雷云劈下来，选一个 4 × 4 的范围，范围里的棋子全部消灭，自己人也一样（2026-11-19 改）；
+    /// 只有躲在城堡里的国王、王后打不到。积累条满了才能放，放完清零重新攒（ChessGame 管积累条）。
+    /// 选范围时的预览没跟着改，还是原来的样子。
     /// </summary>
     public sealed class ThunderSkill : RuleBase
     {
@@ -116,7 +117,7 @@ namespace SaturdayGame.Chess
 
         public override string Id => "thunder";
         public override string Title => "Thunderstorm";
-        public override string Description => $"Lightning hits a {Size}x{Size} area. Every enemy guard in it is gone. Your pieces are safe. Charge it by taking enemy pieces. Takes your turn.";
+        public override string Description => $"Lightning hits a {Size}x{Size} area. Every piece in it is gone, yours too. Only the king and queen in the castle are safe. Charge it by taking enemy pieces. Takes your turn.";
         public override RuleKind Kind => RuleKind.Debuff;
         public override int Stage => 2;
 
@@ -143,7 +144,7 @@ namespace SaturdayGame.Chess
             foreach (var c in area)
             {
                 var piece = ctx.Board.PieceAt(c);
-                if (piece != null && piece.Side == ctx.Opponent && !ctx.Board.InCastle(piece)) ctx.Kill(piece, "thunder");
+                if (piece != null && !ctx.Board.InCastle(piece)) ctx.Kill(piece, "thunder");
             }
             ctx.Say(Speakers.Friend, "Okay. OKAY. That one was scary.");
         }
@@ -195,6 +196,8 @@ namespace SaturdayGame.Chess
         public override string Description => "Everything on high ground slides one square downhill, yours too. Slide into lava and it's gone.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 2;
+
+        public override string UnavailableReason => "Nothing on high ground can slide downhill.";
 
         public override bool IsAvailable(RuleContext ctx)
         {

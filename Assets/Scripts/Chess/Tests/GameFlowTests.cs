@@ -122,6 +122,9 @@ namespace SaturdayGame.Chess.Tests
                     {
                         Assert.LessOrEqual(auto.Game.Offers.Count, 3);
                         Assert.IsTrue(auto.Game.Offers.All(r => r.Stage == 1));
+                        // 用不了的卡不进 Offers，灰着一起显示：两边加起来就是整个卡池
+                        Assert.AreEqual(RuleCatalog.CreatePool(1).Count, auto.Game.Offers.Count + auto.Game.DisabledOffers.Count);
+                        Assert.IsTrue(auto.Game.DisabledOffers.All(r => !string.IsNullOrEmpty(r.UnavailableReason)));
                         Assert.AreEqual(10, auto.Game.Board.FullMove);
                         Assert.AreEqual(Side.White, auto.Game.Board.SideToMove);
                         seen++;

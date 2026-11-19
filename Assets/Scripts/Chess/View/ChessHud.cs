@@ -33,6 +33,8 @@ namespace SaturdayGame.Chess.View
         static readonly Color DeskInk = new Color(0.96f, 0.91f, 0.82f);
 
         public event Action<int> RuleCardClicked;
+        /// <summary>点了一张灰掉（现在用不了）的规则卡。</summary>
+        public event Action<RuleBase> DisabledCardClicked;
         public event Action SkipClicked;
         public event Action PlayAgainClicked;
         public event Action BackClicked;
@@ -254,7 +256,8 @@ namespace SaturdayGame.Chess.View
 
         public void SetNewHint(string text) => newHintText.text = text;
 
-        public void ShowOffers(IReadOnlyList<RuleBase> rules, OfferKind kind = OfferKind.StageCard)
+        /// <summary>弹出规则卡。disabled = 现在用不了的卡，排在后面、灰着显示，点了触发 DisabledCardClicked。</summary>
+        public void ShowOffers(IReadOnlyList<RuleBase> rules, OfferKind kind = OfferKind.StageCard, IReadOnlyList<RuleBase> disabled = null)
         {
             HideOffers();
             switch (kind)
@@ -269,6 +272,13 @@ namespace SaturdayGame.Chess.View
                 int index = i;
                 var look = looks.Count > 0 ? looks[i % looks.Count] : null;
                 cards.Add(Card(rules[i], look, () => RuleCardClicked?.Invoke(index)));
+            }
+            if (disabled == null) return;
+            for (int i = 0; i < disabled.Count; i++)
+            {
+                var rule = disabled[i];
+                var look = looks.Count > 0 ? looks[(rules.Count + i) % looks.Count] : null;
+                cards.Add(Card(rule, look, () => DisabledCardClicked?.Invoke(rule), usable: false));
             }
         }
 
@@ -604,7 +614,7 @@ namespace SaturdayGame.Chess.View
         /// <summary>
         /// 一张规则卡。外层（返回值）只在竖排布局里占位置；里面的 "Paper" 才是看得见的卡片，飞进来的动画挪的是它。
         /// </summary>
-        GameObject Card(RuleBase rule, Sprite cardSprite, Action onClick)
+        GameObject Card(RuleBase rule, Sprite cardSprite, Action onClick, bool usable = true)
         {
             var slot = new GameObject($"Card {rule.Id}", typeof(RectTransform), typeof(LayoutElement));
             slot.transform.SetParent(cardsRoot, false);
@@ -627,7 +637,7 @@ namespace SaturdayGame.Chess.View
             title.resizeTextForBestFit = true;
             title.resizeTextMinSize = 16;
             title.resizeTextMaxSize = 28;
-            Label(rt, "Description", rule.Description, 21, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(pad, -86), new Vector2(-(pad + 18), 140));
+            var description = Label(rt, "Description", rule.Description, 21, FontStyle.Normal, TextAnchor.UpperLeft, new Vector2(pad, -86), new Vector2(-(pad + 18), 140));
             if (cardSprite != null)
             {
                 image.sprite = cardSprite;
@@ -635,6 +645,13 @@ namespace SaturdayGame.Chess.View
                 kind.color = Color.Lerp(KindColor(rule.Kind), Color.black, 0.55f);
             }
             else image.color = KindColor(rule.Kind);
+            if (!usable)
+            {
+                // 用不了的卡：纸变灰、字变淡，还能点（点了说明为什么用不了）
+                image.color = Color.Lerp(image.color, new Color(0.45f, 0.45f, 0.45f), 0.6f);
+                foreach (var text in new[] { kind, title, description })
+                    text.color = new Color(text.color.r, text.color.g, text.color.b, 0.45f);
+            }
             return slot;
         }
 

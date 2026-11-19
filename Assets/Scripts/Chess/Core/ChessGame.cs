@@ -110,6 +110,8 @@ namespace SaturdayGame.Chess
         readonly RuleContext ctx;
         readonly RuleContext friendCtx;
         List<RuleBase> offers;
+        /// <summary>这组卡里现在用不了的（界面上灰着显示，点了说明原因，不能选）。</summary>
+        List<RuleBase> disabledOffers = new List<RuleBase>();
         OfferKind offerKind;
         IEnumerator<TargetRequest> activation;
         int nextStage;
@@ -125,6 +127,7 @@ namespace SaturdayGame.Chess
         /// <summary>正在用的卡和它所在的那组卡：选目标时取消就回到这组卡重新挑。</summary>
         RuleBase usingCard;
         List<RuleBase> usingCardOffers;
+        List<RuleBase> usingCardDisabled;
         /// <summary>正在放的常驻技能（放出去就结束这一回合）。</summary>
         Stage3Skill? usingSkill;
         int initialGuards;
@@ -165,6 +168,8 @@ namespace SaturdayGame.Chess
         public IReadOnlyList<RuleBase> ActiveRules => activeRules;
         /// <summary>ChoosingRule 阶段可选的规则卡。</summary>
         public IReadOnlyList<RuleBase> Offers => offers;
+        /// <summary>和 Offers 一起弹出、但现在用不了的卡（只用来灰着显示，ChooseRule 的下标不包括它们）。</summary>
+        public IReadOnlyList<RuleBase> DisabledOffers => disabledOffers;
         /// <summary>当前这组规则卡是在什么情况下弹出的。</summary>
         public OfferKind CurrentOfferKind => offerKind;
         /// <summary>当前这组规则卡可以跳过（游戏逻辑上都可以；第三阶段的卡界面上不给跳过按钮）。</summary>
@@ -336,13 +341,16 @@ namespace SaturdayGame.Chess
             {
                 // 第三阶段的卡点了就马上用，不占回合；选目标时取消就回到这组卡
                 usingCardOffers = offers;
+                usingCardDisabled = disabledOffers;
                 usingCard = rule;
                 offers = null;
+                disabledOffers = new List<RuleBase>();
                 events.Add(GameEvent.RuleActivated(rule));
                 StartActivation(rule);
                 return;
             }
             offers = null;
+            disabledOffers = new List<RuleBase>();
             activeRules.Add(rule);
             events.Add(GameEvent.RuleActivated(rule));
             StartActivation(rule);
@@ -353,6 +361,7 @@ namespace SaturdayGame.Chess
         {
             if (!CanSkipOffers) throw new InvalidOperationException("These rule cards cannot be skipped");
             offers = null;
+            disabledOffers = new List<RuleBase>();
             BeginTurn();
         }
 
@@ -476,12 +485,15 @@ namespace SaturdayGame.Chess
             if (usingCard != null)
             {
                 var cardOffers = usingCardOffers;
+                var cardDisabled = usingCardDisabled;
                 usingCard = null;
                 usingCardOffers = null;
+                usingCardDisabled = null;
                 if (!acted && cardOffers != null)
                 {
                     // 选目标时取消了：卡没用掉，回到这组卡重新挑（或者不挑，存进雷暴）
                     offers = cardOffers;
+                    disabledOffers = cardDisabled ?? new List<RuleBase>();
                     offerKind = OfferKind.Stage3;
                     events.Add(GameEvent.RulesOffered(2, OfferKind.Stage3, offers));
                     Phase = GamePhase.ChoosingRule;
@@ -682,11 +694,10 @@ namespace SaturdayGame.Chess
             return any;
         }
 
-        /// <summary>第三阶段的卡牌池里随机抽 Stage3CardChoices 张（能用的）。</summary>
+        /// <summary>第三阶段的卡牌池里随机抽 Stage3CardChoices 张（用不了的也抽，灰着显示）。</summary>
         List<RuleBase> Stage3Cards()
         {
             var pool = RuleCatalog.CreateStage3CardPool();
-            pool.RemoveAll(r => !r.IsAvailable(ctx));
             for (int i = pool.Count - 1; i > 0; i--)
             {
                 int j = Rng.Next(i + 1);
@@ -697,12 +708,17 @@ namespace SaturdayGame.Chess
             return pool;
         }
 
-        /// <summary>弹出一组规则卡。没有一张能用时返回 false。</summary>
+        /// <summary>
+        /// 弹出一组规则卡：能用的放进 Offers；用不了的放进 DisabledOffers（灰着显示，点了说明原因）。
+        /// 没有一张能用时返回 false，这组卡不弹。
+        /// </summary>
         bool Offer(OfferKind kind, int stage, List<RuleBase> pool, string line)
         {
-            pool.RemoveAll(r => !r.IsAvailable(ctx));
+            var disabled = pool.FindAll(r => !r.IsAvailable(ctx));
+            pool.RemoveAll(r => disabled.Contains(r));
             if (pool.Count == 0) return false;
             offers = pool;
+            disabledOffers = disabled;
             offerKind = kind;
             events.Add(GameEvent.Dialogue(Speakers.Friend, line));
             events.Add(GameEvent.RulesOffered(stage, kind, offers));
@@ -820,6 +836,7 @@ namespace SaturdayGame.Chess
             gateAnnounced = false;
             usingCard = null;
             usingCardOffers = null;
+            usingCardDisabled = null;
             beamReadyTurn = dragonReadyTurn = 0;
             events.Add(GameEvent.StageStarted(2));
             events.Add(GameEvent.BoardRebuilt());

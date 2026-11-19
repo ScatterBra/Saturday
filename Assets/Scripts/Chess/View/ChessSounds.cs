@@ -51,6 +51,8 @@ namespace SaturdayGame.Chess.View
         public Sfx thunder = new Sfx();
         [Tooltip("第三阶段：王后的冰枪飞出去（每根各播一次）")]
         public Sfx iceLance = new Sfx { pitchJitter = 0.08f };
+        [Tooltip("第三阶段：冰冻到期，插在棋子上的冰枪碎掉（同时碎好几根也只播一次）")]
+        public Sfx iceShatter = new Sfx { pitchJitter = 0.08f };
         [Tooltip("第三阶段：城门打开")]
         public Sfx gate = new Sfx();
 

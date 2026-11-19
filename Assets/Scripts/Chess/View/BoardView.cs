@@ -106,7 +106,8 @@ namespace SaturdayGame.Chess.View
         readonly float hydrantSprayFps, hydrantSprayHeight, hydrantSprayOffset;
         readonly GameObject treeEffect;
         readonly float treeEffectScale;
-        readonly GameObject explosionEffect, rainEffect, thunderEffect;
+        readonly GameObject explosionEffect, rainEffect, thunderEffect, thunderBlastEffect;
+        readonly float thunderBlastScale = 0.5f;
         readonly float explosionEffectScale = 0.5f, rainEffectScale = 1f, rainDuration = 2.5f, thunderEffectScale = 0.5f;
         readonly Color beamColor = new Color(2.5f, 2.2f, 0.9f);
         readonly GameObject beamEffect;
@@ -139,6 +140,17 @@ namespace SaturdayGame.Chess.View
             bool vanished = treeVanished;
             treeVanished = false;
             return vanished;
+        }
+
+        /// <summary>上次 ConsumeIceShattered 之后有冰枪碎掉过。</summary>
+        bool iceShattered;
+
+        /// <summary>自上次调用以来有没有冰枪碎掉（冰冻到期），读完清零。好几根同时碎也只播一遍音效。</summary>
+        public bool ConsumeIceShattered()
+        {
+            bool shattered = iceShattered;
+            iceShattered = false;
+            return shattered;
         }
 
         public BoardView(Transform parent, ChessViewFactory factory, ChessDesk desk = null)
@@ -186,6 +198,8 @@ namespace SaturdayGame.Chess.View
                 rainDuration = desk.rainDuration;
                 thunderEffect = desk.thunderEffect;
                 thunderEffectScale = desk.thunderEffectScale;
+                thunderBlastEffect = desk.thunderBlastEffect;
+                thunderBlastScale = desk.thunderBlastScale;
                 beamColor = desk.beamColor;
                 beamEffect = desk.beamEffect;
                 beamEffectScale = desk.beamEffectScale;
@@ -449,6 +463,7 @@ namespace SaturdayGame.Chess.View
             iceLances.Clear();
             DestroyCake();
             treeVanished = false;
+            iceShattered = false;
             board = newBoard;
             // 新的一局总是从平地开始显示。调试跳关时逻辑在开局就已经进了第三阶段，
             // 但后面一定跟着风暴事件，由过场（或沙尘风暴那条路的 FinishStage3Reveal）再把第三阶段演出来
@@ -1103,7 +1118,11 @@ namespace SaturdayGame.Chess.View
                 iceLances.Remove(piece.Id);
                 if (lance != null)
                 {
-                    if (piece.OnBoard && !quietTrees) PlayIceBurst(root.InverseTransformPoint(lance.transform.position));
+                    if (piece.OnBoard && !quietTrees)
+                    {
+                        PlayIceBurst(root.InverseTransformPoint(lance.transform.position));
+                        iceShattered = true;
+                    }
                     ViewUtil.Destroy(lance);
                 }
             }
@@ -1496,6 +1515,18 @@ namespace SaturdayGame.Chess.View
                 yield return null;
             }
             foreach (var flash in flashes) ViewUtil.Destroy(flash);
+        }
+
+        /// <summary>雷暴闪完电：在范围的正中间（4 × 4 就是中间四格的交点）播一次爆炸特效。</summary>
+        public void PlayThunderBlast(IReadOnlyList<Coord> area)
+        {
+            if (thunderBlastEffect == null || area == null || area.Count == 0) return;
+            var center = Vector3.zero;
+            foreach (var c in area) center += PiecePosition(c);
+            center /= area.Count;
+            var fx = ParticleFx.Spawn(thunderBlastEffect, root, center + Vector3.up * 0.3f, thunderBlastScale, Random.Range(0f, 360f));
+            fx.name = "Thunder Blast";
+            ParticleFx.PlayOnce(fx);
         }
 
         public IEnumerator AnimateMove(int id, Coord from, Coord to, float duration)

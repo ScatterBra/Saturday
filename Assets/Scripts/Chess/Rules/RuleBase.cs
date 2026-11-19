@@ -43,6 +43,9 @@ namespace SaturdayGame.Chess
         /// <summary>当前局面下能不能出现在抽卡里（例如马都被吃光了，龙就不出现）。</summary>
         public virtual bool IsAvailable(RuleContext ctx) => true;
 
+        /// <summary>用不了时（IsAvailable 为 false），玩家点这张灰掉的卡弹出的提示。</summary>
+        public virtual string UnavailableReason => "You can't use this one right now.";
+
         /// <summary>
         /// 规则生效。需要玩家点选目标时 yield 一个 TargetRequest，等玩家选完（Result 被填好）再继续。
         /// </summary>

@@ -376,7 +376,7 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void Thunder_HitsA4x4Area_OnlyEnemies_NeverTheCastle()
+        public void Thunder_HitsA4x4Area_YoursToo_NeverTheCastle()
         {
             CollectionAssert.AreEquivalent(
                 new[] { "a1", "b1", "c1", "d1", "a2", "b2", "c2", "d2", "a3", "b3", "c3", "d3", "a4", "b4", "c4", "d4" }.Select(C),
@@ -391,7 +391,7 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsTrue(ctx.Acted);
             Assert.IsNull(board.PieceAt(C("a6")));
             Assert.IsNull(board.PieceAt(C("c6")));
-            Assert.IsNotNull(board.PieceAt(C("b5")), "your own pieces are safe");
+            Assert.IsNull(board.PieceAt(C("b5")), "your own pieces get hit too");
             Assert.IsNotNull(board.PieceAt(C("a7")), "the castle is safe");
             Assert.IsNotNull(board.PieceAt(C("g2")), "outside the area");
         }
@@ -498,6 +498,26 @@ namespace SaturdayGame.Chess.Tests
             game.ChooseRule(rain);
             Assert.AreEqual(GamePhase.PlayerTurn, game.Phase, "a card doesn't use your turn");
             Assert.IsTrue(game.Board.PiecesOf(Side.White).All(p => p.IsWet));
+        }
+
+        [Test]
+        public void EveryStage3Card_IsUsedUp_AndDoesNotComeBackAsTheSameOffer()
+        {
+            var seen = new HashSet<string>();
+            for (int seed = 1; seed < 40; seed++)
+            {
+                for (int i = 0; ; i++)
+                {
+                    var game = Stage3Game(seed);
+                    if (i >= game.Offers.Count) break;
+                    var id = game.Offers[i].Id;
+                    game.ChooseRule(i);
+                    while (game.Phase == GamePhase.ChoosingTarget) game.ResolveTarget(game.PendingTarget.Options[0]);
+                    Assert.AreNotEqual(GamePhase.ChoosingRule, game.Phase, $"{id} was picked but the cards came back");
+                    seen.Add(id);
+                }
+            }
+            CollectionAssert.IsSubsetOf(new[] { "rain", "tree_pawns" }, seen);
         }
 
         [Test]

@@ -108,6 +108,10 @@ namespace SaturdayGame.Chess.View
         public GameObject thunderEffect;
         [Tooltip("雷暴特效的整体缩放")]
         public float thunderEffectScale = 0.5f;
+        [Tooltip("雷暴大招：闪完电后在范围正中间播一次的爆炸特效（例如 ParticlePack 的 EnergyExplosion），范围里的棋子同时消失。留空就不播")]
+        public GameObject thunderBlastEffect;
+        [Tooltip("雷暴爆炸特效的整体缩放")]
+        public float thunderBlastScale = 0.5f;
         [Tooltip("象的光束：沿斜线一路裂开的特效（例如 ParticlePack 的 EarthShatter），留空就用一根发光的细条")]
         public GameObject beamEffect;
         [Tooltip("光束特效的整体缩放")]
