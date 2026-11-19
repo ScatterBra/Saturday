@@ -41,6 +41,8 @@ namespace SaturdayGame.Chess.View
         public float speechDuration = 3f;
         [Tooltip("一个气泡冒出来后，等多久再演下一件事（下一句气泡、棋子后退……）")]
         public float speechGap = 1.5f;
+        [Tooltip("有配音的气泡：语音播完后再隔多久演下一件事（下一句语音、棋子后退……）")]
+        public float voiceGap = 0.3f;
         [Header("Cake")]
         [Tooltip("这个回合棋盘中间掉下一块会跑的蛋糕，双方抢，没抢到的一方全体后退一格（0 = 关掉，回到固定的选卡、风暴回合）")]
         public int cakeTurn = 10;
@@ -881,9 +883,14 @@ namespace SaturdayGame.Chess.View
                         yield return new WaitForSeconds(0.03f);
                         break;
                     case GameEventType.PieceSpoke:
-                        // 棋子自己说话：头顶冒个气泡，过一会儿自己消失，不用点
-                        StartCoroutine(SpeechBubble(e.PieceId, e.Text, speechDuration));
-                        yield return new WaitForSeconds(speechGap);
+                        {
+                            // 棋子自己说话：头顶冒个气泡，过一会儿自己消失，不用点。
+                            // 有配音的：等这句播完（再隔 voiceGap）才演下一件事，几句语音一句接一句、不会叠在一起
+                            float voiceLength = sounds != null && e.Voice != null ? sounds.Play(sounds.Voice(e.Voice)) : 0f;
+                            float hold = voiceLength > 0f ? Mathf.Max(speechDuration, voiceLength + 0.5f) : speechDuration;
+                            StartCoroutine(SpeechBubble(e.PieceId, e.Text, hold));
+                            yield return new WaitForSeconds(voiceLength > 0f ? voiceLength + voiceGap : speechGap);
+                        }
                         break;
                     case GameEventType.Pushed:
                         // 推子的是消防栓就是喷水，是青蛙就是舌头

@@ -1389,6 +1389,9 @@ MonoBehaviour:
   stage1MusicVolume: 0.6
   stage1MusicStartAt: 0
   stage1MusicFadeOut: 1.5
+  speechDuration: 3
+  speechGap: 1.5
+  voiceGap: 0.3
   cakeTurn: 10
   cakeMaxRounds: 8
   cardDelayAfterCake: 5
@@ -1546,6 +1549,21 @@ MonoBehaviour:
     pitchJitter: 0.08
   gate:
     clips: []
+    volume: 1
+    pitchJitter: 0
+  voiceCakeFriendQueen:
+    clips:
+    - {fileID: 8300000, guid: 8204a64daf872754aa19fd5afd795260, type: 3}
+    volume: 1
+    pitchJitter: 0
+  voiceCakeYourQueen:
+    clips:
+    - {fileID: 8300000, guid: c8b246869b761a54082cdc42db6ab7e0, type: 3}
+    volume: 1
+    pitchJitter: 0
+  voiceCakeKing:
+    clips:
+    - {fileID: 8300000, guid: 344faf947f54cb44a9ba574bc30a94b7, type: 3}
     volume: 1
     pitchJitter: 0
 --- !u!114 &1185032825

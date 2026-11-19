@@ -56,9 +56,30 @@ namespace SaturdayGame.Chess.View
         [Tooltip("第三阶段：城门打开")]
         public Sfx gate = new Sfx();
 
-        public void Play(Sfx sfx)
+        [Header("Voices")]
+        [Tooltip("蛋糕落下：朋友的王后 \"Hey! I want that cake!\"")]
+        public Sfx voiceCakeFriendQueen = new Sfx();
+        [Tooltip("蛋糕落下：你的王后 \"I want it too! Go grab it for me!\"")]
+        public Sfx voiceCakeYourQueen = new Sfx();
+        [Tooltip("没抢到蛋糕：国王 \"You useless commander! ...\"（谁没抢到都用这条）")]
+        public Sfx voiceCakeKing = new Sfx();
+
+        /// <summary>按 Voices 里的 ID 找语音，没配的为 null。</summary>
+        public Sfx Voice(string id)
         {
-            if (sfx == null || sfx.clips == null || sfx.clips.Length == 0) return;
+            switch (id)
+            {
+                case Voices.CakeFriendQueen: return voiceCakeFriendQueen;
+                case Voices.CakeYourQueen: return voiceCakeYourQueen;
+                case Voices.CakeKing: return voiceCakeKing;
+                default: return null;
+            }
+        }
+
+        /// <summary>播一个音效，返回这次播的音频有多长（秒，按音高换算）；没播返回 0。</summary>
+        public float Play(Sfx sfx)
+        {
+            if (sfx == null || sfx.clips == null || sfx.clips.Length == 0) return 0f;
             if (sfx.source == null)
             {
                 sfx.source = gameObject.AddComponent<AudioSource>();
@@ -69,10 +90,11 @@ namespace SaturdayGame.Chess.View
             if (sfx.clips.Length > 1 && index == sfx.last) index = (index + 1 + UnityEngine.Random.Range(0, sfx.clips.Length - 1)) % sfx.clips.Length;
             sfx.last = index;
             var clip = sfx.clips[index];
-            if (clip == null) return;
+            if (clip == null) return 0f;
             // PlayOneShot 的音高跟着 AudioSource 走，所以每次播之前设一下
             sfx.source.pitch = 1f + UnityEngine.Random.Range(-sfx.pitchJitter, sfx.pitchJitter);
             sfx.source.PlayOneShot(clip, sfx.volume * masterVolume);
+            return clip.length / sfx.source.pitch;
         }
     }
 }

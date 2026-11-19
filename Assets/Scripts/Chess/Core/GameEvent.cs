@@ -93,6 +93,8 @@ namespace SaturdayGame.Chess
         public OfferKind OfferKind;
         public string Speaker;
         public string Text;
+        /// <summary>PieceSpoke：配的语音（Voices 里的常量），没有配音为 null。</summary>
+        public string Voice;
         public RuleBase Rule;
         public IReadOnlyList<RuleBase> Rules;
         public IReadOnlyList<Coord> Squares;
@@ -145,8 +147,8 @@ namespace SaturdayGame.Chess
         public static GameEvent Dialogue(string speaker, string text) =>
             new GameEvent { Type = GameEventType.Dialogue, Speaker = speaker, Text = text };
 
-        public static GameEvent PieceSpoke(Piece piece, string text) =>
-            new GameEvent { Type = GameEventType.PieceSpoke, PieceId = piece.Id, Side = piece.Side, To = piece.Pos, Text = text };
+        public static GameEvent PieceSpoke(Piece piece, string text, string voice = null) =>
+            new GameEvent { Type = GameEventType.PieceSpoke, PieceId = piece.Id, Side = piece.Side, To = piece.Pos, Text = text, Voice = voice };
 
         public static GameEvent GameOver(Side? winner, string text) =>
             new GameEvent { Type = GameEventType.GameOver, Winner = winner, Text = text };
@@ -207,5 +209,16 @@ namespace SaturdayGame.Chess
             new GameEvent { Type = GameEventType.OpponentSkill, Rule = rule, Stage = rule.Stage };
 
         public override string ToString() => $"{Type} piece={PieceId} {From}->{To} {Text}";
+    }
+
+    /// <summary>棋子说话（PieceSpoke）配的语音。表现层 ChessSounds 按这些 ID 找音频。</summary>
+    public static class Voices
+    {
+        /// <summary>蛋糕落下：朋友的王后 "Hey! I want that cake!"</summary>
+        public const string CakeFriendQueen = "cake_friend_queen";
+        /// <summary>蛋糕落下：你的王后 "I want it too! Go grab it for me!"</summary>
+        public const string CakeYourQueen = "cake_your_queen";
+        /// <summary>没抢到蛋糕：国王 "You useless commander! ..."</summary>
+        public const string CakeKing = "cake_king";
     }
 }

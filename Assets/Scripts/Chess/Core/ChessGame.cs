@@ -789,8 +789,8 @@ namespace SaturdayGame.Chess
             // 两个王后自己喊话（气泡冒在棋子头顶，不进对白框）：朋友的先喊，你的接着喊
             var theirQueen = FirstOf(OpponentSide, PieceType.Queen);
             var ourQueen = FirstOf(PlayerSide, PieceType.Queen);
-            if (theirQueen != null) events.Add(GameEvent.PieceSpoke(theirQueen, "Hey! I want that cake!"));
-            if (ourQueen != null) events.Add(GameEvent.PieceSpoke(ourQueen, "I want it too! Go grab it for me!"));
+            if (theirQueen != null) events.Add(GameEvent.PieceSpoke(theirQueen, "Hey! I want that cake!", Voices.CakeFriendQueen));
+            if (ourQueen != null) events.Add(GameEvent.PieceSpoke(ourQueen, "I want it too! Go grab it for me!", Voices.CakeYourQueen));
         }
 
         Piece FirstOf(Side side, PieceType type)
@@ -817,7 +817,7 @@ namespace SaturdayGame.Chess
             }
             // 没抢到的一方：国王自己发火，把军队撤回来（气泡在国王头顶）
             var loserKing = Board.King(loser);
-            if (loserKing != null) events.Add(GameEvent.PieceSpoke(loserKing, "You useless commander! I'm pulling all my troops back!"));
+            if (loserKing != null) events.Add(GameEvent.PieceSpoke(loserKing, "You useless commander! I'm pulling all my troops back!", Voices.CakeKing));
             foreach (var (piece, from) in CakeEscape.StepBack(Board, loser))
                 events.Add(GameEvent.SteppedBack(piece, from, piece.Pos));
         }
