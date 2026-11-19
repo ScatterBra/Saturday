@@ -65,8 +65,8 @@ namespace SaturdayGame.Chess
         public int LavaSquares = 5;
         /// <summary>第三阶段开始时弹一次卡牌，之后每隔这么多回合再弹一次。</summary>
         public int Stage3SkillEvery = 5;
-        /// <summary>第三阶段每次弹几张卡牌给玩家挑。</summary>
-        public int Stage3CardChoices = 2;
+        /// <summary>第三阶段每次弹几张卡牌给玩家挑（卡池现在只有 3 张，就是全给）。</summary>
+        public int Stage3CardChoices = 3;
         /// <summary>
         /// 第三阶段开始后的第几回合王后放技能（例如 2 = 风暴后第 2 回合），前一回合先预告目标格子。
         /// 列表放完后每隔 FriendSkillEvery 回合再放一次（0 = 不再放）；列表为空就从来不放。

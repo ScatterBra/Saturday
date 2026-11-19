@@ -37,7 +37,8 @@ namespace SaturdayGame.Chess
 
         /// <summary>第三阶段的卡牌（不能复活）。每次随机抽两张给玩家挑。</summary>
         public static List<RuleBase> CreateStage3CardPool() =>
-            new List<RuleBase> { new RainRule(), new TreePawnsRule(), new LandslideRule(), new SelfDestructRule() };
+            // Last Stand（自爆，SelfDestructRule）暂时拿掉：和下雨的爆炸机制重复
+            new List<RuleBase> { new RainRule(), new TreePawnsRule(), new LandslideRule() };
 
         public static RuleBase Create(string id)
         {

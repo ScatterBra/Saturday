@@ -473,8 +473,9 @@ namespace SaturdayGame.Chess.Tests
             var game = Stage3Game(2);
             Assert.AreEqual(GamePhase.ChoosingRule, game.Phase);
             Assert.AreEqual(OfferKind.Stage3, game.CurrentOfferKind);
-            Assert.AreEqual(2, game.Offers.Count);
+            Assert.That(game.Offers.Count, Is.InRange(1, 3), "all usable cards from the pool of three");
             Assert.IsTrue(game.Offers.All(r => r.Id != "crayon_revival"), "no reviving in stage 3");
+            Assert.IsTrue(game.Offers.All(r => r.Id != "self_destruct"), "Last Stand is out for now");
             var card = game.Offers[0];
             game.ChooseRule(0);
             Assert.AreEqual(card.Id, game.DrainEvents().First(e => e.Type == GameEventType.RuleActivated).Rule.Id, "the card is used right away");
@@ -485,7 +486,7 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void UsingACard_DoesNotTakeYourTurn_CancellingGoesBackToTheCards()
+        public void UsingACard_DoesNotTakeYourTurn()
         {
             var game = Stage3Game(4);
             int rain = game.Offers.ToList().FindIndex(r => r.Id == "rain");
@@ -497,21 +498,6 @@ namespace SaturdayGame.Chess.Tests
             game.ChooseRule(rain);
             Assert.AreEqual(GamePhase.PlayerTurn, game.Phase, "a card doesn't use your turn");
             Assert.IsTrue(game.Board.PiecesOf(Side.White).All(p => p.IsWet));
-
-            // 要选目标的卡（自爆）：选目标时取消，回到这组卡
-            for (int seed = 1; ; seed++)
-            {
-                game = Stage3Game(seed);
-                int boom = game.Offers.ToList().FindIndex(r => r.Id == "self_destruct");
-                if (boom < 0) continue;
-                var offered = game.Offers.Select(r => r.Id).ToList();
-                game.ChooseRule(boom);
-                Assert.AreEqual(GamePhase.ChoosingTarget, game.Phase);
-                game.ResolveTarget(null);
-                Assert.AreEqual(GamePhase.ChoosingRule, game.Phase, "cancelled: back to the same cards");
-                CollectionAssert.AreEqual(offered, game.Offers.Select(r => r.Id).ToList());
-                break;
-            }
         }
 
         [Test]
