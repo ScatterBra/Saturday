@@ -23,7 +23,7 @@ namespace SaturdayGame.Chess.View
         readonly TextMesh letter;
         readonly TextMesh caption;
         /// <summary>被冰枪冻住时，平躺在棋子前面（靠玩家一侧）格子上的白色剩余回合数。</summary>
-        readonly TextMesh iceTurns;
+        readonly TextMesh frozenTurns;
         static readonly Color IceTint = new Color(0.45f, 0.7f, 1f);
         readonly SpriteRenderer sprite;
         readonly FaceCamera spriteFacing;
@@ -43,10 +43,10 @@ namespace SaturdayGame.Chess.View
 
             letter = factory.Label(Root.transform, new Vector3(0, 0.32f, 0), 0.06f, "");
             caption = factory.Label(Root.transform, new Vector3(0, 0.3f, -0.46f), 0.036f, "", title: true);
-            iceTurns = factory.Label(Root.transform, new Vector3(0f, 0.03f, -0.34f), 0.05f, "", title: true, faceCamera: false);
-            iceTurns.color = Color.white;
-            iceTurns.gameObject.name = "Ice Turns";
-            iceTurns.gameObject.SetActive(false);
+            frozenTurns = factory.Label(Root.transform, new Vector3(0f, 0.03f, -0.34f), 0.05f, "", title: true, faceCamera: false);
+            frozenTurns.color = Color.white;
+            frozenTurns.gameObject.name = "Frozen Turns";
+            frozenTurns.gameObject.SetActive(false);
             // 调整棋子在棋盘上的高度
             if (factory.Art != null)
             {
@@ -101,12 +101,13 @@ namespace SaturdayGame.Chess.View
                 sprite.color = resolved.Tint * Color.Lerp(Color.white, SkinColor(skin), 0.6f);
             if (sprite != null && useSprite) sprite.color *= wet;
 
-            // 冰冻不用头顶的小方块，用插着的冰枪 + 地上的回合数表示
-            // 吃撑躺倒的青蛙：不要小方块，也不写回合数，倒着就够了
+            // 冻住的棋子（树、冰枪、鸟屎……）剩几回合统一写在棋子前面的地上，平贴棋盘，不悬空。
+            // 冰冻不用头顶的小方块，用插着的冰枪表示；吃撑躺倒的青蛙：不要小方块，也不写回合数，倒着就够了
             bool stuffed = piece.IsFrozen && piece.FrozenSkin == FrogTongue.Stuffed;
+            bool showTurns = piece.IsFrozen && !stuffed;
             frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen && !ice && !stuffed);
-            iceTurns.gameObject.SetActive(ice);
-            if (ice) iceTurns.text = piece.FrozenTurns.ToString();
+            frozenTurns.gameObject.SetActive(showTurns);
+            if (showTurns) frozenTurns.text = piece.FrozenTurns.ToString();
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
 
             // 吃撑的青蛙平躺在自己那一格上；起来时扶正（只在状态变了、或模型换了时改）
@@ -121,12 +122,9 @@ namespace SaturdayGame.Chess.View
             letter.color = white ? WhiteInk : BlackInk;
 
             string text = skin ?? "";
-            if (piece.IsFrozen && !ice && !stuffed)
-            {
-                // 冻结外观有图时只显示剩余回合数
-                string frozen = resolved.ShowsFrozen ? piece.FrozenTurns.ToString() : $"{piece.FrozenSkin} {piece.FrozenTurns}";
-                text = frozen + (text.Length > 0 ? "\n" + text : "");
-            }
+            // 冻结外观还没有图时，头顶写外观名（回合数在地上）
+            if (piece.IsFrozen && !ice && !stuffed && !resolved.ShowsFrozen)
+                text = piece.FrozenSkin + (text.Length > 0 ? "\n" + text : "");
             if (piece.IsWet && !useSprite && !useModel) text = $"wet {piece.WetTurns}" + (text.Length > 0 ? "\n" + text : "");
             caption.text = text;
             caption.color = new Color(0.1f, 0.06f, 0.04f);
