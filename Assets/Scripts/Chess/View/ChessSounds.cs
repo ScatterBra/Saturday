@@ -55,6 +55,10 @@ namespace SaturdayGame.Chess.View
         public Sfx iceShatter = new Sfx { pitchJitter = 0.08f };
         [Tooltip("第三阶段：城门打开")]
         public Sfx gate = new Sfx();
+        [Tooltip("规则书拿起来（点规则书，或第三阶段开始时自己举起来）")]
+        public Sfx takeBook = new Sfx();
+        [Tooltip("青蛙吃完一个、撑倒躺下时")]
+        public Sfx frogFull = new Sfx();
 
         [Header("Voices")]
         [Tooltip("蛋糕落下：朋友的王后 \"Hey! I want that cake!\"")]

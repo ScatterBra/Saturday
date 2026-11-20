@@ -55,13 +55,13 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void Frog_EatsTheClosestEnemyInALine()
+        public void Frog_EatsAnEnemyRightNextToIt_NotFurtherAway()
         {
-            var board = Setup("Rd4", "pd7", "nf6");
+            var board = Setup("Rd4", "pd6", "ne5");
             var events = new List<GameEvent>();
             Tongue(board, "d4", 1, events);
-            Assert.IsNull(board.PieceAt(C("f6")), "the diagonal knight two squares away is closer than the pawn three squares up");
-            Assert.IsNotNull(board.PieceAt(C("d7")));
+            Assert.IsNull(board.PieceAt(C("e5")), "the neighbour is eaten");
+            Assert.IsNotNull(board.PieceAt(C("d6")), "two squares away is out of reach");
             var eaten = events.Single(e => e.Type == GameEventType.Captured);
             Assert.AreEqual("eaten", eaten.Text);
             Assert.AreEqual(1, events.Count(e => e.Type == GameEventType.Dialogue), "the first frog to lie down gets one line");
@@ -75,19 +75,15 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsNotNull(board.PieceAt(C("d5")), "straight neighbour is left");
             Assert.IsNull(board.PieceAt(C("e5")), "the diagonal neighbour is eaten first");
 
-            board = Setup("Rd4", "kd5", "pd7");
+            board = Setup("Rd4", "kd5");
             Tongue(board, "d4");
             Assert.IsNotNull(board.King(Side.Black), "kings can't be eaten");
-            Assert.IsNotNull(board.PieceAt(C("d7")), "the king blocks that line");
 
-            // 自己的棋子不吃、挡住后面；超过 3 格够不着
-            board = Setup("Rd4", "Pd6", "pd7", "pa4");
-            Tongue(board, "d4");
-            Assert.IsNotNull(board.PieceAt(C("d7")));
-            Assert.IsNull(board.PieceAt(C("a4")));
-            board = Setup("Rd1", "pd5");
+            // 隔一格的够不着
+            board = Setup("Rd1", "pd3", "pf3");
             Tongue(board, "d1");
-            Assert.IsNotNull(board.PieceAt(C("d5")));
+            Assert.IsNotNull(board.PieceAt(C("d3")));
+            Assert.IsNotNull(board.PieceAt(C("f3")));
 
             // 这一步本身吃了子：不用舌头
             board = Setup("Rd4", "pd6");
@@ -102,12 +98,12 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void Frog_AfterOneMeal_IsStuffed_AndSkipsItsNextTurn()
         {
-            var board = Setup("Rd4", "pd6", "Ka1", "kh8");
+            var board = Setup("Rd4", "pd5", "Ka1", "kh8");
             var frog = board.PieceAt(C("d4"));
             // 真实流程里舌头是在回合交给对方之后才吃的：先模拟白方走完（轮到黑方）
             board.Pass();
             Tongue(board, "d4");
-            Assert.IsNull(board.PieceAt(C("d6")));
+            Assert.IsNull(board.PieceAt(C("d5")));
             Assert.IsTrue(frog.IsFrozen);
             Assert.AreEqual(FrogTongue.Stuffed, frog.FrozenSkin);
             board.Pass(); // 黑方这一回合：还躺着
@@ -119,7 +115,7 @@ namespace SaturdayGame.Chess.Tests
         [Test]
         public void Frog_OnlyTheFirstNapGetsALine()
         {
-            var board = Setup("Rd4", "pd6", "pb4", "Ka1", "kh8");
+            var board = Setup("Rd4", "pd5", "pe5", "Ka1", "kh8");
             var frog = board.PieceAt(C("d4"));
             frog.Skin = FireHydrantRule.Frog;
             var rule = new FireHydrantRule();

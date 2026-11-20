@@ -206,14 +206,22 @@ namespace SaturdayGame.Chess.View
             }
             if (canInteract && clicked && overBook)
             {
-                focused = true;
+                PickUp();
                 return true;
             }
             return false;
         }
 
         /// <summary>不用点，直接举到镜头前（第三阶段开始时强制看一下规则）。放回去照常：点本子外面或按 Esc。</summary>
-        public void PickUp() => focused = true;
+        public void PickUp()
+        {
+            if (focused) return;
+            focused = true;
+            PickedUp?.Invoke();
+        }
+
+        /// <summary>规则书被拿起来的那一刻（播音效用）。</summary>
+        public event System.Action PickedUp;
 
         /// <summary>马上放回桌上（重开一局时用）。</summary>
         public void PutBack()

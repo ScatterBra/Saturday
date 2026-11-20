@@ -47,7 +47,7 @@ namespace SaturdayGame.Chess.View
                     break;
                 case FireHydrantRule.Frog:
                     info.Title = "Frog";
-                    info.Body = $"{moves} Every time it lands without taking anything, its tongue eats the closest enemy.";
+                    info.Body = $"{moves} Every time it lands without taking anything, its tongue eats an enemy right next to it.";
                     break;
                 case "bishbird":
                     info.Title = SkinName(piece.Skin);

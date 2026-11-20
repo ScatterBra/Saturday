@@ -197,6 +197,7 @@ namespace SaturdayGame.Chess.View
             hud.PlayAgainClicked += NewGame;
             hud.BackClicked += () => MinigameSession.Finish(game.Winner == game.PlayerSide ? "won" : game.Winner == null ? "draw" : "lost");
             if (desk != null) ruleBookFocus = RuleBookFocus.Attach(desk.ruleBook, boardCamera, desk.ruleBookOutline);
+            if (ruleBookFocus != null) ruleBookFocus.PickedUp += () => PlaySound(s => s.takeBook);
             NewGame();
         }
 
@@ -1001,6 +1002,8 @@ namespace SaturdayGame.Chess.View
                             break;
                         }
                         if (e.Frozen && e.Text == "tree") PlaySound(s => s.tree);
+                        // 青蛙吃完撑倒
+                        else if (e.Frozen && e.Text == FrogTongue.Stuffed) PlaySound(s => s.frogFull);
                         else if (e.Reverted)
                         {
                             // 变回原样（喷完火的龙变回马）：和树一样冒粉尘、播树的音效

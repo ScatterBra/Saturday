@@ -8,7 +8,7 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 车变成消防栓和青蛙：玩家 a 列的车（按开局位置算）变消防栓、h 列的变青蛙，朋友的反过来（a 列青蛙、h 列消防栓）。
     /// 消防栓每次落地，把紧挨着它的一枚对方棋子（王也算）喷开，最多两格（HydrantSpray）。
-    /// 青蛙每次落地（这一步本身没吃子时），用舌头吃掉直线上最近的一枚敌方棋子（王除外），吃一个就撑倒，躺一回合（FrogTongue）。
+    /// 青蛙每次落地（这一步本身没吃子时），用舌头吃掉紧挨着它的一枚敌方棋子（周围 8 格，王除外），吃一个就撑倒，躺一回合（FrogTongue）。
     /// 走法都和车一样。第三阶段也生效，推到岩浆格上的棋子会烧掉（王也一样）；城堡里的棋子推不动、吃不到。
     /// 同样近的目标有好几个时随机挑一个；玩家走的那一步会用预览里显示的那个（RuleContext.PreferredTargetId）。
     /// Id 沿用 fire_hydrant，场景里的回合表不用改。
@@ -23,7 +23,7 @@ namespace SaturdayGame.Chess
         public override string Description =>
             "Your a-rook is a fire hydrant and your h-rook is a frog. Your friend's are the other way round. " +
             "A hydrant that lands sprays the closest enemy next to it up to 2 squares away. " +
-            "A frog that lands eats the closest enemy in a straight line, up to 3 squares away (not the king).";
+            "A frog that lands eats an enemy right next to it (not the king).";
         public override string RuleBookText => "Hydrants spray enemies away. Frogs eat them.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 0;
@@ -96,7 +96,8 @@ namespace SaturdayGame.Chess
     /// </summary>
     public static class FrogTongue
     {
-        public const int MaxReach = 3;
+        /// <summary>舌头够得着几格：1 = 只吃紧挨着的（周围 8 格）。</summary>
+        public const int MaxReach = 1;
         /// <summary>
         /// 吃一个就撑倒，躺几个（自己一方的）回合。舌头是在走完、回合已经交给对方之后才吃的，
         /// 所以 1 = 对方这一回合 + 自己下一回合都躺着，自己那回合结束时起来（正好停走一轮）。

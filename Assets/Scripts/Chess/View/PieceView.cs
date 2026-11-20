@@ -109,12 +109,13 @@ namespace SaturdayGame.Chess.View
             if (ice) iceTurns.text = piece.FrozenTurns.ToString();
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
 
-            // 吃撑的青蛙躺倒在棋盘上；起来时扶正（只在状态变了时改，免得打断别的动画里的转动）
-            if (stuffed != lyingDown)
+            // 吃撑的青蛙平躺在自己那一格上；起来时扶正（只在状态变了、或模型换了时改）
+            if (stuffed != lyingDown || (stuffed && model != tiltedModel))
             {
                 lyingDown = stuffed;
-                Root.transform.localRotation = stuffed ? Quaternion.Euler(0f, 0f, 80f) : Quaternion.identity;
+                LieDown(stuffed);
             }
+            if (spriteFacing != null && stuffed) spriteFacing.alwaysFlat = true;
 
             letter.text = PieceValues.Letter(piece.Type);
             letter.color = white ? WhiteInk : BlackInk;
@@ -142,11 +143,50 @@ namespace SaturdayGame.Chess.View
             if (model != null) ViewUtil.Destroy(model);
             modelSource = source;
             float yaw = resolved.Standee ? factory.CameraYaw + factory.Art.stage3ModelYaw : piece.Id * 137f;
+            modelYaw = yaw;
+            // 立牌朝着生成时的相机：记下“朝相机的方向”，倒下时让这一面朝上
+            modelFacesCameraYaw = factory.CameraYaw;
             // 例如树：每棵生成时随机歪一点，不会整整齐齐朝着同一个方向（模型换掉前保持这个角度）
             if (resolved.RandomYaw > 0f) yaw += Random.Range(-resolved.RandomYaw, resolved.RandomYaw);
             model = source != null
                 ? factory.Model(source, Root.transform, factory.Art.modelHeight * resolved.ModelScale, factory.Art.modelWidth * resolved.ModelScale, yaw)
                 : null;
+        }
+
+        float modelYaw, modelFacesCameraYaw;
+        /// <summary>青蛙躺倒后在棋盘上歪多少度。</summary>
+        const float LieTwist = 18f;
+        /// <summary>现在是平躺状态的那个模型（模型换了要重新放倒）。</summary>
+        GameObject tiltedModel;
+
+        /// <summary>
+        /// 把模型放倒 / 扶起：朝着相机的那一面翻到朝上（像往后倒），再挪到格子正中、贴着棋盘。
+        /// 只动模型外面那层 holder，不动 Root（Root 的位置归移动动画管）。没有模型（贴图）时贴图本来就能平躺。
+        /// </summary>
+        void LieDown(bool down)
+        {
+            Root.transform.localRotation = Quaternion.identity;
+            tiltedModel = null;
+            if (model == null) return;
+            var holder = model.transform;
+            var standing = Quaternion.Euler(0f, modelYaw, 0f);
+            holder.localRotation = standing;
+            holder.localPosition = Vector3.zero;
+            if (!down) return;
+
+            var towardCamera = Quaternion.Euler(0f, modelFacesCameraYaw, 0f) * Vector3.back;
+            // 平躺后再绕竖直方向歪一点，看起来是随手倒下的，不是摆正的
+            holder.localRotation = Quaternion.AngleAxis(LieTwist, Vector3.up) * Quaternion.FromToRotation(towardCamera, Vector3.up) * standing;
+            var renderers = model.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                var bounds = renderers[0].bounds;
+                foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+                var center = Root.transform.InverseTransformPoint(bounds.center);
+                var bottom = Root.transform.InverseTransformPoint(bounds.min);
+                holder.localPosition = new Vector3(-center.x, -bottom.y + 0.01f, -center.z);
+            }
+            tiltedModel = model;
         }
 
         /// <summary>做成半透明的预览（复活前看看它会出现在哪）。贴图变半透明；3D 模型的材质不透明，保持原样。</summary>

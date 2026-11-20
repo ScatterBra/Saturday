@@ -1551,6 +1551,16 @@ MonoBehaviour:
     clips: []
     volume: 1
     pitchJitter: 0
+  takeBook:
+    clips:
+    - {fileID: 8300000, guid: 01a34aaacf2cd644ba40cee1a85b926a, type: 3}
+    volume: 1
+    pitchJitter: 0
+  frogFull:
+    clips:
+    - {fileID: 8300000, guid: d2f4c2c1382af2d4e930aafbb4cc3446, type: 3}
+    volume: 1
+    pitchJitter: 0
   voiceCakeFriendQueen:
     clips:
     - {fileID: 8300000, guid: 8204a64daf872754aa19fd5afd795260, type: 3}
