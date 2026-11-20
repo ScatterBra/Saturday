@@ -64,7 +64,7 @@ namespace SaturdayGame.Chess.Tests
             Assert.IsNotNull(board.PieceAt(C("d7")));
             var eaten = events.Single(e => e.Type == GameEventType.Captured);
             Assert.AreEqual("eaten", eaten.Text);
-            Assert.AreEqual(1, board.PieceAt(C("d4")).FrogMeals);
+            Assert.AreEqual(1, events.Count(e => e.Type == GameEventType.Dialogue), "the first frog to lie down gets one line");
         }
 
         [Test]
@@ -100,17 +100,37 @@ namespace SaturdayGame.Chess.Tests
         }
 
         [Test]
-        public void Frog_AfterThreeMeals_IsStuffed_LiesDown_ThenStartsCountingAgain()
+        public void Frog_AfterOneMeal_IsStuffed_AndSkipsItsNextTurn()
         {
-            var board = Setup("Rd4", "pd6", "pb4", "pf2", "pg7");
+            var board = Setup("Rd4", "pd6", "Ka1", "kh8");
             var frog = board.PieceAt(C("d4"));
-            for (int i = 0; i < 3; i++) Tongue(board, "d4", i);
-            Assert.AreEqual(1, board.PiecesOf(Side.Black).Count(p => p.Type == PieceType.Pawn), "three of the four pawns are eaten");
-            Assert.IsNotNull(board.PieceAt(C("g7")), "g7 is the farthest, so it is left");
+            // 真实流程里舌头是在回合交给对方之后才吃的：先模拟白方走完（轮到黑方）
+            board.Pass();
+            Tongue(board, "d4");
+            Assert.IsNull(board.PieceAt(C("d6")));
             Assert.IsTrue(frog.IsFrozen);
             Assert.AreEqual(FrogTongue.Stuffed, frog.FrozenSkin);
-            Assert.AreEqual(FrogTongue.NapTurns, frog.FrozenTurns);
-            Assert.AreEqual(0, frog.FrogMeals);
+            board.Pass(); // 黑方这一回合：还躺着
+            Assert.IsTrue(frog.IsFrozen, "still lying down on its own next turn");
+            board.Pass(); // 白方（青蛙自己）这一回合结束：起来
+            Assert.IsFalse(frog.IsFrozen, "gets up after skipping one turn");
+        }
+
+        [Test]
+        public void Frog_OnlyTheFirstNapGetsALine()
+        {
+            var board = Setup("Rd4", "pd6", "pb4", "Ka1", "kh8");
+            var frog = board.PieceAt(C("d4"));
+            frog.Skin = FireHydrantRule.Frog;
+            var rule = new FireHydrantRule();
+            var events = new List<GameEvent>();
+            var ctx = Context(board, 1, events);
+            rule.OnPieceMoved(ctx, frog, frog.Pos);
+            frog.FrozenTurns = 0;
+            frog.FrozenSkin = null;
+            rule.OnPieceMoved(ctx, frog, frog.Pos);
+            Assert.AreEqual(2, events.Count(e => e.Type == GameEventType.Captured), "it ate twice");
+            Assert.AreEqual(1, events.Count(e => e.Type == GameEventType.Dialogue), "only the first nap is talked about");
         }
 
         [Test]
@@ -382,7 +402,8 @@ namespace SaturdayGame.Chess.Tests
             CollectionAssert.DoesNotContain(place.Options, C("d5"));
             Assert.IsTrue(queen.OnBoard);
             Assert.AreEqual(C("d4"), queen.Pos);
-            Assert.AreEqual("crayon", queen.Skin, "queens have crayon art too");
+            Assert.IsNull(queen.Skin, "a plain queen comes back as crayon (no skin, drawn from the lost-piece art)");
+            Assert.IsTrue(queen.WasLost);
         }
 
         [Test]
@@ -395,13 +416,13 @@ namespace SaturdayGame.Chess.Tests
             rook.Skin = "frog";
 
             var (_, place) = Comeback(board, knight, "c3");
-            Assert.AreEqual("crayon", place.PreviewSkin);
-            Assert.AreEqual("crayon", knight.Skin);
+            Assert.IsNull(place.PreviewSkin);
+            Assert.IsNull(knight.Skin, "plain pieces come back as crayon");
 
             Capture(board, "c1");
             var bishop = board.AllPieces.First(p => p.StartPos == C("c1"));
             (_, place) = Comeback(board, bishop, "d3");
-            Assert.IsNull(bishop.Skin, "no crayon bishop yet: it comes back as paper");
+            Assert.IsNull(bishop.Skin, "bishops come back as crayon too");
 
             (_, place) = Comeback(board, rook, "h3");
             Assert.AreEqual("frog", place.PreviewSkin);

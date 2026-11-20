@@ -162,11 +162,9 @@ namespace SaturdayGame.Chess.View
             if (TrySkin(piece.Skin, piece, stage3, ref result))
             {
                 result.ShowsSkin = true;
-                // 蜡笔版用的是纸片那一套图，和纸片一样一直平躺在棋盘上
-                if (piece.Skin == "crayon" && result.Model == null) result.Paper = true;
                 return result;
             }
-            // 被吃过的普通棋子：被吃区里、复活以后都一直是纸片版（换过外观的保持原来的外观）
+            // 被吃过的普通棋子：被吃区里、复活以后都一直是蜡笔版（Paper sprites 那一套图；换过外观的保持原来的外观）
             if (piece.WasLost && string.IsNullOrEmpty(piece.Skin))
             {
                 var paper = PaperSprite(piece, out bool hasBlackPaper);

@@ -44,7 +44,7 @@ namespace SaturdayGame.Chess
 
         public override string Id => "dragon_knight";
         public override string Title => "Here Be Dragons";
-        public override string Description => $"One of your knights becomes a dragon and burns an enemy pawn, knight or bishop up to {Reach} squares away. You pick which. Then it turns back into a knight.";
+        public override string Description => $"One of your knights becomes a dragon and burns an enemy pawn, knight or bishop up to {Reach} squares away.";
         public override RuleKind Kind => RuleKind.Buff;
         public override int Stage => 1;
 
@@ -113,17 +113,15 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 复活自己一枚被吃掉的棋子（王以外都行）：玩家先在规则书的被吃区里挑棋子，再在自己那半边棋盘上挑位置。
     /// 卡选了就得用，两步都不能取消（卡出现时可以整组 Skip），免得误点右键白白浪费一次复活。
-    /// 复活后的样子：本来有外观的（消防栓、青蛙、主教变体）保持原样；有蜡笔图的（兵、马、车、后）画成蜡笔版；其他的（普通的象）是纸片版。
+    /// 复活后的样子：本来有外观的（消防栓、青蛙、主教变体）保持原样；其他的都是蜡笔版（Replacement Paper Pieces 里那套图，
+    /// 表现层按“被吃过、没有外观”画，见 PieceArt；悬浮说明叫 Crayon …）。
     /// 第 10 回合的选卡、被将军时的救急技能里有它；第三阶段不能复活。
     /// </summary>
     public sealed class CrayonRevivalRule : RuleBase
     {
-        /// <summary>有蜡笔图的棋子类型（和 ChessPieceArt 里 crayon 外观配了图的类型一致）。</summary>
-        public static readonly PieceType[] CrayonTypes = { PieceType.Pawn, PieceType.Knight, PieceType.Rook, PieceType.Queen };
-
         public override string Id => "crayon_revival";
         public override string Title => "Crayon Comeback";
-        public override string Description => "Pick one of your lost pieces, then pick where it comes back on your half of the board. Some come back drawn in crayon.";
+        public override string Description => "Pick one of your lost pieces, then pick where it comes back on your half of the board.";
         public override RuleKind Kind => RuleKind.Buff;
         public override int Stage => 1;
 
@@ -155,7 +153,8 @@ namespace SaturdayGame.Chess
             if (!place.Result.HasValue) yield break;
 
             ctx.Revive(piece, place.Result.Value, skin);
-            if (skin == "crayon")
+            // 没有外观的就是画回来的蜡笔版
+            if (string.IsNullOrEmpty(skin))
             {
                 ctx.Say(Speakers.Friend, "Did you just draw that?");
                 ctx.Say(Speakers.You, "It counts.");
@@ -163,12 +162,8 @@ namespace SaturdayGame.Chess
             else ctx.Say(Speakers.Friend, "Welcome back, I guess.");
         }
 
-        /// <summary>复活后的外观：有外观就保留，没有外观的、有蜡笔图的变成蜡笔版，其他的为 null（表现层显示纸片版）。</summary>
-        public static string LookAfterRevival(Piece piece)
-        {
-            if (!string.IsNullOrEmpty(piece.Skin)) return piece.Skin;
-            return System.Array.IndexOf(CrayonTypes, piece.Type) >= 0 ? "crayon" : null;
-        }
+        /// <summary>复活后的外观：有外观就保留；没有外观的为 null，表现层画成蜡笔版（被吃过的棋子都用那套图）。</summary>
+        public static string LookAfterRevival(Piece piece) => string.IsNullOrEmpty(piece.Skin) ? null : piece.Skin;
 
         static List<Piece> Candidates(RuleContext ctx)
         {

@@ -47,12 +47,11 @@ namespace SaturdayGame.Chess.View
                     break;
                 case FireHydrantRule.Frog:
                     info.Title = "Frog";
-                    info.Body = $"{moves} Every time it lands without taking anything, its tongue eats the closest enemy in a straight line, up to {FrogTongue.MaxReach} squares away (diagonals first, never the king). After {FrogTongue.FullAfter} it's stuffed and lies down for {FrogTongue.NapTurns} turns.";
-                    if (!piece.IsFrozen && piece.FrogMeals > 0) info.Status = $"Ate {piece.FrogMeals}/{FrogTongue.FullAfter}.";
+                    info.Body = $"{moves} Every time it lands without taking anything, its tongue eats the closest enemy.";
                     break;
                 case "bishbird":
                     info.Title = SkinName(piece.Skin);
-                    info.Body = "Completely useless. All it does is squawk.";
+                    info.Body = $"Completely useless. All it does is squawk. {moves}";
                     break;
                 case ChessGame.MarieSkin:
                 case ChessGame.CleopatraSkin:
@@ -61,19 +60,15 @@ namespace SaturdayGame.Chess.View
                     break;
                 case "fish_shop":
                     info.Title = SkinName(piece.Skin);
-                    info.Body = $"A bishop in disguise. {moves}";
-                    break;
-                case "crayon":
-                    info.Title = $"Crayon {type}";
-                    // TODO 蜡笔棋子之后会有特殊功能，现在先占位
-                    info.Body = $"Came back from the lost pile, drawn in crayon. {moves} (Crayon power: coming soon.)";
+                    info.Body = $"It's just wordplay. {moves}";
                     break;
                 case null:
                 case "":
+                    // 被吃过又复活的普通棋子：蜡笔版
                     if (piece.WasLost)
                     {
-                        info.Title = $"Paper {type}";
-                        info.Body = $"Came back from the lost pile. {moves}";
+                        info.Title = $"Crayon {type}";
+                        info.Body = "Came back from the lost pile, drawn in crayon.";
                     }
                     break;
                 default:
@@ -94,8 +89,8 @@ namespace SaturdayGame.Chess.View
             else if (stage3 && yours && (piece.Type == PieceType.Bishop || piece.Type == PieceType.Knight))
             {
                 string skill = piece.Type == PieceType.Bishop
-                    ? "Storm power: fires a beam along a diagonal (hits your own pieces too)."
-                    : $"Storm power: turns into a dragon and burns an enemy pawn, knight or bishop up to {DragonKnightRule.Reach} squares away.";
+                    ? "Fires a beam along a diagonal (hits your own pieces too)."
+                    : $"Turns into a dragon and burns an enemy pawn, knight or bishop up to {DragonKnightRule.Reach} squares away.";
                 info.Body = string.IsNullOrEmpty(info.Body) ? $"{moves} {skill}" : $"{info.Body} {skill}";
             }
 
@@ -123,7 +118,7 @@ namespace SaturdayGame.Chess.View
                         info.Status = Join(info.Status, $"Frozen solid. Can't move for {turns}.");
                         break;
                     case FrogTongue.Stuffed:
-                        info.Status = Join(info.Status, $"Stuffed. Lying down for {turns}.");
+                        // 吃撑躺倒的青蛙不写说明，看它倒着就懂了
                         break;
                     default:
                         info.Status = Join(info.Status, $"Can't move for {turns}.");

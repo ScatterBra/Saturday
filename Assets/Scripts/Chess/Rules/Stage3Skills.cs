@@ -165,7 +165,7 @@ namespace SaturdayGame.Chess
     /// <summary>下雨：场上所有棋子（双方，城堡里的除外）潮湿 WetTurns 个回合。潮湿的棋子遇到火就爆炸。</summary>
     public sealed class RainRule : RuleBase
     {
-        public const int WetTurns = 3;
+        public const int WetTurns = 5;
 
         public override string Id => "rain";
         public override string Title => "Rainy Day";
@@ -193,7 +193,7 @@ namespace SaturdayGame.Chess
     {
         public override string Id => "landslide";
         public override string Title => "Landslide";
-        public override string Description => "Everything on high ground slides one square downhill, yours too. Slide into lava and it's gone.";
+        public override string Description => "Everything on high ground slides one square downhill, yours too.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 2;
 

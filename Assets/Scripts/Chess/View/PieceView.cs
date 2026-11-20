@@ -102,11 +102,11 @@ namespace SaturdayGame.Chess.View
             if (sprite != null && useSprite) sprite.color *= wet;
 
             // 冰冻不用头顶的小方块，用插着的冰枪 + 地上的回合数表示
-            // 吃撑躺倒的青蛙也一样：不要小方块，地上写还要躺几回合
+            // 吃撑躺倒的青蛙：不要小方块，也不写回合数，倒着就够了
             bool stuffed = piece.IsFrozen && piece.FrozenSkin == FrogTongue.Stuffed;
             frozenMarker.SetActive(piece.IsFrozen && !resolved.ShowsFrozen && !ice && !stuffed);
-            iceTurns.gameObject.SetActive(ice || stuffed);
-            if (ice || stuffed) iceTurns.text = piece.FrozenTurns.ToString();
+            iceTurns.gameObject.SetActive(ice);
+            if (ice) iceTurns.text = piece.FrozenTurns.ToString();
             if (piece.IsFrozen) factory.SetColor(frozenMarker, SkinColor(piece.FrozenSkin));
 
             // 吃撑的青蛙躺倒在棋盘上；起来时扶正（只在状态变了时改，免得打断别的动画里的转动）
@@ -206,7 +206,6 @@ namespace SaturdayGame.Chess.View
                 case "bishblob": return new Color(0.3f, 0.9f, 0.6f);
                 case "cake": return new Color(1f, 0.6f, 0.8f);
                 case "dragon": return new Color(1f, 0.45f, 0.05f);
-                case "crayon": return new Color(1f, 0.85f, 0.2f);
                 case "tree": return new Color(0.15f, 0.55f, 0.2f);
                 case IceLanceRule.Ice: return new Color(0.6f, 0.85f, 1f);
                 // queen 的两个变种：美术图进来之前的占位颜色

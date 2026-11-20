@@ -8,7 +8,7 @@ namespace SaturdayGame.Chess
     /// <summary>
     /// 车变成消防栓和青蛙：玩家 a 列的车（按开局位置算）变消防栓、h 列的变青蛙，朋友的反过来（a 列青蛙、h 列消防栓）。
     /// 消防栓每次落地，把紧挨着它的一枚对方棋子（王也算）喷开，最多两格（HydrantSpray）。
-    /// 青蛙每次落地（这一步本身没吃子时），用舌头吃掉直线上最近的一枚敌方棋子（王除外），吃满 3 个就撑倒躺几回合（FrogTongue）。
+    /// 青蛙每次落地（这一步本身没吃子时），用舌头吃掉直线上最近的一枚敌方棋子（王除外），吃一个就撑倒，躺一回合（FrogTongue）。
     /// 走法都和车一样。第三阶段也生效，推到岩浆格上的棋子会烧掉（王也一样）；城堡里的棋子推不动、吃不到。
     /// 同样近的目标有好几个时随机挑一个；玩家走的那一步会用预览里显示的那个（RuleContext.PreferredTargetId）。
     /// Id 沿用 fire_hydrant，场景里的回合表不用改。
@@ -23,8 +23,8 @@ namespace SaturdayGame.Chess
         public override string Description =>
             "Your a-rook is a fire hydrant and your h-rook is a frog. Your friend's are the other way round. " +
             "A hydrant that lands sprays the closest enemy next to it up to 2 squares away. " +
-            "A frog that lands eats the closest enemy in a straight line, up to 3 squares away (not the king). After 3 it's stuffed and lies down for a while.";
-        public override string RuleBookText => "Hydrants spray enemies away. Frogs eat them, until they're stuffed.";
+            "A frog that lands eats the closest enemy in a straight line, up to 3 squares away (not the king).";
+        public override string RuleBookText => "Hydrants spray enemies away. Frogs eat them.";
         public override RuleKind Kind => RuleKind.Neutral;
         public override int Stage => 0;
 
@@ -70,37 +70,46 @@ namespace SaturdayGame.Chess
             var pick = options[ctx.Rng.Next(options.Count)];
             foreach (var option in options)
                 if (option.Piece.Id == ctx.PreferredTargetId) pick = option;
-            if (mover.Skin == Frog) FrogTongue.Eat(ctx, mover, pick.Piece);
+            if (mover.Skin == Frog)
+            {
+                FrogTongue.Eat(ctx, mover, pick.Piece);
+                // 这局第一次有青蛙吃撑倒下时说一句，之后就不说了
+                if (!frogNapMentioned)
+                {
+                    frogNapMentioned = true;
+                    if (mover.Side == ctx.Player) ctx.Say(Speakers.Friend, "Your frog ate too much. It's lying down now.");
+                    else ctx.Say(Speakers.You, "Your frog's stuffed. Ha.");
+                }
+            }
             else ctx.Push(pick.Piece, pick.To, mover);
         }
+
+        /// <summary>这局是不是已经有青蛙倒下过（只在第一次说话）。每局新建规则对象，所以不用手动清。</summary>
+        bool frogNapMentioned;
     }
 
     /// <summary>
     /// 青蛙的舌头（2026-11-19 改，原来是把敌人拉近一格）：沿八个方向看出去，每个方向上碰到的第一枚棋子如果是敌方的、
     /// 离青蛙 MaxReach 格以内，就能用舌头把它吃掉（算被吃，进被吃区）。王吃不了，城堡里的吃不到。
     /// 最近的优先；同样近时优先斜向的；还一样就随机挑一枚。青蛙这一步本身吃了子就不用舌头（见 FireHydrantRule.OnPieceMoved）。
-    /// 舌头吃满 FullAfter 个就撑倒：躺 NapTurns 回合不能动（冻结外观 Stuffed），起来后重新计数。
+    /// 舌头吃一个就撑倒：躺 NapTurns 回合不能动（冻结外观 Stuffed），起来后照常吃。
     /// </summary>
     public static class FrogTongue
     {
         public const int MaxReach = 3;
-        /// <summary>舌头吃满几个就撑倒。</summary>
-        public const int FullAfter = 3;
-        /// <summary>撑倒后躺几个（自己一方的）回合。</summary>
-        public const int NapTurns = 3;
+        /// <summary>
+        /// 吃一个就撑倒，躺几个（自己一方的）回合。舌头是在走完、回合已经交给对方之后才吃的，
+        /// 所以 1 = 对方这一回合 + 自己下一回合都躺着，自己那回合结束时起来（正好停走一轮）。
+        /// </summary>
+        public const int NapTurns = 1;
         /// <summary>撑倒时的冻结外观。</summary>
         public const string Stuffed = "stuffed";
 
-        /// <summary>舌头吃掉 victim；吃满了就撑倒。</summary>
+        /// <summary>舌头吃掉 victim，然后撑倒躺下（第一次倒下时的对白在 FireHydrantRule 里）。</summary>
         public static void Eat(RuleContext ctx, Piece frog, Piece victim)
         {
             ctx.Kill(victim, "eaten", frog);
-            frog.FrogMeals++;
-            if (frog.FrogMeals < FullAfter) return;
-            frog.FrogMeals = 0;
             ctx.Freeze(frog, NapTurns, Stuffed);
-            if (frog.Side == ctx.Player) ctx.Say(Speakers.Friend, "Your frog ate too much. It's lying down now.");
-            else ctx.Say(Speakers.You, "Your frog's stuffed. Ha.");
         }
 
         static readonly Coord[] Directions =
