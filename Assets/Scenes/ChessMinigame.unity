@@ -396,6 +396,9 @@ MonoBehaviour:
   thunderEffectScale: 0.5
   thunderBlastEffect: {fileID: 1329845292236604, guid: 9bba9cf244c53c5439505dfc96fdd11c, type: 3}
   thunderBlastScale: 0.5
+  skillReadyEffect: {fileID: 1775406099119076, guid: 379785de5e39005469c875710d3cc5a7, type: 3}
+  skillReadyEffectScale: 0.25
+  skillReadyEffectHeight: 0.5
   beamEffect: {fileID: 1314945738539566, guid: 32c9fd11a72259d45aa26ae41c34c5aa, type: 3}
   beamEffectScale: 0.35
   beamEffectTravel: 0.6

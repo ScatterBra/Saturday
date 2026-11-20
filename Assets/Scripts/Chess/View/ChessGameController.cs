@@ -372,6 +372,7 @@ namespace SaturdayGame.Chess.View
             if (game == null) return;
             UpdateOrbit();
             // 规则书举着（或鼠标在规则书上点了）的时候，棋盘不响应
+            UpdateSkillReady();
             if (UpdateRuleBook()) return;
             UpdateTooltip();
             UpdatePieceSkillButton();
@@ -1147,10 +1148,46 @@ namespace SaturdayGame.Chess.View
             UpdateStatus();
             busy = false;
             RefreshSkillBar();
+            // 选目标时（放技能的中途）不重算，等放完或取消
+            if (game.Phase != GamePhase.ChoosingTarget) RecomputeSkillReady();
             if (game.Phase != GamePhase.ChoosingTarget) castingPiece = null;
             var toSelect = selectAfterEvents;
             selectAfterEvents = null;
             if (toSelect != null && toSelect.OnBoard && toSelect.Side == game.PlayerSide && game.Phase == GamePhase.PlayerTurn) Select(toSelect);
+        }
+
+        /// <summary>现在身上绕着萤火虫的棋子（能放技能的象 / 马）。</summary>
+        readonly HashSet<int> skillReady = new HashSet<int>();
+
+        /// <summary>
+        /// 重新算哪些象 / 马能放技能（冷却好了、有目标）。只在玩家回合、没在演出时算得准，
+        /// 所以只在那时候重算；其他时候沿用上一次的结果（UpdateSkillReady 会把放过技能、被吃掉、冻住的去掉）。
+        /// </summary>
+        void RecomputeSkillReady()
+        {
+            skillReady.Clear();
+            if (game.InStage3 && game.Phase == GamePhase.PlayerTurn && !busy)
+                foreach (var piece in game.Board.PiecesOf(game.PlayerSide))
+                {
+                    var skill = ChessGame.PieceSkill(piece);
+                    if (skill != null && game.CanUseSkill(skill.Value, piece)) skillReady.Add(piece.Id);
+                }
+            board.SetSkillReady(skillReady);
+        }
+
+        /// <summary>每帧：放完技能（进冷却）、被吃、被冻住的棋子马上拿掉萤火虫；第三阶段结束了全拿掉。</summary>
+        void UpdateSkillReady()
+        {
+            if (skillReady.Count == 0) return;
+            bool over = !game.InStage3 || game.Phase == GamePhase.GameOver;
+            int before = skillReady.Count;
+            skillReady.RemoveWhere(id =>
+            {
+                var p = game.Board.GetPiece(id);
+                var skill = ChessGame.PieceSkill(p);
+                return over || p == null || !p.OnBoard || p.IsFrozen || skill == null || game.Cooldown(skill.Value) > 0;
+            });
+            if (skillReady.Count != before) board.SetSkillReady(skillReady);
         }
 
         /// <summary>第三阶段左下角的雷暴按钮和积累条（吃掉敌人就涨，满了点按钮放）；满了云里闪电也变多。不是第三阶段就收起来。</summary>

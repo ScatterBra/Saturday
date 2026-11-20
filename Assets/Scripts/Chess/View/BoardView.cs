@@ -108,6 +108,10 @@ namespace SaturdayGame.Chess.View
         readonly float treeEffectScale;
         readonly GameObject explosionEffect, rainEffect, thunderEffect, thunderBlastEffect;
         readonly float thunderBlastScale = 0.5f;
+        readonly Color skillReadyGlowColor = new Color(0.3f, 0.65f, 1f, 1f);
+        readonly float skillReadyGlowSize = 1f, skillReadyGlowPeriod = 1.6f;
+        /// <summary>能放技能的棋子脚下的呼吸灯（挂在棋子下面，跟着棋子走）。</summary>
+        readonly Dictionary<int, GameObject> skillReadyFx = new Dictionary<int, GameObject>();
         readonly float explosionEffectScale = 0.5f, rainEffectScale = 1f, rainDuration = 2.5f, thunderEffectScale = 0.5f;
         readonly Color beamColor = new Color(2.5f, 2.2f, 0.9f);
         readonly GameObject beamEffect;
@@ -200,6 +204,9 @@ namespace SaturdayGame.Chess.View
                 thunderEffectScale = desk.thunderEffectScale;
                 thunderBlastEffect = desk.thunderBlastEffect;
                 thunderBlastScale = desk.thunderBlastScale;
+                skillReadyGlowColor = desk.skillReadyGlowColor;
+                skillReadyGlowSize = desk.skillReadyGlowSize;
+                skillReadyGlowPeriod = desk.skillReadyGlowPeriod;
                 beamColor = desk.beamColor;
                 beamEffect = desk.beamEffect;
                 beamEffectScale = desk.beamEffectScale;
@@ -1599,6 +1606,36 @@ namespace SaturdayGame.Chess.View
         }
 
         /// <summary>雷暴闪完电：在范围的正中间（4 × 4 就是中间四格的交点）播一次爆炸特效。</summary>
+        /// <summary>
+        /// 第三阶段能放技能的棋子：这些棋子脚下亮一圈蓝色呼吸灯，不在里面的拿掉。挂在棋子下面，棋子走、被吃都跟着。
+        /// </summary>
+        public void SetSkillReady(ICollection<int> pieceIds)
+        {
+            var gone = new List<int>();
+            foreach (var pair in skillReadyFx)
+                if (pair.Value == null || !pieceIds.Contains(pair.Key)) gone.Add(pair.Key);
+            foreach (var id in gone)
+            {
+                if (skillReadyFx[id] != null) ViewUtil.Destroy(skillReadyFx[id]);
+                skillReadyFx.Remove(id);
+            }
+            foreach (var id in pieceIds)
+            {
+                if (skillReadyFx.ContainsKey(id) || !pieces.TryGetValue(id, out var view)) continue;
+                var glow = new GameObject("Skill Ready Glow");
+                glow.transform.SetParent(view.Root.transform, false);
+                // 平贴在棋子脚下（比格子高一点点，免得和格子打架）
+                glow.transform.localPosition = Vector3.up * 0.015f;
+                glow.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                glow.transform.localScale = Vector3.one * skillReadyGlowSize;
+                var sprite = glow.AddComponent<SpriteRenderer>();
+                sprite.sprite = BreathingGlow.GlowSprite();
+                sprite.color = skillReadyGlowColor;
+                glow.AddComponent<BreathingGlow>().period = skillReadyGlowPeriod;
+                skillReadyFx[id] = glow;
+            }
+        }
+
         public void PlayThunderBlast(IReadOnlyList<Coord> area)
         {
             if (thunderBlastEffect == null || area == null || area.Count == 0) return;

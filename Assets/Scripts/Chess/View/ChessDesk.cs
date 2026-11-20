@@ -112,6 +112,12 @@ namespace SaturdayGame.Chess.View
         public GameObject thunderBlastEffect;
         [Tooltip("雷暴爆炸特效的整体缩放")]
         public float thunderBlastScale = 0.5f;
+        [Tooltip("第三阶段：你的象 / 马能放技能时，脚下一圈呼吸灯的颜色（放完技能消失、冷却好了再亮）")]
+        public Color skillReadyGlowColor = new Color(0.3f, 0.65f, 1f, 1f);
+        [Tooltip("呼吸灯多大（直径，1 = 一格宽）")]
+        public float skillReadyGlowSize = 1f;
+        [Tooltip("呼吸灯一呼一吸多少秒")]
+        public float skillReadyGlowPeriod = 1.6f;
         [Tooltip("象的光束：沿斜线一路裂开的特效（例如 ParticlePack 的 EarthShatter），留空就用一根发光的细条")]
         public GameObject beamEffect;
         [Tooltip("光束特效的整体缩放")]
