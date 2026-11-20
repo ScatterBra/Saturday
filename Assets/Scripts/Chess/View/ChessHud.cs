@@ -76,6 +76,22 @@ namespace SaturdayGame.Chess.View
         readonly List<GameObject> cards = new List<GameObject>();
         readonly List<RuleBase> ruleBook = new List<RuleBase>();
         RectTransform lostRoot;
+        GridLayoutGroup lostGrid;
+        float lostWidth;
+        /// <summary>Lost pieces 标题离规则书上边多远（像素，规则书高 900）。</summary>
+        const float LostTitleTop = 540f;
+        /// <summary>被吃区：一排几个、几排（4 × 3 = 12 个），每格多大、间隔多少（像素）。</summary>
+        const int LostColumns = 4, LostRows = 3;
+        const float LostCell = 70f, LostSpacing = 8f;
+
+        /// <summary>按被吃棋子的数量排格子：12 个以内一排 4 个；更多时每排多放几个、格子缩小，还是 3 排装下。</summary>
+        void FitLostGrid(int count)
+        {
+            int columns = Mathf.Max(LostColumns, Mathf.CeilToInt(count / (float)LostRows));
+            float cell = Mathf.Min(LostCell, (lostWidth - (columns - 1) * LostSpacing) / columns);
+            lostGrid.constraintCount = columns;
+            lostGrid.cellSize = new Vector2(cell, cell);
+        }
         Image stormOverlay;
         RectTransform tooltipRoot;
         Text tooltipTitle;
@@ -181,16 +197,20 @@ namespace SaturdayGame.Chess.View
             ruleBookText.resizeTextMinSize = 12;
             ruleBookText.resizeTextMaxSize = RuleBookFontSize;
             ruleBookText.verticalOverflow = VerticalWrapMode.Truncate;
-            ruleBookText.rectTransform.anchorMin = new Vector2(0, 0.36f);
+            // 正文的下边停在 Lost pieces 标题上面
+            ruleBookText.rectTransform.anchorMin = new Vector2(0, 1f - (LostTitleTop - 5f) / (DeskLayout.PanelDepth * DeskLayout.PixelsPerUnit));
             ruleBookText.rectTransform.sizeDelta = new Vector2(-(bookLeft + bookRight), -110);
 
             // 规则书下半部分：我方被吃的棋子（复活技能在这里点选）
-            Label(right, "LostTitle", "Lost pieces", 26, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(bookLeft, -582), new Vector2(-(bookLeft + bookRight), 34));
-            lostRoot = Rect(right, "Lost", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2((bookLeft - bookRight) / 2, 28), new Vector2(-(bookLeft + bookRight), 260));
-            var grid = lostRoot.gameObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(84, 84);
-            grid.spacing = new Vector2(10, 10);
-            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            // 一排 LostColumns 个、LostRows 排，正好装 12 个；标题下面紧跟着从上往下排
+            Label(right, "LostTitle", "Lost pieces", 26, FontStyle.Bold, TextAnchor.UpperLeft, new Vector2(bookLeft, -LostTitleTop), new Vector2(-(bookLeft + bookRight), 34));
+            lostWidth = DeskLayout.PanelWidth * DeskLayout.PixelsPerUnit - bookLeft - bookRight;
+            lostRoot = Rect(right, "Lost", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2((bookLeft - bookRight) / 2, -(LostTitleTop + 40f)), new Vector2(-(bookLeft + bookRight), LostRows * LostCell + (LostRows - 1) * LostSpacing));
+            lostGrid = lostRoot.gameObject.AddComponent<GridLayoutGroup>();
+            lostGrid.spacing = new Vector2(LostSpacing, LostSpacing);
+            lostGrid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            lostGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            FitLostGrid(0);
 
             // 上方状态栏
             var statusPanel = Panel(root, "Status", new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -16), new Vector2(980, 56), new Color(0.1f, 0.08f, 0.08f, 0.8f));
@@ -427,7 +447,9 @@ namespace SaturdayGame.Chess.View
         public void SetLostPieces(IEnumerable<Piece> lost, ICollection<int> pickable)
         {
             for (int i = lostRoot.childCount - 1; i >= 0; i--) ViewUtil.Destroy(lostRoot.GetChild(i).gameObject);
-            foreach (var piece in lost)
+            var lostList = new List<Piece>(lost);
+            FitLostGrid(lostList.Count);
+            foreach (var piece in lostList)
             {
                 int id = piece.Id;
                 bool canPick = pickable != null && pickable.Contains(id);
