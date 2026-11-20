@@ -1203,6 +1203,7 @@ namespace SaturdayGame.Chess.View
 
         static bool SkipPressed()
         {
+            if (ChessHud.QuitDialogBlocking) return false;
             var keyboard = Keyboard.current;
             return keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame);
         }

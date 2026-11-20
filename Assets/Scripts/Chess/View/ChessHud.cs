@@ -71,7 +71,8 @@ namespace SaturdayGame.Chess.View
         GameObject skipButton;
         GameObject gameOverRoot;
         GameObject backButton;
-        RectTransform playAgainButton;
+        GameObject exitButton;
+        GameObject quitDialogRoot;
         RectTransform cardsRoot;
         readonly List<GameObject> cards = new List<GameObject>();
         readonly List<RuleBase> ruleBook = new List<RuleBase>();
@@ -243,8 +244,10 @@ namespace SaturdayGame.Chess.View
             var box = Panel(dim, "Box", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(720, 320), Paper);
             gameOverText = Label(box, "Text", "", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0, -30), new Vector2(-60, 160));
             var buttonRow = Rect(box, "Buttons", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 36), new Vector2(600, 64));
-            playAgainButton = (RectTransform)Button(buttonRow, "PlayAgain", "Play again", new Vector2(0.5f, 0.5f), new Vector2(-150, 0), new Vector2(260, 64), () => PlayAgainClicked?.Invoke()).transform;
+            Button(buttonRow, "PlayAgain", "Play again", new Vector2(0.5f, 0.5f), new Vector2(-150, 0), new Vector2(260, 64), () => PlayAgainClicked?.Invoke());
             backButton = Button(buttonRow, "Back", "Back to office", new Vector2(0.5f, 0.5f), new Vector2(150, 0), new Vector2(260, 64), () => BackClicked?.Invoke()).gameObject;
+            // 单独运行（打包出来的游戏）时没有办公室可回，这个位置放退出按钮
+            exitButton = Button(buttonRow, "Exit", "Exit", new Vector2(0.5f, 0.5f), new Vector2(150, 0), new Vector2(260, 64), QuitGame).gameObject;
             gameOverRoot.SetActive(false);
 
             BuildSkillBar(root);
@@ -254,6 +257,26 @@ namespace SaturdayGame.Chess.View
             // 风暴：盖住整个画面的沙尘，透明度由控制器控制
             stormOverlay = Panel(root, "Storm", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.62f, 0.55f, 0.45f, 0f)).GetComponent<Image>();
             stormOverlay.raycastTarget = false;
+
+            BuildQuitDialog(root);
+        }
+
+        /// <summary>按 Esc 弹出的“退出游戏？”确认框。单独一块画布、排在最上层，盖住所有 HUD。</summary>
+        void BuildQuitDialog(RectTransform root)
+        {
+            var layer = Rect(root, "QuitDialog", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var canvas = layer.gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = 100;
+            layer.gameObject.AddComponent<GraphicRaycaster>();
+            quitDialogRoot = layer.gameObject;
+            var dim = Panel(layer, "Dim", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.55f));
+            var box = Panel(dim, "Box", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(640, 260), Paper);
+            Label(box, "Text", "Quit the game?", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0, -30), new Vector2(-60, 110));
+            var buttonRow = Rect(box, "Buttons", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 36), new Vector2(560, 64));
+            Button(buttonRow, "Quit", "Quit", new Vector2(0.5f, 0.5f), new Vector2(-140, 0), new Vector2(240, 64), QuitGame);
+            Button(buttonRow, "Cancel", "Keep playing", new Vector2(0.5f, 0.5f), new Vector2(140, 0), new Vector2(240, 64), HideQuitDialog);
+            quitDialogRoot.SetActive(false);
         }
 
         // ---------- 对外接口 ----------
@@ -485,8 +508,56 @@ namespace SaturdayGame.Chess.View
         {
             gameOverText.text = text;
             backButton.SetActive(canGoBack);
-            playAgainButton.anchoredPosition = new Vector2(canGoBack ? -150 : 0, 0);
+            exitButton.SetActive(!canGoBack);
             gameOverRoot.SetActive(true);
+        }
+
+        // ---------- 退出 ----------
+
+        static bool quitDialogOpen;
+        static int quitDialogClosedFrame = -1;
+        float timeScaleBeforeQuitDialog = 1f;
+
+        public bool QuitDialogOpen => quitDialogOpen;
+
+        /// <summary>退出确认框开着，或者这一帧刚关掉：棋盘、对白、过场都不要响应这一帧的输入（关框的那一下点击 / Esc 不能漏下去）。</summary>
+        public static bool QuitDialogBlocking => quitDialogOpen || Time.frameCount == quitDialogClosedFrame;
+
+        /// <summary>弹出退出确认框，游戏暂停（时间和声音都停）。</summary>
+        public void ShowQuitDialog()
+        {
+            if (quitDialogOpen) return;
+            quitDialogOpen = true;
+            HideTooltip();
+            timeScaleBeforeQuitDialog = Time.timeScale;
+            Time.timeScale = 0f;
+            AudioListener.pause = true;
+            quitDialogRoot.SetActive(true);
+        }
+
+        public void HideQuitDialog()
+        {
+            if (!quitDialogOpen) return;
+            quitDialogOpen = false;
+            quitDialogClosedFrame = Time.frameCount;
+            Time.timeScale = timeScaleBeforeQuitDialog;
+            AudioListener.pause = false;
+            quitDialogRoot.SetActive(false);
+        }
+
+        static void QuitGame()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        void OnDestroy()
+        {
+            // 场景卸载时框还开着：把暂停恢复，不然下一个场景时间是停的
+            if (quitDialogOpen) HideQuitDialog();
         }
 
         // ---------- 内部 ----------

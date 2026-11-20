@@ -370,6 +370,7 @@ namespace SaturdayGame.Chess.View
         void Update()
         {
             if (game == null) return;
+            if (UpdateQuitDialog()) return;
             UpdateOrbit();
             // 规则书举着（或鼠标在规则书上点了）的时候，棋盘不响应
             UpdateSkillReady();
@@ -400,6 +401,30 @@ namespace SaturdayGame.Chess.View
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
             if (board.TryGetPointedCoord(boardCamera.ScreenPointToRay(mouse.position.ReadValue()), out var coord)) ClickSquare(coord);
         }
+
+        /// <summary>
+        /// Esc 弹出 / 关掉“退出游戏？”确认框。Esc 在别处有用的时候（放回规则书、跳过技能目标、跳过过场）让给它们。
+        /// 返回 true = 框开着（或这一帧刚关掉），这一帧别的输入都不处理。
+        /// </summary>
+        bool UpdateQuitDialog()
+        {
+            var keyboard = Keyboard.current;
+            bool esc = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+            if (hud.QuitDialogOpen)
+            {
+                if (esc) hud.HideQuitDialog();
+                return true;
+            }
+            if (ChessHud.QuitDialogBlocking) return true;
+            if (!esc || EscUsedElsewhere()) return false;
+            hud.ShowQuitDialog();
+            return true;
+        }
+
+        bool EscUsedElsewhere() =>
+            (ruleBookFocus != null && ruleBookFocus.Active) ||
+            (!busy && game.Phase == GamePhase.ChoosingTarget && game.PendingTarget.AllowSkip) ||
+            (stage3Cutscene != null && stage3Cutscene.IsPlaying && stage3Cutscene.allowSkip);
 
         /// <summary>
         /// 规则书：鼠标停上去描边，左键点一下举到镜头前；举着时点外面或按 Esc 放回去。
@@ -830,8 +855,12 @@ namespace SaturdayGame.Chess.View
             {
                 var mouse = Mouse.current;
                 var keyboard = Keyboard.current;
-                if (mouse != null && mouse.leftButton.wasPressedThisFrame) yield break;
-                if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame)) yield break;
+                // 退出确认框上的点击不算“继续”
+                if (!ChessHud.QuitDialogBlocking)
+                {
+                    if (mouse != null && mouse.leftButton.wasPressedThisFrame) yield break;
+                    if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame)) yield break;
+                }
                 yield return null;
             }
         }
