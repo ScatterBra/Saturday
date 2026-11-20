@@ -36,31 +36,32 @@ namespace SaturdayGame.Chess.View
             bool yours = piece.Side == playerSide;
             string type = TypeName(piece.Type);
             string moves = $"Moves like a {type.ToLowerInvariant()}.";
-            var info = new Info { IsYours = yours, Owner = yours ? "Yours" : "Your friend's", Title = type };
+            // 走法统一写在归属后面（“Yours · Moves like a rook.”），说明正文里不再重复
+            var info = new Info { IsYours = yours, Owner = $"{(yours ? "Yours" : "Your friend's")} · {moves}", Title = type };
 
             switch (piece.Skin)
             {
                 case FireHydrantRule.Hydrant:
                     info.Title = "Fire Hydrant";
-                    info.Body = $"{moves} Every time it lands, it sprays an enemy right next to it up to {HydrantSpray.MaxDistance} squares away.";
+                    info.Body = $"Every time it lands, it sprays an enemy right next to it up to {HydrantSpray.MaxDistance} squares away.";
                     if (stage3) info.Body += " Spray one into lava and it's gone.";
                     break;
                 case FireHydrantRule.Frog:
                     info.Title = "Frog";
-                    info.Body = $"{moves} Every time it lands without taking anything, its tongue eats an enemy right next to it.";
+                    info.Body = $"Every time it lands without taking anything, its tongue eats an enemy right next to it.";
                     break;
                 case "bishbird":
                     info.Title = SkinName(piece.Skin);
-                    info.Body = $"Completely useless. All it does is squawk. {moves}";
+                    info.Body = "Completely useless. All it does is squawk.";
                     break;
                 case ChessGame.MarieSkin:
                 case ChessGame.CleopatraSkin:
                     info.Title = SkinName(piece.Skin);
-                    info.Body = $"A queen in costume. {moves}";
+                    info.Body = "A queen in costume.";
                     break;
                 case "fish_shop":
                     info.Title = SkinName(piece.Skin);
-                    info.Body = $"It's just wordplay. {moves}";
+                    info.Body = "It's just wordplay.";
                     break;
                 case null:
                 case "":
@@ -73,7 +74,6 @@ namespace SaturdayGame.Chess.View
                     break;
                 default:
                     info.Title = SkinName(piece.Skin);
-                    info.Body = moves;
                     break;
             }
 
@@ -91,7 +91,7 @@ namespace SaturdayGame.Chess.View
                 string skill = piece.Type == PieceType.Bishop
                     ? "Fires a beam along a diagonal (hits your own pieces too)."
                     : $"Turns into a dragon and burns an enemy pawn, knight or bishop up to {DragonKnightRule.Reach} squares away.";
-                info.Body = string.IsNullOrEmpty(info.Body) ? $"{moves} {skill}" : $"{info.Body} {skill}";
+                info.Body = string.IsNullOrEmpty(info.Body) ? skill : $"{info.Body} {skill}";
             }
 
             if (piece.IsWet)
